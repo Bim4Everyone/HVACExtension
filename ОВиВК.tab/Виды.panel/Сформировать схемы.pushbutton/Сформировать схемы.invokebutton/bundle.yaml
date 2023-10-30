@@ -1,0 +1,17 @@
+title:
+  ru: Сформировать схемы
+  en_us: Сформировать схемы
+
+tooltip:
+  ru: >- 
+    Please Write Description
+  en_us: >- 
+    Please Write Description
+
+assembly: Revit3DvikSchemas.dll
+command_class: Revit3DvikSchemasCommand
+
+author: Redomine
+
+min_revit_version: 2020
+max_revit_version: 2024
