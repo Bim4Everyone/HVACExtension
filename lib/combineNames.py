@@ -62,6 +62,7 @@ def check_mask(paraName, element, elemType):
             return mask_para.AsString()
 
 
+
 def script_execute():
     for element in colAccessory:
         if not isElementEditedBy(element):
@@ -102,6 +103,7 @@ def script_execute():
                         mark_mask = mark_mask.replace("ШИРИНА", width_para.AsValueString())
                     if "ДИАМЕТР" in mark_mask:
                         mark_mask = mark_mask.replace("ДИАМЕТР", diameter_para.AsValueString())
+                        print int(fromRevitToMilimeters(diameter_para.AsDouble()))
                     mark_para.Set(mark_mask)
 
                 if name_mask:
