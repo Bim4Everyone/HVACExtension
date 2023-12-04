@@ -12,6 +12,7 @@ assembly: Revit3DvikSchemas.dll
 command_class: Revit3DvikSchemasCommand
 
 author: Redomine
+context: doc-workshared
 
 min_revit_version: 2020
 max_revit_version: 2024
