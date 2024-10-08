@@ -89,143 +89,24 @@ def roundup(divider, number):
         return int(number)
 
 
+class collar_variant:
+    def __init__(self, diameter, isInsulated):
+        self.diameter = diameter
+        self.isInsulated = isInsulated
+
 
 
 class calculation_element:
-    def pins(self, element):
-
-        lenght = fromRevitToMeters(element.get_Parameter(BuiltInParameter.CURVE_ELEM_LENGTH).AsDouble())
-        pipe_diameter = fromRevitToMilimeters(element.GetParamValueOrDefault(BuiltInParameter.RBS_PIPE_DIAMETER_PARAM))
-
-        self.local_description = self.local_description + ' ' + self.name  + ', Ду' + '{:g}'.format(pipe_diameter)
-
-        if lenght*1000 < pipe_diameter:
-            return 0.2
-        if lenght < 3:
-            return 0.4
-        if lenght < 6:
-            return 0.6
-        if lenght < 9:
-            return 0.8
-        if lenght < 12:
-            return 1
-        if lenght > 12:
-            num = lenght / 12
-            num = roundup(int(num), num)
-            return num
-
-    def collars(self, element):
-        lenght = fromRevitToMeters(element.get_Parameter(BuiltInParameter.CURVE_ELEM_LENGTH).AsDouble())
-        pipe_diameter = fromRevitToMilimeters(element.GetParamValueOrDefault(BuiltInParameter.RBS_PIPE_DIAMETER_PARAM))
-
-        self.name = self.name + ', Ду' + '{:g}'.format(pipe_diameter)
-
-        self.local_description = self.local_description + ' ' + self.name
-
-        if lenght*1000 < pipe_diameter:
-            return 1
-        if lenght < 3:
-            return 2
-        if lenght < 6:
-            return 3
-        if lenght < 9:
-            return 4
-        if lenght < 12:
-            return 5
-        if lenght > 12:
-            num = lenght/12 * 5
-            num = roundup(int(num), num)
-            return num
-
-    def duct_material(self, element):
-        area = (element.GetParamValue(BuiltInParameter.RBS_CURVE_SURFACE_AREA) * 0.092903) / 100
-
-        if str(element.DuctType.Shape) == "Round":
-            D = 304.8 * element.GetParamValue(BuiltInParameter.RBS_CURVE_DIAMETER_PARAM)
-            P = 3.14 * D
-        if str(element.DuctType.Shape) == "Rectangular":
-            A = 304.8 * element.GetParamValue(BuiltInParameter.RBS_CURVE_WIDTH_PARAM)
-            B = 304.8 * element.GetParamValue(BuiltInParameter.RBS_CURVE_HEIGHT_PARAM)
-            P = 2 * (A + B)
-
-
-        if P < 1001:
-            kg = area * 65
-        elif P < 1801:
-            kg = area * 122
-        else:
-            kg = area * 225
-
-        return kg
-
-    def pipe_material(self, element):
-        lenght = (304.8 * element.GetParamValue(BuiltInParameter.CURVE_ELEM_LENGTH)) / 1000
-
-        D = 304.8 * element.GetParamValue(BuiltInParameter.RBS_PIPE_DIAMETER_PARAM)
-
-        if D < 25:
-            kg = 0.9 * lenght
-        elif D < 33:
-            kg = 0.73 * lenght
-        elif D < 41:
-            kg = 0.64 * lenght
-        elif D < 51:
-            kg = 0.67 * lenght
-        elif D < 66:
-            kg = 0.53 * lenght
-        elif D < 81:
-            kg = 0.7 * lenght
-        elif D < 101:
-            kg = 0.64 * lenght
-        elif D < 126:
-            kg = 1.16 * lenght
-        else:
-            kg = 0.96 * lenght
-
-        return kg
-
-    def insul_stock(self, element):
-        area = element.GetParamValue(BuiltInParameter.RBS_CURVE_SURFACE_AREA)
-        if area == None:
-            area = 0
-        area = area * 0.092903 * 0.03
-        return area
-
-    def grunt(self, element):
-        area = (element.GetParamValue(BuiltInParameter.RBS_CURVE_SURFACE_AREA) * 0.092903)
-        number = area / 10
-        return number
-
-    def colorBT(self, element):
-        area = (element.GetParamValue(BuiltInParameter.RBS_CURVE_SURFACE_AREA) * 0.092903)
-        number = area * 0.2 * 2
-        return number
-
-    def get_number(self, element, name):
-        Number = 1
-        if name == "Металлические крепления для трубопроводов" and element in colPipes:
-            Number = self.pipe_material(element)
-        if name == "Металлические крепления для воздуховодов" and element in colCurves:
-            Number = self.duct_material(element)
-        if name == "Изоляция для фланцев и стыков" and element in colInsul:
-            Number = self.insul_stock(element)
-        if name == "Краска антикоррозионная за два раза" and element in colPipes:
-            Number = self.colorBT(element)
-        if name == "Грунтовка для стальных труб" and element in colPipes:
-            Number = self.grunt(element)
-        if name == "Хомут трубный под шпильку М8" and element in colPipes:
-            Number = self.collars(element)
-        if name == "Шпилька М8 1м/1шт" and element in colPipes:
-            Number = self.pins(element)
-
-
-        return Number
-
+    pipe_insulation_filter = ElementCategoryFilter(BuiltInCategory.OST_PipeInsulations)
     def __init__(self, element, collection, parameter, Name, Mark, Maker):
         self.local_description = description
         self.corp = str(element.LookupParameter('ФОП_Блок СМР').AsString())
         self.sec = str(element.LookupParameter('ФОП_Секция СМР').AsString())
         self.floor = str(element.LookupParameter('ФОП_Этаж').AsString())
+        self.length = UnitUtils.ConvertFromInternalUnits(element.GetParamValue(BuiltInParameter.CURVE_ELEM_LENGTH),
+                                                         UnitTypeId.Meters)
+        self.diametr = UnitUtils.ConvertFromInternalUnits(element.GetParamValue(BuiltInParameter.RBS_PIPE_DIAMETER_PARAM),
+                                                     UnitTypeId.Millimeters)
 
         if element.LookupParameter('ФОП_ВИС_Имя системы'):
             self.system = str(element.LookupParameter('ФОП_ВИС_Имя системы').AsString())
@@ -265,6 +146,127 @@ class calculation_element:
         self.key = self.EF + self.corp + self.sec + self.floor + self.system + \
                    self.group + self.name + self.mark + self.art + \
                    self.maker + self.local_description
+
+    def is_pipe_insulated(self, element):
+        dependent_elements = element.GetDependentElements(self.pipe_insulation_filter)
+        return len(dependent_elements) > 0
+
+    def mid_calculation_fix(self, coeff):
+        num = self.length / coeff
+        if num < 1:
+            num = 1
+        return int(num)
+
+    def pins(self, element):
+        self.local_description = '{0} {1}, Ду{2}'.format(self.local_description, self.name,self.diametr)
+        dict_var_pins = {15: [2, 1.5], 20: [3, 2], 25: [3.5, 2], 32: [4, 2.5], 40: [4.5, 3], 50: [5, 3], 65: [6, 4],
+                            80: [6, 4], 100: [6, 4.5], 125: [7, 5]}
+
+        # Мы не считаем крепление труб до 0.5 м
+        if self.length < 0.5:
+            return 0
+
+        if self.is_pipe_insulated(element):
+            if self.diametr in dict_var_pins:
+                return self.mid_calculation_fix(dict_var_pins[self.diametr][0])
+            else:
+                return self.mid_calculation_fix(7)
+        else:
+            if self.diametr in dict_var_pins:
+                return self.mid_calculation_fix(dict_var_pins[self.diametr][1])
+            else:
+                return self.mid_calculation_fix(5)
+
+    def collars(self, element):
+        self.name = '{0}, Ду{1}'.format(self.name, int(self.diametr))
+        self.local_description = '{0} {1}'.format(self.local_description, self.name)
+        dict_var_collars = {15:[2, 1.5], 20:[3, 2], 25:[3.5, 2], 32:[4, 2.5], 40:[4.5, 3], 50:[5, 3], 65:[6, 4],
+                            80:[6, 4], 100:[6, 4.5], 125:[7, 5]}
+
+        if self.length < 0.5:
+            return 0
+
+        if self.is_pipe_insulated(element):
+            if self.diametr in dict_var_collars:
+                return self.mid_calculation_fix(dict_var_collars[self.diametr][0])
+            else:
+                return self.mid_calculation_fix(7)
+        else:
+            if self.diametr in dict_var_collars:
+                return self.mid_calculation_fix(dict_var_collars[self.diametr][1])
+            else:
+                return self.mid_calculation_fix(5)
+
+    def duct_material(self, element):
+        area = (element.GetParamValue(BuiltInParameter.RBS_CURVE_SURFACE_AREA) * 0.092903) / 100
+
+        if str(element.DuctType.Shape) == "Round":
+            D = 304.8 * element.GetParamValue(BuiltInParameter.RBS_CURVE_DIAMETER_PARAM)
+            P = 3.14 * D
+        if str(element.DuctType.Shape) == "Rectangular":
+            A = 304.8 * element.GetParamValue(BuiltInParameter.RBS_CURVE_WIDTH_PARAM)
+            B = 304.8 * element.GetParamValue(BuiltInParameter.RBS_CURVE_HEIGHT_PARAM)
+            P = 2 * (A + B)
+
+
+        if P < 1001:
+            kg = area * 65
+        elif P < 1801:
+            kg = area * 122
+        else:
+            kg = area * 225
+
+        return kg
+
+    def pipe_material(self, element):
+        dict_var_p_mat = {15: 0.14, 20: 0.12, 25: 0.11, 32: 0.1, 40: 0.11, 50: 0.144, 65: 0.195,
+                            80: 0.233, 100: 0.37, 125: 0.53}
+        up_coeff = 1.7
+        # Запас 70% задан по согласованию.
+        if self.diametr in dict_var_p_mat:
+            key_up = dict_var_p_mat[self.diametr] * up_coeff
+            return key_up*self.length
+        else:
+            return 0.62*up_coeff*self.length
+
+    def insul_stock(self, element):
+        area = element.GetParamValue(BuiltInParameter.RBS_CURVE_SURFACE_AREA)
+        if area == None:
+            area = 0
+        area = area * 0.092903 * 0.03
+        return area
+
+    def grunt(self, element):
+        area = (element.GetParamValue(BuiltInParameter.RBS_CURVE_SURFACE_AREA) * 0.092903)
+        number = area / 10
+        return number
+
+    def colorBT(self, element):
+        area = (element.GetParamValue(BuiltInParameter.RBS_CURVE_SURFACE_AREA) * 0.092903)
+        number = area * 0.2 * 2
+        return number
+
+    def get_number(self, element, name):
+        Number = 1
+        if name == "Металлические крепления для трубопроводов" and element in colPipes:
+            Number = self.pipe_material(element)
+        if name == "Металлические крепления для воздуховодов" and element in colCurves:
+            Number = self.duct_material(element)
+        if name == "Изоляция для фланцев и стыков" and element in colInsul:
+            Number = self.insul_stock(element)
+        if name == "Краска антикоррозионная за два раза" and element in colPipes:
+            Number = self.colorBT(element)
+        if name == "Грунтовка для стальных труб" and element in colPipes:
+            Number = self.grunt(element)
+        if name == "Хомут трубный под шпильку М8" and element in colPipes:
+            Number = self.collars(element)
+        if name == "Шпилька М8 1м/1шт" and element in colPipes:
+            Number = self.pins(element)
+
+
+        return Number
+
+
 
 def is_object_to_generate(element, genCol, collection, parameter, genList = genList):
     if element in genCol:
