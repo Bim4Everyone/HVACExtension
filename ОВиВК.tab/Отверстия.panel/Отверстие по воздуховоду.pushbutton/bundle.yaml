@@ -1,0 +1,14 @@
+title:
+  ru: Отверстие по воздуховоду
+  en_us: Calculation of local resistance
+
+tooltip:
+  ru: Размещает отверстие по прямоугольному воздуховоду.
+  en_us: Recalculates local resistance on duct connecting parts.
+
+author: Redomine
+help_url: "https://kb.a101.ru/pages/viewpage.action?pageId=110562609"
+
+min_revit_version: 2020
+max_revit_version: 2024
+
