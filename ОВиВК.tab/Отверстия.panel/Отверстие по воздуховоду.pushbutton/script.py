@@ -73,6 +73,52 @@ def get_element_size(element):
     size = bbox.Max - bbox.Min
     return size
 
+def get_horizontal_offset(element, point):
+    # Получаем коннекторы воздуховода
+    connectors = element.ConnectorManager.Connectors
+
+    # Проверяем, что у нас есть как минимум два коннектора
+    if connectors.Size < 2:
+        raise ValueError("Воздуховод должен иметь как минимум два коннектора.")
+
+    # Получаем координаты начала и конца воздуховода через коннекторы
+    start_point = None
+    end_point = None
+    for connector in connectors:
+        if start_point is None:
+            start_point = connector.Origin
+        else:
+            end_point = connector.Origin
+            break
+
+    if start_point is None or end_point is None:
+        raise ValueError("Не удалось получить координаты коннекторов.")
+
+    # Получаем координаты точки
+    point_x = point.X
+    point_y = point.Y
+
+    # Получаем координаты начала и конца воздуховода
+    start_x = start_point.X
+    start_y = start_point.Y
+    end_x = end_point.X
+    end_y = end_point.Y
+
+    # Вычисляем длину нормали от точки до прямой
+    # Формула для расстояния от точки до прямой:
+    # d = |(x2 - x1)(y1 - y0) - (x1 - x0)(y2 - y1)| / sqrt((x2 - x1)^2 + (y2 - y1)^2)
+    numerator = abs((end_x - start_x) * (start_y - point_y) - (start_x - point_x) * (end_y - start_y))
+    denominator = math.sqrt((end_x - start_x) ** 2 + (end_y - start_y) ** 2)
+
+    if denominator == 0:
+        return 0  # Если длина прямой равна нулю, возвращаем 0
+
+    distance = numerator / denominator
+
+    return distance
+
+
+
 # Функция для размещения семейства в заданных координатах
 def place_family_at_coordinates(family_symbol, point, direction, element):
     # Создание экземпляра семейства
@@ -84,10 +130,10 @@ def place_family_at_coordinates(family_symbol, point, direction, element):
     family_size = get_element_size(family_symbol)
 
     # Вычисление horizontal_offset
-    horizontal_offset = duct_size.Y - family_size.Y
+    horizontal_offset = get_horizontal_offset(element, point)
 
     # Вычисление vertical_offset
-    vertical_offset = (duct_size.Z - family_size.Z) / 2
+    vertical_offset = 0
 
     # Сдвиг точки размещения на ось воздуховода по вертикали и горизонтали
     point = point + XYZ.BasisZ * vertical_offset + direction * horizontal_offset
