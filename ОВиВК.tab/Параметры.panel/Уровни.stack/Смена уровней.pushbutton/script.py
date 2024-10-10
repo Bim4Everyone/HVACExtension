@@ -1,29 +1,39 @@
 # -*- coding: utf-8 -*-
-import clr
 import sys
+import clr
+
+clr.AddReference('ProtoGeometry')
+clr.AddReference("RevitNodes")
+clr.AddReference("RevitServices")
+clr.AddReference("RevitAPI")
+clr.AddReference("RevitAPIUI")
+clr.AddReference("dosymep.Revit.dll")
+clr.AddReference("dosymep.Bim4Everyone.dll")
+
 import System
 from System.Collections.Generic import *
-clr.AddReference('ProtoGeometry')
-from Autodesk.DesignScript.Geometry import *
-clr.AddReference("RevitNodes")
+
 import Revit
+from Autodesk.Revit.DB import *
+from Autodesk.Revit.UI.Selection import Selection
+from Autodesk.DesignScript.Geometry import *
+from Autodesk.Revit.UI import TaskDialog
+
 clr.ImportExtensions(Revit.Elements)
 clr.ImportExtensions(Revit.GeometryConversion)
-clr.AddReference("RevitServices")
+
 import RevitServices
 from RevitServices.Persistence import DocumentManager
 from RevitServices.Transactions import TransactionManager
+
 from pyrevit import revit
 from pyrevit import forms
 from rpw.ui.forms import SelectFromList
-from Redomine import *
 
-clr.AddReference("RevitAPI")
-clr.AddReference("RevitAPIUI")
-
-import Autodesk
-from Autodesk.Revit.DB import *
-from Autodesk.Revit.UI import *
+import dosymep
+clr.ImportExtensions(dosymep.Revit)
+clr.ImportExtensions(dosymep.Bim4Everyone)
+from dosymep.Bim4Everyone.Templates import ProjectParameters
 
 
 doc = __revit__.ActiveUIDocument.Document  # type: Document
@@ -31,12 +41,29 @@ uiapp = DocumentManager.Instance.CurrentUIApplication
 #app = uiapp.Application
 uidoc = __revit__.ActiveUIDocument
 
-if isItFamily():
-    print 'Надстройка не предназначена для работы с семействами'
-    sys.exit()
+# типы параметров отвечающих за уровень
+built_in_level_params = [BuiltInParameter.RBS_START_LEVEL_PARAM,
+                         BuiltInParameter.FAMILY_LEVEL_PARAM,
+                         BuiltInParameter.GROUP_LEVEL]
 
+# типы параметров отвечающих за смещение от уровня
+built_in_offset_params = [BuiltInParameter.INSTANCE_ELEVATION_PARAM,
+                          BuiltInParameter.RBS_OFFSET_PARAM,
+                          BuiltInParameter.GROUP_OFFSET_FROM_LEVEL,
+                          BuiltInParameter.INSTANCE_FREE_HOST_OFFSET_PARAM]
 
-def make_col(category):
+class TargetLevel:
+    level_element = None
+    level_elevation = None
+    level_top_elevation = None
+
+    def __init__(self, element, elevation, top_elevation):
+        self.level_elevation = elevation
+        self.level_element = element
+        self.level_top_elevation = top_elevation
+
+def get_elements_by_category(category):
+    """ Возвращает коллекцию элементов по категории """
     col = FilteredElementCollector(doc)\
                             .OfCategory(category)\
                             .WhereElementIsNotElementType()\
@@ -44,21 +71,17 @@ def make_col(category):
     return col
 
 def convert(value):
+    """ Преобразует дабл в миллиметры """
     unit_type = DisplayUnitType.DUT_MILLIMETERS
     new_v = UnitUtils.ConvertFromInternalUnits(value, unit_type)
     return new_v
 
-
-def pick_elements(uidoc):
-    result = []
-    message = "Выберите элементы"
-    ob_type = Selection.ObjectType.Element
-    for ref in uidoc.Selection.PickObjects(ob_type, message):
-        result.append(doc.GetElement(ref))
-    return result
-
+def get_selected_elements(uidoc):
+    """ Возвращает выбранные элементы """
+    return [uidoc.Document.GetElement(elem_id) for elem_id in uidoc.Selection.GetElementIds()]
 
 def check_is_nested(element):
+    """ Проверяет, является ли вложением """
     if hasattr(element, "SuperComponent"):
         if not element.SuperComponent:
             return False
@@ -68,64 +91,82 @@ def check_is_nested(element):
         return True
     return False
 
+def get_parameter_if_exist_not_ro(element, built_in_parameters):
+    """ Получает параметр, если он существует и если он не ReadOnly """
+    for built_in_parameter in built_in_parameters:
+        parameter = element.get_Parameter(built_in_parameter)
+        if parameter is not None and not parameter.IsReadOnly:
+            return built_in_parameter
+
+    return None
 
 def filter_elements(elements):
+    """Возвращает фильтрованный от вложений и от свободных от групп список элементов"""
     result = []
     for element in elements:
-        if str(element.GroupId) == "-1":
+        if element.GroupId == ElementId.InvalidElementId:
+            builtin_level_param = get_parameter_if_exist_not_ro(element, built_in_level_params)
+            builtin_offset_param = get_parameter_if_exist_not_ro(element, built_in_offset_params)
+
+            if builtin_offset_param is None:
+                continue
+
+            # у гибких элементов есть только базовый уровень, никакой отметки, поэтому дальнейшие фильтры они иначе не пройдут
+            if element.InAnyCategory([BuiltInCategory.OST_FlexDuctCurves, BuiltInCategory.OST_FlexPipeCurves]):
+                result.append(element)
+
+            if builtin_level_param is None:
+                continue
+
+            # Даже если у элемента нашелся builtin - все равно просто параметра может и не быть.
+            # Дело в том что для материалов изоляции мы находим RBS_START_LEVEL_PARAM и RBS_OFFSET_PARAM
+            # Хотя таких параметров у них не существует
+            # IsExistsParam по BuiltIn вернет будто параметр существует
+            if not element.IsExistsParam(LabelUtils.GetLabelFor(builtin_level_param)):
+                continue
+
+            if not element.IsExistsParam(LabelUtils.GetLabelFor(builtin_offset_param)):
+                continue
+
+            # проверяем вложение или нет
             if not check_is_nested(element):
                 result.append(element)
+
     return result
 
-
-def get_real_height(doc, element, height, height_offset):
-    level_id = element.LookupParameter(height).AsElementId()
+def get_real_height(doc, element, level_param_name, offset_param_name):
+    """ Возвращает реальную абсолютную отметку элемента """
+    level_id = element.GetParamValue(level_param_name)
     level = doc.GetElement(level_id)
     height_value = level.Elevation
-    height_offset_value = element.LookupParameter(height_offset).AsDouble()
+    height_offset_value = element.GetParamValue(offset_param_name)
     real_height = height_value + height_offset_value
     return real_height
 
-
-def find_parameter(element, parameter_name):
-    for parameter in element.GetParameters(parameter_name):
-        if not parameter.IsReadOnly:
-            return parameter
-
-
 def get_height_by_element(doc, element):
-    parameters = {
-        'Смещение начала от уровня': "Базовый уровень",
-        'Отметка от уровня': ["Уровень спецификации", "Уровень"],
-        'Отметка посередине': "Базовый уровень",
-        }
-    for offset_param_name in parameters.keys():
-        if element.LookupParameter(offset_param_name):
-            height_param_name = parameters[offset_param_name]
-            offset_param = find_parameter(element, offset_param_name)
-            if isinstance(height_param_name, list):
-                for var_param_height_name in height_param_name:
-                    var_param_height = find_parameter(element, var_param_height_name)
-                    if var_param_height:
-                            real_height = get_real_height(doc, element, var_param_height_name, offset_param_name)
-                            return [real_height, offset_param, var_param_height]
-                return False
-            else:
-                param_height = find_parameter(element, height_param_name)
-                real_height = get_real_height(doc, element, height_param_name, offset_param_name)
-                return [real_height, offset_param, param_height]
+    """ Возвращает абсолютную отметку, параметр смещения и параметр уровня """
 
+    level_builtin_param = get_parameter_if_exist_not_ro(element, built_in_level_params)
+    offset_builtin_param = get_parameter_if_exist_not_ro(element, built_in_offset_params)
 
-def find_new_level(height):
-    all_levels = FilteredElementCollector(doc).OfClass(Level)
-    new_offset = 10000
-    for level in all_levels:
-        level_height = level.Elevation
-        offset = height - level_height
-        if offset < new_offset and offset >= 0:
-            new_level = level
-            new_offset = offset
-    return new_level, new_offset
+    real_height = get_real_height(doc, element, level_builtin_param, offset_builtin_param)
+    level_param = element.GetParam(level_builtin_param)
+    offset_param = element.GetParam(offset_builtin_param)
+
+    return [real_height, offset_param, level_param]
+
+def find_new_level(height, target_levels):
+    """ Ищем новый уровень. Здесь мы принимаем целевые уровни и смотрим в промежуток между отметками какого из них попадает
+     наша отметка. Если дошли до самого верхнего - принимаем его"""
+
+    for target_level in target_levels:
+        element_offset = height - target_level.level_elevation
+        # У самого верхнего уровня отметка верха - None. Он всегда будет последним из-за сортировки по отметке в методе где мы их собираем
+        if target_level.level_top_elevation is None:
+            return target_level.level_element, element_offset
+
+        if target_level.level_elevation < height < target_level.level_top_elevation:
+            return target_level.level_element, element_offset
 
 
 def change_level(element, new_level, new_offset, offset_param, height_param):
@@ -133,83 +174,105 @@ def change_level(element, new_level, new_offset, offset_param, height_param):
     offset_param.Set(new_offset)
     return element
 
-method = forms.SelectFromList.show(["Все элементы на активном виде к ближайшим уровням",
-                                    "Все элементы на активном виде к выбранному уровню",
-                                    "Выбранные элементы к выбранному уровню"],
-                                    title="Выберите метод привязки",
-                                    button_name="Применить")
+def get_selected_mode():
+    method = forms.SelectFromList.show(["Все элементы на активном виде к ближайшим уровням",
+                                        "Все элементы на активном виде к выбранному уровню",
+                                        "Выбранные элементы к выбранному уровню"],
+                                       title="Выберите метод привязки",
+                                       button_name="Применить")
+    if method is None:
+        sys.exit()
+    return method
 
-if method != 'Все элементы на активном виде к ближайшим уровням':
-    selected_view = True
+def get_selected_level(method):
+    """ Возвращаем выбранный уровень или False, если режим работы не подразумевает такого """
+    if method != 'Все элементы на активном виде к ближайшим уровням':
+        selected_view = True
 
-    levelCol = make_col(BuiltInCategory.OST_Levels)
+        levelCol = get_elements_by_category(BuiltInCategory.OST_Levels)
 
-    levels = []
+        levels = []
 
-    for levelEl in levelCol:
-        levels.append(levelEl.Name)
+        for levelEl in levelCol:
+            levels.append(levelEl.Name)
 
-    level_name = forms.SelectFromList.show(levels,
-                                      title="Выберите уровень",
-                                      button_name="Применить")
+        level_name = forms.SelectFromList.show(levels,
+                                               title="Выберите уровень",
+                                               button_name="Применить")
+        if level_name is None:
+            sys.exit()
 
-    for levelEl in levelCol:
-        if levelEl.Name == level_name:
-            level = levelEl
+        for levelEl in levelCol:
+            if levelEl.Name == level_name:
+                level = levelEl
+                return level
 
-else:
-    selected_view = False
+    return False
 
-
-
-
-try:
+def get_list_of_elements(method):
+    """ Возвращаем лист элементов в зависимости от выбранного режима работы """
     if method == 'Выбранные элементы к выбранному уровню':
-        elements = pick_elements(uidoc)
-    if method == 'Все элементы на активном виде к выбранному уровню' or method == 'Все элементы на активном виде к ближайшим уровням':
+        elements = get_selected_elements(uidoc)
+    if (method == 'Все элементы на активном виде к выбранному уровню'
+            or method == 'Все элементы на активном виде к ближайшим уровням'):
         elements = FilteredElementCollector(doc, doc.ActiveView.Id)
-except Exception:
-    print "Элементы не выбраны"
+
+    filtered = filter_elements(elements)
+
+    if len(filtered) == 0:
+        TaskDialog.Show("Ошибка", "Элементы не выбраны")
+        sys.exit()
+
+    return filtered
+
+def get_target_levels_list():
+    """ возвращает список целевых уровней, с отметками их низа и верха. Если верха нет - возвращает с None вместо отметки """
+    all_levels = FilteredElementCollector(doc).OfClass(Level).ToElements()
+    sorted_levels = sorted(all_levels, key=lambda level: level.GetParamValue(BuiltInParameter.LEVEL_ELEV))
+    result = []
+
+    for index, level in enumerate(sorted_levels):
+        if index + 1 < len(sorted_levels):
+            next_level_elevation = sorted_levels[index + 1].Elevation
+        else:
+            next_level_elevation = None
+
+        result.append(TargetLevel(level, level.Elevation, next_level_elevation))
+
+    return result
+
+
+def execute():
+    result_error = []
+    result_ok = []
+    target_levels = []
+
+    method = get_selected_mode()
+    elements = get_list_of_elements(method)
+    level = get_selected_level(method)
+    if not level:
+        target_levels = get_target_levels_list()
+    with revit.Transaction("Смена уровней"):
+            for element in elements:
+                height_result = get_height_by_element(doc, element)
+
+                if height_result:
+                    real_height = height_result[0]
+                    offset_param = height_result[1]
+                    height_param = height_result[2]
+
+                    if level:
+                        new_offset = real_height - level.Elevation
+                        change_level(element, level, new_offset, offset_param, height_param)
+                    else:
+                        new_level, new_offset = find_new_level(real_height, target_levels)
+                        change_level(element, new_level, new_offset, offset_param, height_param)
+                    result_ok.append(element)
+                else:
+                    result_error.append(element)
+
+if doc.IsFamilyDocument:
+    TaskDialog.Show("Ошибка", "Надстройка не предназначена для работы с семействами")
     sys.exit()
 
-filtered = filter_elements(elements)
-
-result = []
-result_error = []
-result_ok = []
-
-
-
-# with Transaction(doc, "Change level") as t:
-#     t.Start()
-with revit.Transaction("Смена уровней"):
-    try:
-        for element in filtered:
-            height_result = get_height_by_element(doc, element)
-            if height_result:
-                real_height = height_result[0]
-                offset_param = height_result[1]
-                height_param = height_result[2]
-                new_level, new_offset = find_new_level(real_height)
-                if selected_view:
-                    new_offset = real_height - level.Elevation
-                    change_level(element, level, new_offset, offset_param, height_param)
-                else:
-                    change_level(element, new_level, new_offset, offset_param, height_param)
-                result_ok.append(element)
-                # result_ok.append(convert(real_height)
-                # result_ok.append(new_level)
-                # result_ok.append(convert(new_offset))
-            else:
-                # result_error.append("Error with:")
-                result_error.append(element)
-            # t.Commit()
-    except Exception:
-        print 'Ошибка переноса для элементов с айди'
-        print element.Id
-
-
-#
-# result.append(result_ok)
-# result.append(result_error)
-
+execute()
