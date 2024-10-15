@@ -72,8 +72,7 @@ def get_element_size(element):
     bbox = geometry.GetBoundingBox()
     size = bbox.Max - bbox.Min
     return size
-
-def get_horizontal_offset(element, point):
+def get_horizontal_offset(element, point, direction):
     # Получаем коннекторы воздуховода
     connectors = element.ConnectorManager.Connectors
 
@@ -115,9 +114,30 @@ def get_horizontal_offset(element, point):
 
     distance = numerator / denominator
 
-    return distance
+    # Вычисление vertical_offset
+    vertical_offset = 0
+
+    # Сдвиг точки размещения на ось воздуховода по вертикали и горизонтали
+    target = point + XYZ.BasisZ * vertical_offset + direction * -1 * distance
+
+    # Проверка, проходит ли линия через точку target
+    if is_point_on_line(start_x, start_y, end_x, end_y, target.X, target.Y):
+        return distance
+    else:
+        return distance * -1
 
 
+
+def is_point_on_line(start_x, start_y, end_x, end_y, target_x, target_y, epsilon=1e-9):
+    # Проверка, лежит ли точка на прямой с учетом погрешности
+    if abs((end_x - start_x) * (target_y - start_y) - (end_y - start_y) * (target_x - start_x)) > epsilon:
+        return False
+
+    # Проверка, лежит ли точка в пределах отрезка
+    if min(start_x, end_x) <= target_x <= max(start_x, end_x) and min(start_y, end_y) <= target_y <= max(start_y, end_y):
+        return True
+
+    return False
 
 # Функция для размещения семейства в заданных координатах
 def place_family_at_coordinates(family_symbol, point, direction, element):
@@ -126,18 +146,18 @@ def place_family_at_coordinates(family_symbol, point, direction, element):
     transaction.Start()
 
     # Получение размеров воздуховода и семейства
-    duct_size = get_element_size(element)
-    family_size = get_element_size(family_symbol)
+
 
     # Вычисление horizontal_offset
-    horizontal_offset = get_horizontal_offset(element, point)
+    horizontal_offset = get_horizontal_offset(element, point, direction)
 
     # Вычисление vertical_offset
     vertical_offset = 0
 
     # Сдвиг точки размещения на ось воздуховода по вертикали и горизонтали
-    point = point + XYZ.BasisZ * vertical_offset + direction * horizontal_offset
+    point = point + XYZ.BasisZ * vertical_offset + direction * -1 * horizontal_offset
 
+    family_symbol.Activate()
     instance = doc.Create.NewFamilyInstance(point, family_symbol, Structure.StructuralType.NonStructural)
 
     # Создание оси вращения, проходящей через точку размещения и направленной вдоль оси Z
