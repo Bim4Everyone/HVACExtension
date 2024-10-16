@@ -5,6 +5,7 @@ __title__ = "Отверстие по воздуховоду"
 __doc__ = "Пересчитывает КМС соединительных деталей воздуховодов"
 
 import clr
+import datetime
 from pyrevit.labs import target
 
 clr.AddReference("RevitAPI")
@@ -23,9 +24,15 @@ from Autodesk.Revit.UI import TaskDialog
 from Autodesk.Revit.UI.Selection import ObjectType
 from Autodesk.Revit.UI.Selection import ISelectionFilter
 from Autodesk.Revit.DB import BuiltInCategory, ElementFilter, LogicalOrFilter, ElementCategoryFilter
+from Autodesk.Revit.Exceptions import OperationCanceledException
 
 from System.Collections.Generic import List
 from System import Guid
+from pyrevit import forms
+from pyrevit import HOST_APP
+from pyrevit import EXEC_PARAMS
+
+from dosymep_libs.bim4everyone import *
 
 doc = __revit__.ActiveUIDocument.Document # type: Document
 
@@ -61,7 +68,13 @@ class CustomSelectionFilter(ISelectionFilter):
 def get_point_coordinates():
     # Применяем пользовательский фильтр к выбору объектов
     selection_filter = CustomSelectionFilter(combined_filter)
-    reference = uidoc.Selection.PickObject(ObjectType.Element, selection_filter)
+
+    try:
+        reference = uidoc.Selection.PickObject(ObjectType.Element, selection_filter)
+        # Продолжайте выполнение кода, если объект был выбран
+    except OperationCanceledException:
+        # Обработка отмены операции выбора
+        sys.exit()
 
     if reference:
         element = doc.GetElement(reference)
@@ -185,13 +198,18 @@ def is_point_on_line(start_x, start_y, end_x, end_y, target_x, target_y, epsilon
 
     return False
 
+def get_parameter_if_exists(element, param_name):
+    if element.IsExistsParam(param_name):
+        return element.GetParam(param_name)
+    else:
+        return None
+
 def setup_size(instance, curve):
     indent = (50 * 2) / 304.8
 
-    instance_diameter_param = instance.GetParam("ADSK_Размер_Диаметр") \
-        if instance.IsExistsParam("ADSK_Размер_Диаметр") else None
-    instance_height_param = instance.GetParam("ADSK_Размер_Высота")
-    instance_width_param = instance.GetParam("ADSK_Размер_Ширина")
+    instance_diameter_param = get_parameter_if_exists(instance, "ADSK_Размер_Диаметр")
+    instance_height_param = get_parameter_if_exists(instance, "ADSK_Размер_Высота")
+    instance_width_param = get_parameter_if_exists(instance, "ADSK_Размер_Ширина")
 
     curve_diameter = 0
     curve_width = 0
@@ -209,23 +227,48 @@ def setup_size(instance, curve):
     if curve_diameter != 0:
         if instance_diameter_param:
             instance_diameter_param.Set(curve_diameter + indent)
+            correction = 0
         else:
             instance_width_param.Set(curve_diameter + indent)
             instance_height_param.Set(curve_diameter + indent)
-        correction = (curve_diameter + indent) / 2
+            correction = (curve_diameter + indent) / 2
     else:
-        instance_width_param.Set(curve_width + indent)
-        instance_height_param.Set(curve_height + indent)
-        correction = (curve_height + indent) / 2
+        if instance_diameter_param:
+            instance_diameter_param.Set(math.sqrt(curve_width ** 2 + curve_height ** 2)  + indent)
+            correction = 0
+        else:
+            instance_width_param.Set(curve_width + indent)
+            instance_height_param.Set(curve_height + indent)
+            correction = (curve_height + indent) / 2
 
     return correction
 
-def setup_opening_instance(instance, curve):
-    correction = setup_size(instance, curve)
+def get_curve_system(curve):
+    system_name = curve.GetParamValueOrDefault("ФОП_ВИС_Имя системы")
+    if system_name is None:
+        system_name = curve.GetParamValue(BuiltInParameter.RBS_SYSTEM_NAME_PARAM)
+    return system_name
 
+def setup_opening_instance(instance, curve):
+    # Заполняем автора задания
+    user_name = __revit__.Application.Username
+    instance.SetParamValue("ФОП_Автор задания", user_name)
+
+    # Заполняем айди линейного элемента
+    instance.SetParamValue("ФОП_Описание", curve.Id.ToString())
+
+    # Заполняем имя системы элемента
+    instance.SetParamValue("ФОП_ВИС_Имя системы", get_curve_system(curve))
+
+    # Заполняем время
+    current_time = datetime.datetime.now()
+    formatted_time = current_time.strftime("%Y-%m-%d %H:%M")
+    instance.SetParamValue("ФОП_Дата", formatted_time)
+
+    # Устанавливаем размер под воздуховод и получаем смещение относительно него
+    correction = setup_size(instance, curve)
     instance_offset_param = instance.get_Parameter(BuiltInParameter.INSTANCE_FREE_HOST_OFFSET_PARAM)
     instance_current_offset = instance.GetParamValueOrDefault(BuiltInParameter.INSTANCE_FREE_HOST_OFFSET_PARAM)
-
     instance_offset_param.Set(instance_current_offset - correction)
 
 # Функция для размещения семейства в заданных координатах
@@ -260,14 +303,16 @@ def place_family_at_coordinates(family_symbol, point, direction, element):
 
     transaction.Commit()
 
-# Основная функция для запуска
-def main():
+#@notification()
+#@log_plugin(EXEC_PARAMS.command_name)
+def script_execute():
     element, point = get_point_coordinates()
     duct_direction = get_curve_direction(element)
-    family_name = "ОбщМд_Отв_Отверстие_Прямоугольное_В стене"
+    # family_name = "ОбщМд_Отв_Отверстие_Прямоугольное_В стене"
+    family_name =  "ОбщМд_Отв_Отверстие_Круглое_В стене"
     family_symbol = find_family_symbol(family_name)
 
     if family_symbol:
         place_family_at_coordinates(family_symbol, point, duct_direction, element)
 
-main()
+script_execute()
