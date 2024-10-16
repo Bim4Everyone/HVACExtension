@@ -31,6 +31,11 @@ uiapp = __revit__.Application
 
 view = doc.ActiveView
 
+class CurveSizes:
+    curve_diameter = 0
+    curve_width = 0
+    curve_height = 0
+
 # Функция для получения координат точки на воздуховоде
 def get_point_coordinates(uiapp):
     # Запрос на выбор элемента
@@ -131,8 +136,6 @@ def get_offset(element, point, direction, use_horizontal_projection):
     else:
         target = point + XYZ.BasisZ * distance + direction * horizontal_offset
 
-
-
     # Проверка, проходит ли линия через точку target
     if use_horizontal_projection:
         if is_point_on_line(start_x, start_y, end_x, end_y, target.X, target.Y):
@@ -156,6 +159,48 @@ def is_point_on_line(start_x, start_y, end_x, end_y, target_x, target_y, epsilon
 
     return False
 
+def setup_size(instance, curve):
+    indent = (50 * 2) / 304.8
+
+    instance_diameter_param = instance.GetParam("ADSK_Размер_Диаметр") \
+        if instance.IsExistsParam("ADSK_Размер_Диаметр") else None
+    instance_height_param = instance.GetParam("ADSK_Размер_Высота")
+    instance_width_param = instance.GetParam("ADSK_Размер_Ширина")
+
+    curve_diameter = 0
+    curve_width = 0
+    curve_height = 0
+
+    if curve.Category.IsId(BuiltInCategory.OST_PipeCurves):
+        curve_diameter = curve.GetParamValue(BuiltInParameter.RBS_PIPE_OUTER_DIAMETER)
+    elif curve.Category.IsId(BuiltInCategory.OST_DuctCurves):
+        if curve.DuctType.Shape == ConnectorProfileType.Round:
+            curve_diameter = curve.GetParamValue(BuiltInParameter.RBS_CURVE_DIAMETER_PARAM)
+        elif curve.DuctType.Shape == ConnectorProfileType.Rectangular:
+            curve_width = curve.GetParamValue(BuiltInParameter.RBS_CURVE_WIDTH_PARAM)
+            curve_height = curve.GetParamValue(BuiltInParameter.RBS_CURVE_HEIGHT_PARAM)
+
+    if curve_diameter != 0:
+        if instance_diameter_param:
+            instance_diameter_param.Set(curve_diameter + indent)
+        else:
+            instance_width_param.Set(curve_diameter + indent)
+            instance_height_param.Set(curve_diameter + indent)
+        correction = (curve_diameter + indent) / 2
+    else:
+        instance_width_param.Set(curve_width + indent)
+        instance_height_param.Set(curve_height + indent)
+        correction = (curve_height + indent) / 2
+
+    return correction
+
+def setup_opening_instance(instance, curve):
+    correction = setup_size(instance, curve)
+
+    instance_offset_param = instance.get_Parameter(BuiltInParameter.INSTANCE_FREE_HOST_OFFSET_PARAM)
+    instance_current_offset = instance.GetParamValueOrDefault(BuiltInParameter.INSTANCE_FREE_HOST_OFFSET_PARAM)
+
+    instance_offset_param.Set(instance_current_offset - correction)
 
 # Функция для размещения семейства в заданных координатах
 def place_family_at_coordinates(family_symbol, point, direction, element):
@@ -176,11 +221,7 @@ def place_family_at_coordinates(family_symbol, point, direction, element):
     family_symbol.Activate()
     instance = doc.Create.NewFamilyInstance(point, family_symbol, Structure.StructuralType.NonStructural)
 
-    height = instance.GetParamValueOrDefault("ADSK_Размер_Высота")
-
-    offset_para = instance.get_Parameter(BuiltInParameter.INSTANCE_FREE_HOST_OFFSET_PARAM)
-    current_offset = instance.GetParamValueOrDefault(BuiltInParameter.INSTANCE_FREE_HOST_OFFSET_PARAM)
-    offset_para.Set(current_offset - height/2)
+    setup_opening_instance(instance, element)
 
     # Создание оси вращения, проходящей через точку размещения и направленной вдоль оси Z
     axis = Line.CreateBound(point, point + XYZ.BasisZ)
@@ -193,10 +234,7 @@ def place_family_at_coordinates(family_symbol, point, direction, element):
 
     transaction.Commit()
 
-def get_element_size(element):
-    height = element.GetParamValueOrDefault("ADSK_Размер_Высота")
-    width = element.GetParamValueOrDefault("ADSK_Размер_Ширина")
-    diameter = element.GetParamValueOrDefault("ADSK_Размер_Диаметр")
+
 
 # Основная функция для запуска
 def main():
