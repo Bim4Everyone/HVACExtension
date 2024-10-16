@@ -21,6 +21,9 @@ import math
 from Autodesk.Revit.DB import *
 from Autodesk.Revit.UI import TaskDialog
 from Autodesk.Revit.UI.Selection import ObjectType
+from Autodesk.Revit.UI.Selection import ISelectionFilter
+from Autodesk.Revit.DB import BuiltInCategory, ElementFilter, LogicalOrFilter, ElementCategoryFilter
+
 from System.Collections.Generic import List
 from System import Guid
 
@@ -36,15 +39,38 @@ class CurveSizes:
     curve_width = 0
     curve_height = 0
 
+# Создаем фильтры для нужных категорий
+duct_filter = ElementCategoryFilter(BuiltInCategory.OST_DuctCurves)
+pipe_filter = ElementCategoryFilter(BuiltInCategory.OST_PipeCurves)
+
+# Объединяем фильтры с помощью логического "или"
+combined_filter = LogicalOrFilter(duct_filter, pipe_filter)
+
+# Создаем пользовательский фильтр для выбора объектов
+class CustomSelectionFilter(ISelectionFilter):
+    def __init__(self, filter):
+        self.filter = filter
+
+    def AllowElement(self, element):
+        return self.filter.PassesFilter(element)
+
+    def AllowReference(self, reference, position):
+        return True
+
 # Функция для получения координат точки на воздуховоде
-def get_point_coordinates(uiapp):
-    # Запрос на выбор элемента
-    reference = uidoc.Selection.PickObject(ObjectType.Element)
-    element = doc.GetElement(reference)
-    # Получение координат точки
-    point = reference.GlobalPoint
-    coordinates = point.ToString()
-    return element, point
+def get_point_coordinates():
+    # Применяем пользовательский фильтр к выбору объектов
+    selection_filter = CustomSelectionFilter(combined_filter)
+    reference = uidoc.Selection.PickObject(ObjectType.Element, selection_filter)
+
+    if reference:
+        element = doc.GetElement(reference)
+        # Получение координат точки
+        point = reference.GlobalPoint
+        coordinates = point.ToString()
+        return element, point
+    else:
+        return None, None
 
 # Функция для получения центра и направления воздуховода
 def get_curve_direction(duct):
@@ -234,11 +260,9 @@ def place_family_at_coordinates(family_symbol, point, direction, element):
 
     transaction.Commit()
 
-
-
 # Основная функция для запуска
 def main():
-    element, point = get_point_coordinates(uiapp)
+    element, point = get_point_coordinates()
     duct_direction = get_curve_direction(element)
     family_name = "ОбщМд_Отв_Отверстие_Прямоугольное_В стене"
     family_symbol = find_family_symbol(family_name)
