@@ -47,18 +47,6 @@ uiapp = __revit__.Application
 
 view = doc.ActiveView
 
-class CurveSizes:
-    curve_diameter = 0
-    curve_width = 0
-    curve_height = 0
-
-# Создаем фильтры для нужных категорий
-duct_filter = ElementCategoryFilter(BuiltInCategory.OST_DuctCurves)
-pipe_filter = ElementCategoryFilter(BuiltInCategory.OST_PipeCurves)
-
-# Объединяем фильтры с помощью логического "или"
-combined_filter = LogicalOrFilter(duct_filter, pipe_filter)
-
 # Создаем пользовательский фильтр для выбора объектов
 class CustomSelectionFilter(ISelectionFilter):
     def __init__(self, filter):
@@ -72,6 +60,13 @@ class CustomSelectionFilter(ISelectionFilter):
 
 # Функция для получения координат точки на воздуховоде
 def get_point_coordinates():
+    # Создаем фильтры для нужных категорий
+    duct_filter = ElementCategoryFilter(BuiltInCategory.OST_DuctCurves)
+    pipe_filter = ElementCategoryFilter(BuiltInCategory.OST_PipeCurves)
+
+    # Объединяем фильтры с помощью логического "или"
+    combined_filter = LogicalOrFilter(duct_filter, pipe_filter)
+
     # Применяем пользовательский фильтр к выбору объектов
     selection_filter = CustomSelectionFilter(combined_filter)
 
@@ -107,7 +102,7 @@ def get_curve_direction(duct):
     return direction
 
 # Функция для поиска семейства в проекте
-def find_family_symbol(family_name):
+def find_family_symbol():
     family_symbols = FilteredElementCollector(doc).OfClass(FamilySymbol).ToElements()
     family_symbol = next((fs for fs in family_symbols if fs.Family.Name == family_name), None)
     if not family_symbol:
@@ -305,6 +300,35 @@ def setup_opening_instance(instance, curve):
     instance_current_offset = instance.GetParamValueOrDefault(BuiltInParameter.INSTANCE_FREE_HOST_OFFSET_PARAM)
     instance_offset_param.Set(instance_current_offset - correction)
 
+    # Заполняем параметры отметки от уровня и абсолютной отметки
+    set_offset_values_to_shared_params(instance)
+
+def set_offset_values_to_shared_params(instance):
+    target_levels = get_target_levels_list()
+    real_height = instance.GetParamValue(BuiltInParameter.INSTANCE_ELEVATION_PARAM)
+    new_offset, level_offset = find_new_level(real_height, target_levels)
+
+
+    instance.SetParamValue(shared_absolute_offset_name, real_height)
+    instance.SetParamValue(shared_from_level_offset_name, new_offset)
+    instance.SetParamValue(shared_level_offset_name, level_offset)
+
+
+
+def find_new_level(height, target_levels):
+    """ Ищем новый уровень. Здесь мы принимаем целевые уровни и смотрим в промежуток между отметками какого из них попадает
+     наша отметка. Если дошли до самого верхнего - принимаем его"""
+
+    for target_level in target_levels:
+        element_offset = height - target_level.level_elevation
+        # У самого верхнего уровня отметка верха - None. Он всегда будет последним из-за сортировки по отметке в методе где мы их собираем
+        if target_level.level_top_elevation is None:
+            return element_offset, target_level.level_elevation
+
+        if target_level.level_elevation < height < target_level.level_top_elevation:
+            return element_offset, target_level.level_elevation
+
+
 # Функция для размещения семейства в заданных координатах
 def place_family_at_coordinates(family_symbol, point, direction, element):
     # Создание экземпляра семейства
@@ -345,6 +369,32 @@ class CategoryConfig:
         self.to_value = to_value
         self.offset_value = offset_value
         self.opening_type_name = opening_type_name
+
+class TargetLevel:
+    level_element = None
+    level_elevation = None
+    level_top_elevation = None
+
+    def __init__(self, element, elevation, top_elevation):
+        self.level_elevation = elevation
+        self.level_element = element
+        self.level_top_elevation = top_elevation
+
+def get_target_levels_list():
+    """ возвращает список целевых уровней, с отметками их низа и верха. Если верха нет - возвращает с None вместо отметки """
+    all_levels = FilteredElementCollector(doc).OfClass(Level).ToElements()
+    sorted_levels = sorted(all_levels, key=lambda level: level.GetParamValue(BuiltInParameter.LEVEL_ELEV))
+    result = []
+
+    for index, level in enumerate(sorted_levels):
+        if index + 1 < len(sorted_levels):
+            next_level_elevation = sorted_levels[index + 1].Elevation
+        else:
+            next_level_elevation = None
+
+        result.append(TargetLevel(level, level.Elevation, next_level_elevation))
+
+    return result
 
 # Функция для чтения JSON файла и извлечения данных
 def get_offsets_for_categories(file_path, category_names):
@@ -397,6 +447,10 @@ config_category_pipe_name = "Трубы"
 config_category_round_duct_name = "Воздуховоды (прямоугольное сечение)"
 config_category_rectangle_duct_name = "Воздуховоды (круглое сечение)"
 
+shared_absolute_offset_name = "ADSK_Отверстие_Отметка от нуля"
+shared_from_level_offset_name = "ADSK_Отверстие_Отметка от этажа"
+shared_level_offset_name = "ADSK_Отверстие_Отметка этажа"
+
 shared_height_param_name = "ADSK_Размер_Высота"
 shared_width_param_name = "ADSK_Размер_Ширина"
 shared_diameter_param_name = "ADSK_Размер_Диаметр"
@@ -415,9 +469,10 @@ def script_execute():
     duct_direction = get_curve_direction(curve)
     get_plugin_config(curve)
 
-    family_symbol = find_family_symbol(family_name)
+    family_symbol = find_family_symbol()
 
     if family_symbol:
+
         place_family_at_coordinates(family_symbol, point, duct_direction, curve)
 
 script_execute()
