@@ -37,6 +37,7 @@ from pyrevit import forms
 from pyrevit import HOST_APP
 from pyrevit import EXEC_PARAMS
 
+from dosymep.Bim4Everyone.SharedParams import SharedParamsConfig
 from dosymep_libs.bim4everyone import *
 
 doc = __revit__.ActiveUIDocument.Document # type: Document
@@ -248,9 +249,9 @@ def get_curve_width_height(curve):
 
 # Настраиваем размер отверстия под линейный элемент и возвращаем значение корректировки на которое надо опустить точку вставки
 def setup_size(instance, curve):
-    instance_diameter_param = get_parameter_if_exists(instance, "ADSK_Размер_Диаметр")
-    instance_height_param = get_parameter_if_exists(instance, "ADSK_Размер_Высота")
-    instance_width_param = get_parameter_if_exists(instance, "ADSK_Размер_Ширина")
+    instance_diameter_param = get_parameter_if_exists(instance, shared_diameter_param_name)
+    instance_height_param = get_parameter_if_exists(instance, shared_height_param_name)
+    instance_width_param = get_parameter_if_exists(instance, shared_width_param_name)
 
     curve_width, curve_height, category_name = get_curve_width_height(curve)
 
@@ -276,7 +277,7 @@ def setup_size(instance, curve):
 
 # Возвращаем значение системного Имя системы или ФОП_ВИС_Имя системы в зависимости от заполненности второго
 def get_curve_system(curve):
-    system_name = curve.GetParamValueOrDefault("ФОП_ВИС_Имя системы")
+    system_name = curve.GetParamValueOrDefault(shared_system_param_name)
     if system_name is None:
         system_name = curve.GetParamValue(BuiltInParameter.RBS_SYSTEM_NAME_PARAM)
     return system_name
@@ -285,18 +286,18 @@ def get_curve_system(curve):
 def setup_opening_instance(instance, curve):
     # Заполняем автора задания
     user_name = __revit__.Application.Username
-    instance.SetParamValue("ФОП_Автор задания", user_name)
+    instance.SetParamValue(shared_autor_param_name, user_name)
 
     # Заполняем айди линейного элемента
-    instance.SetParamValue("ФОП_Описание", curve.Id.ToString())
+    instance.SetParamValue(shared_info_param_name, curve.Id.ToString())
 
     # Заполняем имя системы элемента
-    instance.SetParamValue("ФОП_ВИС_Имя системы", get_curve_system(curve))
+    instance.SetParamValue(shared_system_param_name, get_curve_system(curve))
 
     # Заполняем время
     current_time = datetime.datetime.now()
     formatted_time = current_time.strftime("%Y-%m-%d %H:%M")
-    instance.SetParamValue("ФОП_Дата", formatted_time)
+    instance.SetParamValue(shared_date_param_name, formatted_time)
 
     # Устанавливаем размер под воздуховод и получаем смещение относительно него
     correction = setup_size(instance, curve)
@@ -364,19 +365,14 @@ def get_offsets_for_categories(file_path, category_names):
 
     return category_configs
 
-
 # Получаем конфиг плагина размещение отверстий или возвращаем стандартные настройки
 def get_plugin_config(curve):
     global family_name, indent
+    indent = UnitUtils.ConvertToInternalUnits((50 * 2), UnitTypeId.Millimeters)
+    family_name = rectangle_opening_name
 
     curve_width, curve_height, category_name = get_curve_width_height(curve)
     curve_size = UnitUtils.ConvertToInternalUnits(max(curve_width, curve_height), UnitTypeId.Millimeters)
-
-
-    family_name = rectangle_opening_name
-
-    indent = UnitUtils.ConvertToInternalUnits((50 * 2), UnitTypeId.Millimeters)
-
 
     file_path = str(
         os.environ['USERPROFILE']) + "\\Documents\\dosymep\\2022\\RevitOpeningPlacement\\OpeningConfig.json"
@@ -393,7 +389,6 @@ def get_plugin_config(curve):
 
                 indent = UnitUtils.ConvertToInternalUnits(config.offset_value*2, UnitTypeId.Millimeters)
 
-
 rectangle_opening_name = "ОбщМд_Отв_Отверстие_Прямоугольное_В стене"
 round_opening_name = "ОбщМд_Отв_Отверстие_Круглое_В стене"
 config_round_type_name = "Круглое"
@@ -402,15 +397,23 @@ config_category_pipe_name = "Трубы"
 config_category_round_duct_name = "Воздуховоды (прямоугольное сечение)"
 config_category_rectangle_duct_name = "Воздуховоды (круглое сечение)"
 
+shared_height_param_name = "ADSK_Размер_Высота"
+shared_width_param_name = "ADSK_Размер_Ширина"
+shared_diameter_param_name = "ADSK_Размер_Диаметр"
+shared_date_param_name = "ФОП_Дата"
+shared_info_param_name = "ФОП_Описание"
+shared_autor_param_name = "ФОП_Автор задания"
+shared_system_param_name = SharedParamsConfig.Instance.VISSystemName.Name
+
 family_name = None
 indent = 0
+
 #@notification()
 #@log_plugin(EXEC_PARAMS.command_name)
 def script_execute():
     curve, point = get_point_coordinates()
     duct_direction = get_curve_direction(curve)
     get_plugin_config(curve)
-
 
     family_symbol = find_family_symbol(family_name)
 
