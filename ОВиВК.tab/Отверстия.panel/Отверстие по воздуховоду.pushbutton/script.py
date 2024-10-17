@@ -1,8 +1,8 @@
 #! /usr/bin/env python
 # -*- coding: utf-8 -*-
 
-__title__ = "Отверстие по воздуховоду"
-__doc__ = "Пересчитывает КМС соединительных деталей воздуховодов"
+__title__ = "Отверстие по линейному элементу"
+__doc__ = "Размещает отверстие "
 
 
 import clr
@@ -284,7 +284,7 @@ def setup_opening_instance(instance, curve):
     instance.SetParamValue(shared_autor_param_name, user_name)
 
     # Заполняем айди линейного элемента
-    instance.SetParamValue(shared_info_param_name, curve.Id.ToString())
+    instance.SetParamValue(shared_info_param_name, curve.Name + ": " + curve.Id.ToString())
 
     # Заполняем имя системы элемента
     instance.SetParamValue(shared_system_param_name, get_curve_system(curve))
@@ -304,30 +304,13 @@ def setup_opening_instance(instance, curve):
     set_offset_values_to_shared_params(instance)
 
 def set_offset_values_to_shared_params(instance):
-    target_levels = get_target_levels_list()
-    real_height = instance.GetParamValue(BuiltInParameter.INSTANCE_ELEVATION_PARAM)
-    new_offset, level_offset = find_new_level(real_height, target_levels)
+    real_height = instance.GetParamValue(BuiltInParameter.INSTANCE_ELEVATION_PARAM) + level.Elevation
+    offset = instance.GetParamValue(BuiltInParameter.INSTANCE_ELEVATION_PARAM)
+    level_offset = level.Elevation
 
-
-    instance.SetParamValue(shared_absolute_offset_name, real_height)
-    instance.SetParamValue(shared_from_level_offset_name, new_offset)
-    instance.SetParamValue(shared_level_offset_name, level_offset)
-
-
-
-def find_new_level(height, target_levels):
-    """ Ищем новый уровень. Здесь мы принимаем целевые уровни и смотрим в промежуток между отметками какого из них попадает
-     наша отметка. Если дошли до самого верхнего - принимаем его"""
-
-    for target_level in target_levels:
-        element_offset = height - target_level.level_elevation
-        # У самого верхнего уровня отметка верха - None. Он всегда будет последним из-за сортировки по отметке в методе где мы их собираем
-        if target_level.level_top_elevation is None:
-            return element_offset, target_level.level_elevation
-
-        if target_level.level_elevation < height < target_level.level_top_elevation:
-            return element_offset, target_level.level_elevation
-
+    instance.SetParamValue(shared_absolute_offset_name, UnitUtils.ConvertFromInternalUnits(real_height, UnitTypeId.Millimeters))
+    instance.SetParamValue(shared_from_level_offset_name, UnitUtils.ConvertFromInternalUnits(offset, UnitTypeId.Millimeters))
+    instance.SetParamValue(shared_level_offset_name, UnitUtils.ConvertFromInternalUnits(level_offset, UnitTypeId.Millimeters))
 
 # Функция для размещения семейства в заданных координатах
 def place_family_at_coordinates(family_symbol, point, direction, element):
@@ -346,7 +329,13 @@ def place_family_at_coordinates(family_symbol, point, direction, element):
 
     # Создание экземпляра
     family_symbol.Activate()
-    instance = doc.Create.NewFamilyInstance(point, family_symbol, Structure.StructuralType.NonStructural)
+
+    if level is None:
+        instance = doc.Create.NewFamilyInstance(point, family_symbol, Structure.StructuralType.NonStructural)
+    else:
+        # Корректируем уровень по Z, потому что изначально точку мы получаем проектную и иначе она будет значительно выше чем должна
+        point = XYZ(point.X, point.Y, point.Z - level.ProjectElevation)
+        instance = doc.Create.NewFamilyInstance(point, family_symbol, level, Structure.StructuralType.NonStructural)
 
     setup_opening_instance(instance, element)
 
@@ -370,31 +359,15 @@ class CategoryConfig:
         self.offset_value = offset_value
         self.opening_type_name = opening_type_name
 
-class TargetLevel:
-    level_element = None
-    level_elevation = None
-    level_top_elevation = None
-
-    def __init__(self, element, elevation, top_elevation):
-        self.level_elevation = elevation
-        self.level_element = element
-        self.level_top_elevation = top_elevation
-
-def get_target_levels_list():
-    """ возвращает список целевых уровней, с отметками их низа и верха. Если верха нет - возвращает с None вместо отметки """
+def get_curve_level(curve):
+    global level
     all_levels = FilteredElementCollector(doc).OfClass(Level).ToElements()
-    sorted_levels = sorted(all_levels, key=lambda level: level.GetParamValue(BuiltInParameter.LEVEL_ELEV))
-    result = []
+    curve_level_name = curve.GetParam(BuiltInParameter.RBS_START_LEVEL_PARAM).AsValueString()
 
-    for index, level in enumerate(sorted_levels):
-        if index + 1 < len(sorted_levels):
-            next_level_elevation = sorted_levels[index + 1].Elevation
-        else:
-            next_level_elevation = None
-
-        result.append(TargetLevel(level, level.Elevation, next_level_elevation))
-
-    return result
+    for level in all_levels:
+        if curve_level_name == level.Name:
+            level = level
+            break
 
 # Функция для чтения JSON файла и извлечения данных
 def get_offsets_for_categories(file_path, category_names):
@@ -447,9 +420,9 @@ config_category_pipe_name = "Трубы"
 config_category_round_duct_name = "Воздуховоды (прямоугольное сечение)"
 config_category_rectangle_duct_name = "Воздуховоды (круглое сечение)"
 
-shared_absolute_offset_name = "ADSK_Отверстие_Отметка от нуля"
-shared_from_level_offset_name = "ADSK_Отверстие_Отметка от этажа"
-shared_level_offset_name = "ADSK_Отверстие_Отметка этажа"
+shared_absolute_offset_name = "ADSK_Отверстие_ОтметкаОтНуля"
+shared_from_level_offset_name = "ADSK_Отверстие_ОтметкаОтЭтажа"
+shared_level_offset_name = "ADSK_Отверстие_ОтметкаЭтажа"
 
 shared_height_param_name = "ADSK_Размер_Высота"
 shared_width_param_name = "ADSK_Размер_Ширина"
@@ -459,6 +432,8 @@ shared_info_param_name = "ФОП_Описание"
 shared_autor_param_name = "ФОП_Автор задания"
 shared_system_param_name = SharedParamsConfig.Instance.VISSystemName.Name
 
+level = None
+curve_offset = 0
 family_name = None
 indent = 0
 
@@ -467,6 +442,8 @@ indent = 0
 def script_execute():
     curve, point = get_point_coordinates()
     duct_direction = get_curve_direction(curve)
+    get_curve_level(curve)
+
     get_plugin_config(curve)
 
     family_symbol = find_family_symbol()
