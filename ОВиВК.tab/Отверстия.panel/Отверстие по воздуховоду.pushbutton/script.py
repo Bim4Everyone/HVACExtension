@@ -117,6 +117,7 @@ def get_element_size(element):
     size = bbox.Max - bbox.Min
     return size
 
+# Получаем горизонтальное или вертикальное смещение точки от оси линейного элемента
 def get_offset(element, point, direction, use_horizontal_projection):
     # Получаем коннекторы воздуховода
     connectors = element.ConnectorManager.Connectors
@@ -187,6 +188,7 @@ def get_offset(element, point, direction, use_horizontal_projection):
         else:
             return distance * -1
 
+# True если точка на линии, False если нет
 def is_point_on_line(start_x, start_y, end_x, end_y, target_x, target_y, epsilon=0.1):
     # Проверка, лежит ли точка на прямой с учетом погрешности
     if abs((end_y - start_y) * (target_x - start_x) - (end_x - start_x) * (target_y - start_y)) > epsilon:
@@ -204,51 +206,73 @@ def get_parameter_if_exists(element, param_name):
     else:
         return None
 
-def setup_size(instance, curve):
-    indent = (50 * 2) / 304.8
+# Устанавливаем размер круглого отверстия
+def set_size_round_opening(instance_diameter_param, diameter):
+    instance_diameter_param.Set(diameter + indent)
+    # для круглых отверстий не нужна поправка, у них точка вставки в центре
+    return 0
 
-    instance_diameter_param = get_parameter_if_exists(instance, "ADSK_Размер_Диаметр")
-    instance_height_param = get_parameter_if_exists(instance, "ADSK_Размер_Высота")
-    instance_width_param = get_parameter_if_exists(instance, "ADSK_Размер_Ширина")
+# Устанавливаем размер прямоугольного отверстия
+def set_size_rectangular_opening(instance_width_param, instance_height_param, width, height):
+    instance_width_param.Set(width + indent)
+    instance_height_param.Set(height + indent)
+    # для прямоугольных точка вставки на основании, нужно их смещать на половину высоты
+    return (height + indent) / 2
 
-    curve_diameter = 0
+# Получаем значение ширины и высоты для воздуховодов
+def get_curve_width_height(curve):
     curve_width = 0
     curve_height = 0
 
     if curve.Category.IsId(BuiltInCategory.OST_PipeCurves):
-        curve_diameter = curve.GetParamValue(BuiltInParameter.RBS_PIPE_OUTER_DIAMETER)
+        curve_width = curve.GetParamValue(BuiltInParameter.RBS_PIPE_OUTER_DIAMETER)
+        curve_height = curve.GetParamValue(BuiltInParameter.RBS_PIPE_OUTER_DIAMETER)
     elif curve.Category.IsId(BuiltInCategory.OST_DuctCurves):
         if curve.DuctType.Shape == ConnectorProfileType.Round:
-            curve_diameter = curve.GetParamValue(BuiltInParameter.RBS_CURVE_DIAMETER_PARAM)
+            curve_width = curve.GetParamValue(BuiltInParameter.RBS_CURVE_DIAMETER_PARAM)
+            curve_height = curve.GetParamValue(BuiltInParameter.RBS_CURVE_DIAMETER_PARAM)
         elif curve.DuctType.Shape == ConnectorProfileType.Rectangular:
             curve_width = curve.GetParamValue(BuiltInParameter.RBS_CURVE_WIDTH_PARAM)
             curve_height = curve.GetParamValue(BuiltInParameter.RBS_CURVE_HEIGHT_PARAM)
 
-    if curve_diameter != 0:
-        if instance_diameter_param:
-            instance_diameter_param.Set(curve_diameter + indent)
-            correction = 0
-        else:
-            instance_width_param.Set(curve_diameter + indent)
-            instance_height_param.Set(curve_diameter + indent)
-            correction = (curve_diameter + indent) / 2
-    else:
-        if instance_diameter_param:
-            instance_diameter_param.Set(math.sqrt(curve_width ** 2 + curve_height ** 2)  + indent)
-            correction = 0
-        else:
-            instance_width_param.Set(curve_width + indent)
-            instance_height_param.Set(curve_height + indent)
-            correction = (curve_height + indent) / 2
+    return curve_width, curve_height
 
-    return correction
+# Настраиваем размер отверстия под линейный элемент и возвращаем значение корректировки на которое надо опустить точку вставки
+def setup_size(instance, curve):
+    instance_diameter_param = get_parameter_if_exists(instance, "ADSK_Размер_Диаметр")
+    instance_height_param = get_parameter_if_exists(instance, "ADSK_Размер_Высота")
+    instance_width_param = get_parameter_if_exists(instance, "ADSK_Размер_Ширина")
 
+    curve_width, curve_height = get_curve_width_height(curve)
+
+    if curve.Category.IsId(BuiltInCategory.OST_PipeCurves):
+        if family_name == "ОбщМд_Отв_Отверстие_Круглое_В стене":
+            return set_size_round_opening(instance_diameter_param, curve_width)
+        if family_name == "ОбщМд_Отв_Отверстие_Прямоугольное_В стене":
+            return set_size_rectangular_opening(instance_width_param, instance_height_param, curve_width, curve_height)
+
+    if curve.Category.IsId(BuiltInCategory.OST_DuctCurves):
+        if curve.DuctType.Shape == ConnectorProfileType.Round:
+            if family_name == "ОбщМд_Отв_Отверстие_Круглое_В стене":
+                return set_size_round_opening(instance_diameter_param, curve_width)
+            if family_name == "ОбщМд_Отв_Отверстие_Прямоугольное_В стене":
+                return set_size_rectangular_opening(instance_width_param, instance_height_param, curve_width,
+                                                    curve_height)
+
+        if curve.DuctType.Shape == ConnectorProfileType.Rectangular:
+            if family_name == "ОбщМд_Отв_Отверстие_Круглое_В стене":
+                return set_size_round_opening(instance_diameter_param, math.sqrt(curve_width ** 2 + curve_height ** 2))
+            if family_name == "ОбщМд_Отв_Отверстие_Прямоугольное_В стене":
+                return set_size_rectangular_opening(instance_width_param, instance_height_param, curve_width, curve_height)
+
+# Возвращаем значение системного Имя системы или ФОП_ВИС_Имя системы в зависимости от заполненности второго
 def get_curve_system(curve):
     system_name = curve.GetParamValueOrDefault("ФОП_ВИС_Имя системы")
     if system_name is None:
         system_name = curve.GetParamValue(BuiltInParameter.RBS_SYSTEM_NAME_PARAM)
     return system_name
 
+# Настраиваем экземпляр отверстия для чтения через навигатор КР и ставим его размеры-смещение под линейный элемент
 def setup_opening_instance(instance, curve):
     # Заполняем автора задания
     user_name = __revit__.Application.Username
@@ -303,16 +327,25 @@ def place_family_at_coordinates(family_symbol, point, direction, element):
 
     transaction.Commit()
 
+# Получаем конфиг плагина размещение отверстий или возвращаем стандартные настройки
+def get_plugin_config(curve):
+    global family_name, indent
+    family_name = "ОбщМд_Отв_Отверстие_Прямоугольное_В стене"
+    #family_name =  "ОбщМд_Отв_Отверстие_Круглое_В стене"
+    indent = (50 * 2) / 304.8
+
+family_name = None
+indent = 0
 #@notification()
 #@log_plugin(EXEC_PARAMS.command_name)
 def script_execute():
-    element, point = get_point_coordinates()
-    duct_direction = get_curve_direction(element)
-    # family_name = "ОбщМд_Отв_Отверстие_Прямоугольное_В стене"
-    family_name =  "ОбщМд_Отв_Отверстие_Круглое_В стене"
+    curve, point = get_point_coordinates()
+    duct_direction = get_curve_direction(curve)
+    get_plugin_config(curve)
+
     family_symbol = find_family_symbol(family_name)
 
     if family_symbol:
-        place_family_at_coordinates(family_symbol, point, duct_direction, element)
+        place_family_at_coordinates(family_symbol, point, duct_direction, curve)
 
 script_execute()
