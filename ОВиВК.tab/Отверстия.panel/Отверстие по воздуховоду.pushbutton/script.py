@@ -4,6 +4,7 @@
 __title__ = "Отверстие по воздуховоду"
 __doc__ = "Пересчитывает КМС соединительных деталей воздуховодов"
 
+
 import clr
 import datetime
 import os
@@ -232,16 +233,16 @@ def get_curve_width_height(curve):
     if curve.Category.IsId(BuiltInCategory.OST_PipeCurves):
         curve_width = curve.GetParamValue(BuiltInParameter.RBS_PIPE_OUTER_DIAMETER)
         curve_height = curve.GetParamValue(BuiltInParameter.RBS_PIPE_OUTER_DIAMETER)
-        category_name = "Трубы"
+        category_name = config_category_pipe_name
     elif curve.Category.IsId(BuiltInCategory.OST_DuctCurves):
         if curve.DuctType.Shape == ConnectorProfileType.Round:
             curve_width = curve.GetParamValue(BuiltInParameter.RBS_CURVE_DIAMETER_PARAM)
             curve_height = curve.GetParamValue(BuiltInParameter.RBS_CURVE_DIAMETER_PARAM)
-            category_name = "Воздуховоды (круглое сечение)"
+            category_name = config_category_round_duct_name
         elif curve.DuctType.Shape == ConnectorProfileType.Rectangular:
             curve_width = curve.GetParamValue(BuiltInParameter.RBS_CURVE_WIDTH_PARAM)
             curve_height = curve.GetParamValue(BuiltInParameter.RBS_CURVE_HEIGHT_PARAM)
-            category_name = "Воздуховоды (прямоугольное сечение)"
+            category_name = config_category_rectangle_duct_name
 
     return curve_width, curve_height, category_name
 
@@ -254,23 +255,23 @@ def setup_size(instance, curve):
     curve_width, curve_height, category_name = get_curve_width_height(curve)
 
     if curve.Category.IsId(BuiltInCategory.OST_PipeCurves):
-        if family_name == "ОбщМд_Отв_Отверстие_Круглое_В стене":
+        if family_name == round_opening_name:
             return set_size_round_opening(instance_diameter_param, curve_width)
-        if family_name == "ОбщМд_Отв_Отверстие_Прямоугольное_В стене":
+        if family_name == rectangle_opening_name:
             return set_size_rectangular_opening(instance_width_param, instance_height_param, curve_width, curve_height)
 
     if curve.Category.IsId(BuiltInCategory.OST_DuctCurves):
         if curve.DuctType.Shape == ConnectorProfileType.Round:
-            if family_name == "ОбщМд_Отв_Отверстие_Круглое_В стене":
+            if family_name == round_opening_name:
                 return set_size_round_opening(instance_diameter_param, curve_width)
-            if family_name == "ОбщМд_Отв_Отверстие_Прямоугольное_В стене":
+            if family_name == rectangle_opening_name:
                 return set_size_rectangular_opening(instance_width_param, instance_height_param, curve_width,
                                                     curve_height)
 
         if curve.DuctType.Shape == ConnectorProfileType.Rectangular:
-            if family_name == "ОбщМд_Отв_Отверстие_Круглое_В стене":
+            if family_name == round_opening_name:
                 return set_size_round_opening(instance_diameter_param, math.sqrt(curve_width ** 2 + curve_height ** 2))
-            if family_name == "ОбщМд_Отв_Отверстие_Прямоугольное_В стене":
+            if family_name == rectangle_opening_name:
                 return set_size_rectangular_opening(instance_width_param, instance_height_param, curve_width, curve_height)
 
 # Возвращаем значение системного Имя системы или ФОП_ВИС_Имя системы в зависимости от заполненности второго
@@ -369,28 +370,37 @@ def get_plugin_config(curve):
     global family_name, indent
 
     curve_width, curve_height, category_name = get_curve_width_height(curve)
-    curve_size = max(curve_width, curve_height)
+    curve_size = UnitUtils.ConvertToInternalUnits(max(curve_width, curve_height), UnitTypeId.Millimeters)
 
-    family_name = "ОбщМд_Отв_Отверстие_Прямоугольное_В стене"
 
-    indent = (50 * 2) / 304.8
+    family_name = rectangle_opening_name
+
+    indent = UnitUtils.ConvertToInternalUnits((50 * 2), UnitTypeId.Millimeters)
+
 
     file_path = str(
         os.environ['USERPROFILE']) + "\\Documents\\dosymep\\2022\\RevitOpeningPlacement\\OpeningConfig.json"
 
     if os.path.isfile(file_path):
-        category_names = ["Трубы", "Воздуховоды (прямоугольное сечение)", "Воздуховоды (круглое сечение)"]
+        category_names = [config_category_pipe_name, config_category_round_duct_name, config_category_rectangle_duct_name]
         category_configs = get_offsets_for_categories(file_path, category_names)
         for config in category_configs:
-            if category_name == config.category_name and config.from_value < curve_size < config.to_value:
-                if config.opening_type_name == "Круглое":
-                    family_name = "ОбщМд_Отв_Отверстие_Круглое_В стене"
-                if config.opening_type_name == "Прямоугольное":
-                    family_name = "ОбщМд_Отв_Отверстие_Прямоугольное_В стене"
+            if category_name == config.category_name and config.from_value <= curve_size <= config.to_value:
+                if config.opening_type_name == config_round_type_name:
+                    family_name = round_opening_name
+                if config.opening_type_name == config_rectangle_type_name:
+                    family_name = rectangle_opening_name
 
-                indent = (config.offset_value * 2) / 304.8
+                indent = UnitUtils.ConvertToInternalUnits(config.offset_value*2, UnitTypeId.Millimeters)
 
 
+rectangle_opening_name = "ОбщМд_Отв_Отверстие_Прямоугольное_В стене"
+round_opening_name = "ОбщМд_Отв_Отверстие_Круглое_В стене"
+config_round_type_name = "Круглое"
+config_rectangle_type_name = "Прямоугольное"
+config_category_pipe_name = "Трубы"
+config_category_round_duct_name = "Воздуховоды (прямоугольное сечение)"
+config_category_rectangle_duct_name = "Воздуховоды (круглое сечение)"
 
 family_name = None
 indent = 0
@@ -400,6 +410,7 @@ def script_execute():
     curve, point = get_point_coordinates()
     duct_direction = get_curve_direction(curve)
     get_plugin_config(curve)
+
 
     family_symbol = find_family_symbol(family_name)
 
