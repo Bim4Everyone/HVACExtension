@@ -6,7 +6,11 @@ __doc__ = "Пересчитывает КМС соединительных дет
 
 import clr
 import datetime
+import os
+import json
+import codecs
 from pyrevit.labs import target
+from unicodedata import category
 
 clr.AddReference("RevitAPI")
 clr.AddReference("RevitAPIUI")
@@ -223,19 +227,23 @@ def set_size_rectangular_opening(instance_width_param, instance_height_param, wi
 def get_curve_width_height(curve):
     curve_width = 0
     curve_height = 0
+    category_name = None
 
     if curve.Category.IsId(BuiltInCategory.OST_PipeCurves):
         curve_width = curve.GetParamValue(BuiltInParameter.RBS_PIPE_OUTER_DIAMETER)
         curve_height = curve.GetParamValue(BuiltInParameter.RBS_PIPE_OUTER_DIAMETER)
+        category_name = "Трубы"
     elif curve.Category.IsId(BuiltInCategory.OST_DuctCurves):
         if curve.DuctType.Shape == ConnectorProfileType.Round:
             curve_width = curve.GetParamValue(BuiltInParameter.RBS_CURVE_DIAMETER_PARAM)
             curve_height = curve.GetParamValue(BuiltInParameter.RBS_CURVE_DIAMETER_PARAM)
+            category_name = "Воздуховоды (круглое сечение)"
         elif curve.DuctType.Shape == ConnectorProfileType.Rectangular:
             curve_width = curve.GetParamValue(BuiltInParameter.RBS_CURVE_WIDTH_PARAM)
             curve_height = curve.GetParamValue(BuiltInParameter.RBS_CURVE_HEIGHT_PARAM)
+            category_name = "Воздуховоды (прямоугольное сечение)"
 
-    return curve_width, curve_height
+    return curve_width, curve_height, category_name
 
 # Настраиваем размер отверстия под линейный элемент и возвращаем значение корректировки на которое надо опустить точку вставки
 def setup_size(instance, curve):
@@ -243,7 +251,7 @@ def setup_size(instance, curve):
     instance_height_param = get_parameter_if_exists(instance, "ADSK_Размер_Высота")
     instance_width_param = get_parameter_if_exists(instance, "ADSK_Размер_Ширина")
 
-    curve_width, curve_height = get_curve_width_height(curve)
+    curve_width, curve_height, category_name = get_curve_width_height(curve)
 
     if curve.Category.IsId(BuiltInCategory.OST_PipeCurves):
         if family_name == "ОбщМд_Отв_Отверстие_Круглое_В стене":
@@ -272,7 +280,7 @@ def get_curve_system(curve):
         system_name = curve.GetParamValue(BuiltInParameter.RBS_SYSTEM_NAME_PARAM)
     return system_name
 
-# Настраиваем экземпляр отверстия для чтения через навигатор КР и ставим его размеры-смещение под линейный элемент
+# Настраиваем экземпляр отверстия для чтения через навигатор АР и ставим его размеры-смещение под линейный элемент
 def setup_opening_instance(instance, curve):
     # Заполняем автора задания
     user_name = __revit__.Application.Username
@@ -327,12 +335,62 @@ def place_family_at_coordinates(family_symbol, point, direction, element):
 
     transaction.Commit()
 
+# Определяем класс для хранения данных
+class CategoryConfig:
+    def __init__(self, category_name, from_value, to_value, offset_value, opening_type_name):
+        self.category_name = category_name
+        self.from_value = from_value
+        self.to_value = to_value
+        self.offset_value = offset_value
+        self.opening_type_name = opening_type_name
+
+# Функция для чтения JSON файла и извлечения данных
+def get_offsets_for_categories(file_path, category_names):
+    with codecs.open(file_path, 'r', encoding='utf-8') as file:
+        data = json.load(file)
+
+    category_configs = []
+    for category in data.get('Categories', []):
+        if category.get('Name') in category_names:
+            for offset in category.get('Offsets', []):
+                category_configs.append(CategoryConfig(
+                    category_name=category.get('Name'),
+                    from_value=offset.get('From'),
+                    to_value=offset.get('To'),
+                    offset_value=offset.get('OffsetValue'),
+                    opening_type_name=offset.get("OpeningTypeName")
+                ))
+
+    return category_configs
+
+
 # Получаем конфиг плагина размещение отверстий или возвращаем стандартные настройки
 def get_plugin_config(curve):
     global family_name, indent
+
+    curve_width, curve_height, category_name = get_curve_width_height(curve)
+    curve_size = max(curve_width, curve_height)
+
     family_name = "ОбщМд_Отв_Отверстие_Прямоугольное_В стене"
-    #family_name =  "ОбщМд_Отв_Отверстие_Круглое_В стене"
+
     indent = (50 * 2) / 304.8
+
+    file_path = str(
+        os.environ['USERPROFILE']) + "\\Documents\\dosymep\\2022\\RevitOpeningPlacement\\OpeningConfig.json"
+
+    if os.path.isfile(file_path):
+        category_names = ["Трубы", "Воздуховоды (прямоугольное сечение)", "Воздуховоды (круглое сечение)"]
+        category_configs = get_offsets_for_categories(file_path, category_names)
+        for config in category_configs:
+            if category_name == config.category_name and config.from_value < curve_size < config.to_value:
+                if config.opening_type_name == "Круглое":
+                    family_name = "ОбщМд_Отв_Отверстие_Круглое_В стене"
+                if config.opening_type_name == "Прямоугольное":
+                    family_name = "ОбщМд_Отв_Отверстие_Прямоугольное_В стене"
+
+                indent = (config.offset_value * 2) / 304.8
+
+
 
 family_name = None
 indent = 0
