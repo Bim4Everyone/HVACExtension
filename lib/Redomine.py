@@ -326,86 +326,76 @@ def setElement(element, name, setting):
             element.LookupParameter(name).Set(setting)
 
 
-#генерирует пустые элементы в рабочем наборе немоделируемых
-def new_position(calculation_elements, temporary, famName, description):
-    #создаем заглушки по элементов собранных из таблицы
-    loc = XYZ(0, 0, 0)
-
-    temporary.Activate()
-    for element in calculation_elements:
-        familyInst = doc.Create.NewFamilyInstance(loc, temporary, Structure.StructuralType.NonStructural)
-
-    #собираем список из созданных заглушек
-    colModel = make_col(BuiltInCategory.OST_GenericModel)
-    Models = []
-
-    fws = FilteredWorksetCollector(doc).OfKind(WorksetKind.UserWorkset)
-    for ws in fws:
-        if ws.Name == '99_Немоделируемые элементы':
-            WORKSET_ID = ws.Id
-
-
-    for element in colModel:
-        try:
-            elemType = doc.GetElement(element.GetTypeId())
-            if elemType.get_Parameter(BuiltInParameter.ALL_MODEL_FAMILY_NAME).AsString() == famName:
-
-                if element.LookupParameter('ФОП_ВИС_Назначение').AsString() == '':
-                    ews = element.get_Parameter(BuiltInParameter.ELEM_PARTITION_PARAM)
-                    ews.Set(WORKSET_ID.IntegerValue)
-                    Models.append(element)
-                if element.LookupParameter('ФОП_ВИС_Назначение').AsString() == None:
-                    ews = element.get_Parameter(BuiltInParameter.ELEM_PARTITION_PARAM)
-                    ews.Set(WORKSET_ID.IntegerValue)
-                    Models.append(element)
-        except Exception:
-                 print 'Не удалось присвоить рабочий набор "99_Немоделируемые элементы", проверьте список наборов'
-
-    index = 1
-    #для первого элмента списка заглушек присваиваем все параметры, после чего удаляем его из списка
-    for position in calculation_elements:
-        group = position.group
-        if description != 'Пустая строка':
-
-            posGroup = str(position.group) + '_' + str(position.name) + '_' + str(position.mark) + '_' + str(index)
-            index+=1
-            if description == 'Расходники изоляции':
-                posGroup = str(position.group) + '_' + str(position.name) + '_' + str(position.mark)
-
-            if description == 'Расчет краски и креплений':
-                posGroup = str(position.group) + '_' + str(position.name) + '_' + str(position.mark)
-            group = posGroup
-
-
-        if description != 'Пустая строка':
-            dummy = Models[0]
-        else:
-            dummy = familyInst
-
-        setElement(dummy, 'ФОП_Блок СМР', position.corp)
-        setElement(dummy, 'ФОП_Секция СМР', position.sec)
-        setElement(dummy, 'ФОП_Этаж', position.floor)
-        setElement(dummy, 'ФОП_ВИС_Имя системы', position.system)
-        setElement(dummy, 'ФОП_ВИС_Группирование', group)
-        setElement(dummy, 'ФОП_ВИС_Наименование комбинированное', position.name)
-        setElement(dummy, 'ФОП_ВИС_Марка', position.mark)
-        setElement(dummy, 'ФОП_ВИС_Код изделия', position.art)
-        setElement(dummy, 'ФОП_ВИС_Завод-изготовитель', position.maker)
-        setElement(dummy, 'ФОП_ВИС_Единица измерения', position.unit)
-        setElement(dummy, 'ФОП_ВИС_Число', position.number)
-        setElement(dummy, 'ФОП_ВИС_Масса', position.mass)
-        setElement(dummy, 'ФОП_ВИС_Примечание', position.comment)
-        setElement(dummy, 'ФОП_Экономическая функция', position.EF)
-
-        #вот этот блок внизу нужен для фильтрации шпилек под разные диаметры, да и вообще любых элементов под разные диаметры
-        #пока использую только в расчете краски и креплений
-        if description != 'Расчет краски и креплений':
-            setElement(dummy, 'ФОП_ВИС_Назначение', description)
-        else:
-            setElement(dummy, 'ФОП_ВИС_Назначение', position.local_description)
-
-        if description != 'Пустая строка':
-            Models.pop(0)
+# Генерирует пустые элементы в рабочем наборе немоделируемых
+# def new_position(calculation_elements, temporary, famName, description):
+#     # Создаем заглушки по элементам, собранным из таблицы
+#     loc = XYZ(0, 0, 0)
+#
+#     temporary.Activate()
+#     col_model = []
+#
+#     # Находим рабочий набор "99_Немоделируемые элементы"
+#     fws = FilteredWorksetCollector(doc).OfKind(WorksetKind.UserWorkset)
+#     workset_id = None
+#     for ws in fws:
+#         if ws.Name == '99_Немоделируемые элементы':
+#             workset_id = ws.Id
+#             break
+#
+#     if workset_id is None:
+#         print('Не удалось найти рабочий набор "99_Немоделируемые элементы", проверьте список наборов')
+#         return
+#
+#     # Создаем элементы и добавляем их в colModel
+#     for _ in calculation_elements:
+#         family_inst = doc.Create.NewFamilyInstance(loc, temporary, Structure.StructuralType.NonStructural)
+#         col_model.append(family_inst)
+#
+#     # Фильтруем элементы и присваиваем рабочий набор
+#     for element in col_model:
+#         try:
+#             elem_type = doc.GetElement(element.GetTypeId())
+#             if elem_type.get_Parameter(BuiltInParameter.ALL_MODEL_FAMILY_NAME).AsString() == famName:
+#                 if not element.LookupParameter('ФОП_ВИС_Назначение').AsString():
+#                     ews = element.get_Parameter(BuiltInParameter.ELEM_PARTITION_PARAM)
+#                     ews.Set(workset_id.IntegerValue)
+#         except Exception as e:
+#             print 'Ошибка при присвоении рабочего набора'
+#
+#     index = 1
+#     # Для первого элемента списка заглушек присваиваем все параметры, после чего удаляем его из списка
+#     for position in calculation_elements:
+#         group = position.group
+#         if description != 'Пустая строка':
+#             posGroup = f'{position.group}_{position.name}_{position.mark}_{index}'
+#             index += 1
+#             if description in ['Расходники изоляции', 'Расчет краски и креплений']:
+#                 posGroup = f'{position.group}_{position.name}_{position.mark}'
+#             group = posGroup
+#
+#         dummy = col_model.pop(0) if description != 'Пустая строка' else family_inst
+#
+#         setElement(dummy, 'ФОП_Блок СМР', position.corp)
+#         setElement(dummy, 'ФОП_Секция СМР', position.sec)
+#         setElement(dummy, 'ФОП_Этаж', position.floor)
+#         setElement(dummy, 'ФОП_ВИС_Имя системы', position.system)
+#         setElement(dummy, 'ФОП_ВИС_Группирование', group)
+#         setElement(dummy, 'ФОП_ВИС_Наименование комбинированное', position.name)
+#         setElement(dummy, 'ФОП_ВИС_Марка', position.mark)
+#         setElement(dummy, 'ФОП_ВИС_Код изделия', position.art)
+#         setElement(dummy, 'ФОП_ВИС_Завод-изготовитель', position.maker)
+#         setElement(dummy, 'ФОП_ВИС_Единица измерения', position.unit)
+#         setElement(dummy, 'ФОП_ВИС_Число', position.number)
+#         setElement(dummy, 'ФОП_ВИС_Масса', position.mass)
+#         setElement(dummy, 'ФОП_ВИС_Примечание', position.comment)
+#         setElement(dummy, 'ФОП_Экономическая функция', position.EF)
+#
+#         # Фильтрация шпилек под разные диаметры
+#         setElement(dummy, 'ФОП_ВИС_Назначение',
+#                    description if description != 'Расчет краски и креплений' else position.local_description)
+#
+#         if description != 'Пустая строка':
+#             col_model.pop(0)
 
 #для прогона новых ревизий генерации немоделируемых: стирает элмент с переданным именем модели
 def remove_models(colModel, famName, description):
@@ -450,23 +440,14 @@ class rowOfSpecification:
         self.comment = comment
         self.EF = EF
 
-#возвращает famsymbol если семейство есть в проекте, None если нет
+# Возвращает FamilySymbol, если семейство есть в проекте, None если нет
 def isFamilyIn(builtin, name):
-    # create a filtered element collector set to Category OST_Mass and Class FamilySymbol
-    collector = FilteredElementCollector(doc)
-    collector.OfCategory(builtin)
-    collector.OfClass(FamilySymbol)
-    famtypeitr = collector.GetElementIdIterator()
-    famtypeitr.Reset()
+    # Создаем фильтрованный коллектор для категории OST_Mass и класса FamilySymbol
+    collector = FilteredElementCollector(doc).OfCategory(builtin).OfClass(FamilySymbol)
 
-    is_temporary_in = False
-    for element in famtypeitr:
-        famtypeID = element
-        famsymb = doc.GetElement(famtypeID)
+    # Итерируемся по элементам коллектора
+    for element in collector:
+        if element.Family.Name == name:
+            return element
 
-        if famsymb.Family.Name == name:
-            temporary = famsymb
-            is_temporary_in = True
-            return temporary
-    else:
-        return None
+    return None

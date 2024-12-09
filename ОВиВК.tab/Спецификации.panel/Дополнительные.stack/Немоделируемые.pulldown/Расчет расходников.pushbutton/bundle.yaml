@@ -1,0 +1,13 @@
+title:
+  ru: Расчет расходников
+  en_us: Calculation of consumables
+
+tooltip:
+  ru: Генерирует в модели элементы обобщенных моделей с внесением туда расчетных данных.
+  en_us: Generates elements of generalized models in the model by entering calculated data into it.
+
+author: Redomine
+help_url: "https://kb.a101.ru/pages/viewpage.action?pageId=110562607"
+
+min_revit_version: 2020
+max_revit_version: 2024

@@ -4,164 +4,169 @@
 __title__ = 'Импорт немоделируемых'
 __doc__ = "Генерирует в модели элементы в соответствии с их ведомостью"
 
-
 import clr
 clr.AddReference("RevitAPI")
 clr.AddReference("RevitAPIUI")
 clr.AddReference('Microsoft.Office.Interop.Excel, Version=11.0.0.0, Culture=neutral, PublicKeyToken=71e9bce111e9429c')
+clr.AddReference("dosymep.Revit.dll")
+clr.AddReference("dosymep.Bim4Everyone.dll")
 
 import sys
 import System
-import paraSpec
-import checkAnchor
+import dosymep
 
-from Autodesk.Revit.DB import *
-from Autodesk.Revit.UI import TaskDialog
-from Autodesk.Revit.UI.Selection import ObjectType
-from System.Collections.Generic import List
-from System import Guid
-from pyrevit import revit
+from UnmodelingClassLibrary import UnmodelingFactory, MaterialCalculator, RowOfSpecification
 
+clr.ImportExtensions(dosymep.Revit)
+clr.ImportExtensions(dosymep.Bim4Everyone)
+
+from dosymep.Bim4Everyone import *
+from dosymep.Bim4Everyone.SharedParams import *
+from collections import defaultdict
+from UnmodelingClassLibrary import  *
+from dosymep_libs.bim4everyone import *
 
 from Microsoft.Office.Interop import Excel
 from Redomine import *
-from System.Runtime.InteropServices import Marshal
 from rpw.ui.forms import select_file
-from rpw.ui.forms import TextInput
-from rpw.ui.forms import SelectFromList
-from rpw.ui.forms import Alert
+
 
 #Исходные данные
 doc = __revit__.ActiveUIDocument.Document
+unmodeling_factory = UnmodelingFactory()
 view = doc.ActiveView
-colPipes = make_col(BuiltInCategory.OST_PipeCurves)
-colCurves = make_col(BuiltInCategory.OST_DuctCurves)
-colModel = make_col(BuiltInCategory.OST_GenericModel)
-
-nameOfModel = '_Якорный элемент'
 description = 'Импорт немоделируемых'
 
-def setElement(element, name, setting):
-    if name == 'ФОП_ВИС_Число':
-        try:
-            element.LookupParameter(name).Set(setting)
-        except:
-            element.LookupParameter(name).Set(0)
-    if name == 'ФОП_ВИС_Масса':
-        pass
+def find_column(worksheet, search_value):
+    found_cell = worksheet.Cells.Find(What=search_value)
+    if found_cell is not None:
+        return found_cell.Column
     else:
-        if setting == None or setting == 'None':
-            setting = ''
-        element.LookupParameter(name).Set(str(setting))
+        error = "Ячейка с содержимым '{}' не найдена.".format(search_value)
 
-temporary = isFamilyIn(BuiltInCategory.OST_GenericModel, nameOfModel)
+        forms.alert(
+            error,
+            "Ошибка",
+            exitscript=True)
 
-if isItFamily():
-    print 'Надстройка не предназначена для работы с семействами'
-    sys.exit()
-
-if temporary == None:
-    print 'Не обнаружен якорный элемент. Проверьте наличие семейства или восстановите исходное имя.'
-    sys.exit()
-
-def script_execute():
-
+@notification()
+@log_plugin(EXEC_PARAMS.command_name)
+def script_execute(plugin_logger):
+    family_symbol = unmodeling_factory.startup_checks(doc)
     exel = Excel.ApplicationClass()
+    # Создание объекта TextInput
+
     filepath = select_file()
 
-
-    ADSK_System_Names = []
-    System_Named = True
-
-    try:
-        workbook = exel.Workbooks.Open(filepath)
-    except Exception:
-        print 'Ошибка открытия таблицы, проверьте ее целостность'
+    if filepath is None:
         sys.exit()
+
+    workbook = exel.Workbooks.Open(filepath, ReadOnly=True)
     sheet_name = 'Импорт'
 
     try:
         worksheet = workbook.Sheets[sheet_name]
     except Exception:
-        print 'Не найден лист с названием Импорт, проверьте файл формы.'
-        sys.exit()
+        forms.alert(
+            "Добавление пустого элемента возможно только на целевой спецификации.",
+            "Ошибка",
+            exitscript=True)
 
-    xlrange = worksheet.Range["A1", "AZ500"]
+    # Находим последнюю заполненную строку
+    used_range = worksheet.UsedRange
+    last_row = used_range.Rows.Count
 
-    FOP_Corp = 0
-    FOP_Sec = 1
-    FOP_Floor = 2
-    FOP_System = 3
-    FOP_Group = 4
-    FOP_Name = 5
-    FOP_Mark = 6
-    FOP_Art = 7
-    FOP_Maker = 8
-    FOP_Izm = 9
-    FOP_Number = 10
-    FOP_Mass = 11
-    FOP_Comment = 12
-    FOP_EF = 13
+    function_column = find_column(worksheet, 'Экономическая функция')
+    system_name_column = find_column(worksheet, 'Имя системы')
+    group_column = find_column(worksheet, 'Группирование')
+    name_column = find_column(worksheet, 'Наименование')
+    mark_column = find_column(worksheet, 'Марка')
+    code_column = find_column(worksheet, 'Код')
+    maker_column = find_column(worksheet, 'Завод-изготовитель')
+    unit_column = find_column(worksheet, 'Единица измерения')
+    number_column = find_column(worksheet, 'Число')
+    mass_column = find_column(worksheet, 'Масса')
+    note_column = find_column(worksheet, 'Примечание')
 
-    report_rows = set()
+    elements_to_generate = []
 
-    for element in colModel:
-        if isElementEditedBy(element):
-            fillReportRows(element, report_rows)
-            for report in report_rows:
-                print 'Якорные элементы не были обработаны, так как были заняты пользователями:' + report
-            sys.exit()
+    found_cell = worksheet.Cells.Find('Экономическая функция')
+    row = found_cell.Row + 1
+
+    while row <= last_row:
+        function = worksheet.Cells(row, function_column).value2
+        system = worksheet.Cells(row, system_name_column).value2
+        group = worksheet.Cells(row, group_column).value2
+        name = worksheet.Cells(row, name_column).value2
+        mark = worksheet.Cells(row, mark_column).value2
+        code = worksheet.Cells(row, code_column).value2
+        maker = worksheet.Cells(row, maker_column).value2
+        unit = worksheet.Cells(row, unit_column).value2
+        number = worksheet.Cells(row, number_column).value2
+        mass = worksheet.Cells(row, mass_column).value2
+        note = worksheet.Cells(row, note_column).value2
+
+        if name is None:
+            break
+
+        if function is None:
+            function = unmodeling_factory.out_of_function_value
+
+        if system is None:
+            system = unmodeling_factory.out_of_system_value
+
+        try:
+            number = float(number)
+        except ValueError:
+            error = "Значение количества в строке '{}' не является числом.".format(row)
+            forms.alert(
+                error,
+                "Ошибка",
+                exitscript=True)
+
+        if type(mass) is not str:
+            error = "Значение массы в строке '{}' не является текстом.".format(row)
+            forms.alert(
+                error,
+                "Ошибка",
+                exitscript=True)
+
+        elements_to_generate.append(
+            RowOfSpecification(
+                system,
+                function,
+                group,
+                name,
+                mark,
+                code,
+                maker,
+                unit,
+                description,
+                number,
+                mass,
+                note
+            )
+        )
+
+        row += 1
 
     with revit.Transaction("Добавление расчетных элементов"):
+        family_symbol.Activate()
+
         # при каждом повторе расчета удаляем старые версии
-        remove_models(colModel, nameOfModel, description)
-        #при каждом повторе расчета удаляем старые версии
+        unmodeling_factory.remove_models(doc, description)
 
-        calculation_elements = []
-        row = 2
-        while True:
-            if xlrange.value2[row, FOP_Name] == None:
-                break
-            newPos = rowOfSpecification(corp = xlrange.value2[row, FOP_Corp],
-                            sec = xlrange.value2[row, FOP_Sec],
-                            floor = xlrange.value2[row, FOP_Floor],
-                            system = xlrange.value2[row, FOP_System],
-                            group = xlrange.value2[row, FOP_Group],
-                            name = xlrange.value2[row, FOP_Name],
-                            mark = xlrange.value2[row, FOP_Mark],
-                            art = xlrange.value2[row, FOP_Art],
-                            maker = xlrange.value2[row, FOP_Maker],
-                            unit = xlrange.value2[row, FOP_Izm],
-                            number = xlrange.value2[row, FOP_Number],
-                            mass = xlrange.value2[row, FOP_Mass],
-                            comment = xlrange.value2[row, FOP_Comment],
-                            EF = xlrange.value2[row, FOP_EF])
+        element_location = unmodeling_factory.get_base_location(doc)
 
+        for element in elements_to_generate:
+            element_location = unmodeling_factory.update_location(element_location)
 
-            row += 1
+            unmodeling_factory.create_new_position(doc, element, family_symbol, description, element_location)
 
-            calculation_elements.append(newPos)
+    # Закрываем рабочую книгу без сохранения изменений
+    workbook.Close(SaveChanges=False)
 
-        # в следующем блоке генерируем новые экземпляры пустых семейств куда уйдут расчеты
-        new_position(calculation_elements, temporary, nameOfModel, description)
+    # Закрываем приложение Excel
+    exel.Quit()
 
-    exel.ActiveWorkbook.Close(True)
-    Marshal.ReleaseComObject(worksheet)
-    Marshal.ReleaseComObject(workbook)
-    Marshal.ReleaseComObject(exel)
-
-if isItFamily():
-    print 'Надстройка не предназначена для работы с семействами'
-    sys.exit()
-
-status = paraSpec.check_parameters()
-
-if not status:
-    anchor = checkAnchor.check_anchor(showText = False)
-    if anchor:
-        script_execute()
-
-
-
-
-
+script_execute()
