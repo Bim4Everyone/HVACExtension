@@ -1,0 +1,23 @@
+title:
+  ru: Расчет расходников
+  en_us: Calculation of consumables
+
+tooltip:
+  ru: Генерирует в модели элементы обобщенных моделей с внесением туда расчетных данных.
+    
+    1. Включите в типах труб/воздуховодов требуемые типы расчета
+
+    2. Активируйте скрипт, старые элементы-расходники будут удалены, новые элементы будут сгенерированы в скрытый рабочий набор
+
+  en_us: Generates elements of generalized models in the model by entering calculated data into it.
+    
+    1. Enable the required calculation types in the pipe/duct types
+
+    2. Activate the script, old consumable elements will be deleted, new elements will be generated in a hidden workset
+
+
+author: Redomine
+help_url: "https://kb.a101.ru/pages/viewpage.action?pageId=110562607"
+
+min_revit_version: 2020
+max_revit_version: 2024
