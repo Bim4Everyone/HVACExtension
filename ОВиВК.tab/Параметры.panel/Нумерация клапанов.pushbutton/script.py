@@ -35,57 +35,112 @@ doc = __revit__.ActiveUIDocument.Document
 view = doc.ActiveView
 uidoc = __revit__.ActiveUIDocument
 
-def create_open_numbers(valves, file_path=None):
-    valves_by_floors = {}
-    for valve in valves:
-        floor_name = valve.GetParamValueOrDefault("ФОП_Этаж")
+class ValveData:
+    floor_name = ''
+    system_name = ''
+    id = ''
+    valve_base_name = ''
 
-        if floor_name is None:
-            continue
+    def __init__(self, floor_name, system_name, id):
+        self.system_name = system_name
+        self.floor_name = floor_name
+        self.id = id
+        self.valve_base_name = system_name + "-" + floor_name
 
-        valve_id = valve.Id
-
-        if floor_name not in valves_by_floors:
-            valves_by_floors[floor_name] = []
-
-        valves_by_floors[floor_name].append(valve_id)
-
-    data = []
+def get_json_data(file_path):
     name_mapping = {}
-
     if file_path and os.path.exists(file_path):
         with codecs.open(file_path, 'r', encoding='utf-8') as json_file:
             name_mapping = json.load(json_file)
             name_mapping = {item['id']: item['name'] for item in name_mapping}
 
-    for floor_name, valve_ids in valves_by_floors.items():
+    return name_mapping
+
+def send_json_data(data, desktop_path=os.path.join(os.path.expanduser("~"), "Desktop")):
+    file_path = os.path.join(desktop_path, "Задание СС.json")
+
+    # Проверяем, существует ли файл
+    if os.path.exists(file_path):
+        # Читаем существующие данные
+        with codecs.open(file_path, 'r', encoding='utf-8') as json_file:
+            existing_data = json.load(json_file)
+
+        # Объединяем существующие данные с новыми данными
+        # Предполагается, что данные являются списками или словарями
+        if isinstance(existing_data, list) and isinstance(data, list):
+            combined_data = existing_data + data
+        elif isinstance(existing_data, dict) and isinstance(data, dict):
+            combined_data = dict(existing_data.items() + data.items())
+        else:
+            raise ValueError("Data types are not compatible for merging")
+    else:
+        combined_data = data
+
+    # Запись данных в JSON-файл
+    with codecs.open(file_path, 'w', encoding='utf-8') as json_file:
+        json.dump(combined_data, json_file, ensure_ascii=False, indent=4)
+
+def split_valves_by_floors(valves):
+    valves_by_floors = {}
+    for valve in valves:
+        floor_name = valve.GetParamValueOrDefault("ФОП_Этаж")
+        system_name = valve.GetParamValueOrDefault("ФОП_ВИС_Имя системы")
+
+        if floor_name is None or (system_name is None or system_name == "!Нет системы"):
+            continue
+
+        if floor_name not in valves_by_floors:
+            valves_by_floors[floor_name] = []
+
+        valves_by_floors[floor_name].append(ValveData(floor_name, system_name, valve.Id))
+
+    return valves_by_floors
+
+def create_open_numbers(valves):
+    valves_by_floors = split_valves_by_floors(valves)
+
+    data = []
+
+    for floor_name, valve_data_instances in valves_by_floors.items():
         count = 0
-        for valve_id in valve_ids:
-            valve = doc.GetElement(valve_id)
-            system_name = valve.GetParamValueOrDefault("ФОП_ВИС_Имя системы")
+        for valve_data in valve_data_instances:
+            valve = doc.GetElement(valve_data.id)
             count += 1
 
-            if str(valve_id) in name_mapping:
-                name = name_mapping[str(valve_id)]
-            else:
-                name = "НО-" + system_name + "-" + floor_name + "-" + str(count)
+            name = "НО-" + valve_data.valve_base_name + "-" + str(count)
 
             valve.SetParamValue("ADSK_Позиция", name)
 
-            data.append({"name": name, "id": str(valve_id)})
+            data.append({"name": name, "id": str(valve_data.id)})
 
-    if file_path is None:
-        # Путь к рабочему столу
-        desktop_path = os.path.join(os.path.expanduser("~"), "Desktop")
-        file_path = os.path.join(desktop_path, "Задание СС.json")
-
-        # Запись данных в JSON-файл
-        with codecs.open(file_path, 'w', encoding='utf-8') as json_file:
-            json.dump(data, json_file, ensure_ascii=False, indent=4)
-
+    return data
 
 def create_closed_numbers(valves):
-    pass
+    valves_by_floors = split_valves_by_floors(valves)
+    data = []
+
+    for floor_name, valve_data_instances in valves_by_floors.items():
+        # Группировка valve_data_instances по valve_base_name
+        valve_groups = {}
+        for valve_data in valve_data_instances:
+            if valve_data.valve_base_name not in valve_groups:
+                valve_groups[valve_data.valve_base_name] = []
+            valve_groups[valve_data.valve_base_name].append(valve_data)
+
+        # проходим по экземплярам НЗ сгруппированных по базовому имени(одинаковая система и этаж)
+        for valve_base_name, valve_data_instances_group in valve_groups.items():
+            count = 0
+            for valve_data in valve_data_instances_group:
+                valve = doc.GetElement(valve_data.id)
+                count += 1
+
+                name = "НЗ-" + valve_base_name + "-" + str(count)
+
+                valve.SetParamValue("ADSK_Позиция", name)
+
+                data.append({"name": name, "id": str(valve_data.id)})
+
+    return data
 
 @notification()
 @log_plugin(EXEC_PARAMS.command_name)
@@ -93,26 +148,38 @@ def script_execute(plugin_logger):
     open_valves = []
     closed_valves = []
 
-    filepath = select_file(title="Выберите существующий файл задания или нажмите отменить для нового")
+    file_path = select_file(title="Выберите существующий файл задания или нажмите отменить для нового")
 
     duct_accessory_collection = FilteredElementCollector(doc) \
             .OfCategory(BuiltInCategory.OST_DuctAccessory) \
             .WhereElementIsNotElementType() \
             .ToElements()
 
-    for duct_accessory in duct_accessory_collection:
-        mark = duct_accessory.GetSharedParamValueOrDefault("ФОП_ВИС_Марка")
-        if mark is not None and mark != "":
-            if "НО" in mark:
-                open_valves.append(duct_accessory)
-            if "НЗ" in mark:
-                closed_valves.append(duct_accessory)
-
     with revit.Transaction("BIM: Задание СС"):
-        create_open_numbers(open_valves, filepath)
-        create_closed_numbers(closed_valves)
+        name_mapping = get_json_data(file_path)
+
+        for duct_accessory in duct_accessory_collection:
+            mark = duct_accessory.GetSharedParamValueOrDefault("ФОП_ВИС_Марка")
+
+            if mark is not None and mark != "":
+                if "НО" in mark or "НЗ" in mark:
+                    if str(duct_accessory.Id) in name_mapping:
+                        name = name_mapping[str(duct_accessory.Id)]
+                        duct_accessory.SetParamValue("ADSK_Позиция", name)
+                        continue # если айди клапана упомянут в задании то заново его не рассматриваем, сразу ставим имя оттуда
+
+                    if "НО" in mark:
+                        open_valves.append(duct_accessory)
+                    if "НЗ" in mark:
+                        closed_valves.append(duct_accessory)
 
 
+        json_data = []
+        json_data.extend(create_open_numbers(open_valves))
+        json_data.extend(create_closed_numbers(closed_valves))
+
+        if file_path is None:
+            send_json_data(json_data)
 
 
 script_execute()
