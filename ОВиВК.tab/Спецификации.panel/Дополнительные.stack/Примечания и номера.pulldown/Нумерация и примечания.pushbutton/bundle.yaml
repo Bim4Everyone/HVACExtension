@@ -4,7 +4,21 @@ title:
 
 tooltip:
   ru: Заполнение площадей воздуховодов в примечания и нумерация позиций.
-  en_us: Filling duct areas to notes and filling out a position in the specification..
+    
+    1. Откройте вид спецификации, на котором требуется заполнить нумерацию и площади в примечания воздуховодов.
+    
+    2. Запустите команду.
+    
+    3. Проверьте результат работы. Параметры типа заполнены не будут!
+
+
+  en_us: Filling duct areas to notes and filling out a position in the specification.
+  
+    1. Open the specification view where you need to fill in the numbering and areas in the duct notes.
+  
+    2. Run the command.
+  
+    3. Check the result of the work. The type parameters will not be filled in!
 
 author: Redomine
 help_url: "https://kb.a101.ru/pages/viewpage.action?pageId=110562607"

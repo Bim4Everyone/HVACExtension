@@ -1,9 +1,5 @@
 #! /usr/bin/env python
 # -*- coding: utf-8 -*-
-
-__title__ = 'Нумерация'
-__doc__ = "Нумерует позиции в спецификации"
-
 import os.path as op
 import clr
 clr.AddReference("dosymep.Revit.dll")
@@ -14,30 +10,21 @@ import dosymep
 
 clr.ImportExtensions(dosymep.Revit)
 clr.ImportExtensions(dosymep.Bim4Everyone)
-from dosymep.Bim4Everyone.Templates import ProjectParameters
-from dosymep.Bim4Everyone.SharedParams import SharedParamsConfig
-import sys
-import paraSpec
-from Autodesk.Revit.DB import *
-from Redomine import *
-from numerateSpec import *
-from System import Guid
-from itertools import groupby
+
+from numerate_class_library import *
 from pyrevit import revit
 from pyrevit.script import output
+from pyrevit import script
+from pyrevit import HOST_APP
+from pyrevit import EXEC_PARAMS
 
-doc = __revit__.ActiveUIDocument.Document  # type: Document
-view = doc.ActiveView
+@notification()
+@log_plugin(EXEC_PARAMS.command_name)
+def script_execute(plugin_logger):
+    document = __revit__.ActiveUIDocument.Document  # type: Document
+    view = document.ActiveView
+    specification_filler = SpecificationFiller(document, view)
 
+    specification_filler.fill_position_and_notes(fill_numbers=True)
 
-
-if isItFamily():
-    print 'Надстройка не предназначена для работы с семействами'
-    sys.exit()
-
-parametersAdded = paraSpec.check_parameters()
-
-
-
-if not parametersAdded:
-    numerate(doNumbers = True, doAreas = False)
+script_execute()
