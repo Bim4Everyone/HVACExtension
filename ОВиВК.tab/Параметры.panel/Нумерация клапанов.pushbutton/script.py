@@ -4,6 +4,7 @@
 from itertools import count
 
 import clr
+from System import DateTime
 
 from unmodeling_class_library import UnmodelingFactory, MaterialCalculator, RowOfSpecification
 
@@ -22,18 +23,77 @@ from dosymep.Bim4Everyone.SharedParams import SharedParamsConfig
 from dosymep.Bim4Everyone import *
 from dosymep.Bim4Everyone.SharedParams import *
 from collections import defaultdict
-from unmodeling_class_library import  *
+from unmodeling_class_library import *
 from dosymep_libs.bim4everyone import *
 import sys
 from rpw.ui.forms import select_file
 import json
 import os
 import codecs
-
+from datetime import datetime
 
 doc = __revit__.ActiveUIDocument.Document
 view = doc.ActiveView
 uidoc = __revit__.ActiveUIDocument
+
+
+class EditedReport:
+    edited_reports = []
+    status_report = ''
+    edited_report = ''
+
+    def get_element_editor_name(self, element):
+        """
+        Возвращает имя пользователя, занявшего элемент, или None.
+
+        Args:
+            element (Element): Элемент для проверки.
+
+        Returns:
+            str или None: Имя пользователя или None, если элемент не занят.
+        """
+        user_name = __revit__.Application.Username
+        edited_by = element.GetParamValueOrDefault(BuiltInParameter.EDITED_BY)
+        if edited_by is None:
+            return None
+
+        if edited_by.lower() in user_name.lower():
+            return None
+        return edited_by
+
+    def is_elemet_edited(self, element):
+        """
+        Проверяет, заняты ли элементы другими пользователями.
+
+        Args:
+            elements (list): Список элементов для проверки.
+        """
+
+        update_status = WorksharingUtils.GetModelUpdatesStatus(doc, element.Id)
+
+        if update_status == ModelUpdatesStatus.UpdatedInCentral:
+            self.status_report = "Вы владеете элементами, но ваш файл устарел. Выполните синхронизацию. "
+
+        name = self.get_element_editor_name(element)
+        if name is not None and name not in self.edited_reports:
+            self.edited_reports.append(name)
+
+        if name is not None or update_status == ModelUpdatesStatus.UpdatedInCentral:
+            return True
+
+        return False
+
+    def show_report(self):
+        if len(self.edited_reports) > 0:
+            self.edited_report = \
+                ("Часть элементов спецификации занята пользователями: {}".format(", ".join(self.edited_reports)))
+
+        if self.edited_report != '' or self.status_report != '':
+            report_message = (self.status_report +
+                              ('\n' if (self.edited_report and self.status_report) else '') +
+                              self.edited_report)
+            forms.alert(report_message, "Ошибка", exitscript=True)
+
 
 class ValveData:
     floor_name = ''
@@ -47,6 +107,7 @@ class ValveData:
         self.id = id
         self.valve_base_name = system_name + "-" + floor_name
 
+
 def get_json_data(file_path):
     name_mapping = {}
     if file_path and os.path.exists(file_path):
@@ -56,8 +117,14 @@ def get_json_data(file_path):
 
     return name_mapping
 
+
 def send_json_data(data, desktop_path=os.path.join(os.path.expanduser("~"), "Desktop")):
-    file_path = os.path.join(desktop_path, "Задание СС.json")
+    project_name = doc.Title
+    time = datetime.now()
+
+    formatted_time = time.strftime("%Y.%m.%d_%H.%M")
+
+    file_path = os.path.join(desktop_path, "Задание СС_" + project_name + "_" + formatted_time)
 
     # Проверяем, существует ли файл
     if os.path.exists(file_path):
@@ -80,6 +147,7 @@ def send_json_data(data, desktop_path=os.path.join(os.path.expanduser("~"), "Des
     with codecs.open(file_path, 'w', encoding='utf-8') as json_file:
         json.dump(combined_data, json_file, ensure_ascii=False, indent=4)
 
+
 def split_valves_by_floors(valves):
     valves_by_floors = {}
     for valve in valves:
@@ -95,6 +163,7 @@ def split_valves_by_floors(valves):
         valves_by_floors[floor_name].append(ValveData(floor_name, system_name, valve.Id))
 
     return valves_by_floors
+
 
 def create_open_numbers(valves):
     valves_by_floors = split_valves_by_floors(valves)
@@ -114,6 +183,7 @@ def create_open_numbers(valves):
             data.append({"name": name, "id": str(valve_data.id)})
 
     return data
+
 
 def create_closed_numbers(valves):
     valves_by_floors = split_valves_by_floors(valves)
@@ -142,6 +212,7 @@ def create_closed_numbers(valves):
 
     return data
 
+
 @notification()
 @log_plugin(EXEC_PARAMS.command_name)
 def script_execute(plugin_logger):
@@ -151,14 +222,18 @@ def script_execute(plugin_logger):
     file_path = select_file(title="Выберите существующий файл задания или нажмите отменить для нового")
 
     duct_accessory_collection = FilteredElementCollector(doc) \
-            .OfCategory(BuiltInCategory.OST_DuctAccessory) \
-            .WhereElementIsNotElementType() \
-            .ToElements()
+        .OfCategory(BuiltInCategory.OST_DuctAccessory) \
+        .WhereElementIsNotElementType() \
+        .ToElements()
 
     with revit.Transaction("BIM: Задание СС"):
         name_mapping = get_json_data(file_path)
+        edited_report = EditedReport()
 
         for duct_accessory in duct_accessory_collection:
+            if edited_report.is_elemet_edited(duct_accessory):
+                continue
+
             mark = duct_accessory.GetSharedParamValueOrDefault("ФОП_ВИС_Марка")
 
             if mark is not None and mark != "":
@@ -166,13 +241,15 @@ def script_execute(plugin_logger):
                     if str(duct_accessory.Id) in name_mapping:
                         name = name_mapping[str(duct_accessory.Id)]
                         duct_accessory.SetParamValue("ADSK_Позиция", name)
-                        continue # если айди клапана упомянут в задании то заново его не рассматриваем, сразу ставим имя оттуда
+                        continue
+                        # если айди клапана упомянут в задании то заново его не рассматриваем, сразу ставим имя оттуда
 
                     if "НО" in mark:
                         open_valves.append(duct_accessory)
                     if "НЗ" in mark:
                         closed_valves.append(duct_accessory)
 
+        edited_report.show_report()
 
         json_data = []
         json_data.extend(create_open_numbers(open_valves))
