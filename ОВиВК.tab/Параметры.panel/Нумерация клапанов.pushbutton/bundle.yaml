@@ -1,9 +1,9 @@
 title:
-  ru: Нумерация клапанов
-  en_us: Valve numbering
+  ru: Нумерация для СС
+  en_us: SS numbering
 
 tooltip:
-  ru: Переносит значения между двумя столбцами спецификации.
+  ru: Выполняет нумерацию для выдачи заданий в отдел СС.
   en_us: Transfers values between two specification columns.
 
 author: Redomine
