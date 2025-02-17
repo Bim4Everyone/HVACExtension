@@ -112,10 +112,10 @@ def script_execute(plugin_logger):
             break
 
         if function is None:
-            function = unmodeling_factory.out_of_function_value
+            function = unmodeling_factory.OUT_OF_FUNCTION_VALUE
 
         if system is None:
-            system = unmodeling_factory.out_of_system_value
+            system = unmodeling_factory.OUT_OF_SYSTEM_VALUE
 
         try:
             number = float(number)
@@ -143,7 +143,7 @@ def script_execute(plugin_logger):
                 code,
                 maker,
                 unit,
-                unmodeling_factory.import_description,
+                unmodeling_factory.IMPORT_DESCRIPTION,
                 number,
                 mass,
                 note
@@ -153,7 +153,7 @@ def script_execute(plugin_logger):
         row += 1
 
     # при каждом повторе расчета удаляем старые версии
-    unmodeling_factory.remove_models(doc, unmodeling_factory.import_description)
+    unmodeling_factory.remove_models(doc, unmodeling_factory.IMPORT_DESCRIPTION)
 
     with revit.Transaction("BIM: Импорт немоделируемых"):
         family_symbol.Activate()
@@ -166,7 +166,7 @@ def script_execute(plugin_logger):
             unmodeling_factory.create_new_position(doc,
                                                    element,
                                                    family_symbol,
-                                                   unmodeling_factory.import_description,
+                                                   unmodeling_factory.IMPORT_DESCRIPTION,
                                                    element_location)
 
     # Закрываем рабочую книгу без сохранения изменений

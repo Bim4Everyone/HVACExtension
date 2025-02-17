@@ -70,9 +70,9 @@ def split_calculation_elements_list(elements):
 
     for element in elements:
         shared_function = element.GetSharedParamValueOrDefault(
-            SharedParamsConfig.Instance.EconomicFunction.Name, unmodeling_factory.out_of_function_value)
+            SharedParamsConfig.Instance.EconomicFunction.Name, unmodeling_factory.OUT_OF_FUNCTION_VALUE)
         shared_system = element.GetSharedParamValueOrDefault(
-            SharedParamsConfig.Instance.VISSystemName.Name, unmodeling_factory.out_of_system_value)
+            SharedParamsConfig.Instance.VISSystemName.Name, unmodeling_factory.OUT_OF_SYSTEM_VALUE)
         function_system_key = shared_function + "_" + shared_system
 
         # Добавляем элемент в соответствующий список в словаре
@@ -152,8 +152,8 @@ def get_material_number_value(element, operation_name):
 
 def remove_old_models():
     """ Удаление уже размещенных в модели расходников и материалов перед новой генерацией"""
-    unmodeling_factory.remove_models(doc, unmodeling_factory.material_description)
-    unmodeling_factory.remove_models(doc, unmodeling_factory.consumable_description)
+    unmodeling_factory.remove_models(doc, unmodeling_factory.MATERIAL_DESCRIPTION)
+    unmodeling_factory.remove_models(doc, unmodeling_factory.CONSUMABLE_DESCRIPTION)
 
 def process_materials(family_symbol, material_description):
     """ Обработка предопределенного списка материалов
@@ -335,8 +335,8 @@ def script_execute(plugin_logger):
     with revit.Transaction("BIM: Добавление расчетных элементов"):
         family_symbol.Activate()
 
-        process_materials(family_symbol, unmodeling_factory.material_description)
-        process_insulation_consumables(family_symbol, unmodeling_factory.consumable_description)
+        process_materials(family_symbol, unmodeling_factory.MATERIAL_DESCRIPTION)
+        process_insulation_consumables(family_symbol, unmodeling_factory.CONSUMABLE_DESCRIPTION)
 
 
 script_execute()

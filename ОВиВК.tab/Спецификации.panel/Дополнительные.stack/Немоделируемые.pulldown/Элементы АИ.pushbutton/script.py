@@ -245,9 +245,9 @@ def create_new_row(element, variant, number):
     """Создание нового элемента RowOfSpecification на базе Element из модели для последующей генерации якоря"""
 
     shared_function = element.GetParamValueOrDefault(
-        SharedParamsConfig.Instance.EconomicFunction, unmodeling_factory.out_of_function_value)
+        SharedParamsConfig.Instance.EconomicFunction, unmodeling_factory.OUT_OF_FUNCTION_VALUE)
     shared_system = element.GetParamValueOrDefault(
-        SharedParamsConfig.Instance.VISSystemName, unmodeling_factory.out_of_system_value)
+        SharedParamsConfig.Instance.VISSystemName, unmodeling_factory.OUT_OF_SYSTEM_VALUE)
     unit = 'шт.'  # В этом плагине мы бьем элементы поштучно, поэтому блокируем это значение
     note = element.GetParamValueOrDefault(SharedParamsConfig.Instance.VISNote)
     group = '8. Трубопроводы'
@@ -261,7 +261,7 @@ def create_new_row(element, variant, number):
         code=variant.code,
         maker=variant.maker,
         unit=unit,
-        local_description=unmodeling_factory.ai_description,
+        local_description=unmodeling_factory.AI_DESCRIPTION,
         number=number,
         note=note
     )
@@ -466,7 +466,7 @@ def script_execute(plugin_logger):
 
 
     # При каждом запуске затираем расходники с соответствующим описанием и генерируем заново
-    unmodeling_factory.remove_models(doc, unmodeling_factory.ai_description)
+    unmodeling_factory.remove_models(doc, unmodeling_factory.AI_DESCRIPTION)
 
     with revit.Transaction("BIM: Добавление расчетных элементов"):
         family_symbol.Activate()
@@ -481,8 +481,8 @@ def script_execute(plugin_logger):
             material_location = unmodeling_factory.update_location(material_location)
 
             unmodeling_factory.create_new_position(doc, element, family_symbol,
-                                                  unmodeling_factory.ai_description,
-                                                  material_location)
+                                                   unmodeling_factory.AI_DESCRIPTION,
+                                                   material_location)
 
         for data in elements_to_update:
             if not unmodeling_factory.is_elemet_edited(doc, data.element):

@@ -62,7 +62,7 @@ def process_new_position(family_symbol, rows_number):
         unmodeling_factory.create_new_position(doc,
                                                new_position,
                                                family_symbol,
-                                               unmodeling_factory.empty_description,
+                                               unmodeling_factory.EMPTY_DESCRIPTION,
                                                location)
 
 @notification()
@@ -85,7 +85,7 @@ def script_execute(plugin_logger):
     rows_number = forms.ask_for_string(
         default='1',
         prompt='Введите количество пустых строк:',
-        title=unmodeling_factory.empty_description
+        title=unmodeling_factory.EMPTY_DESCRIPTION
     )
 
     try:

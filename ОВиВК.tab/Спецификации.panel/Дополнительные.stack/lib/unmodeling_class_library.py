@@ -149,18 +149,18 @@ class InsulationConsumables:
 
 class UnmodelingFactory:
     """ Класс, оперирующий созданием немоделируемых элементов """
-    coordinate_step = 0.01  # Шаг координаты на который разносим немоделируемые. ~3 мм, чтоб они не стояли в одном месте и чтоб не растягивали чертеж своим существованием
-    description_param_name = 'ФОП_ВИС_Назначение'  # Пока нет в платформе, будет добавлено и перенесено в RevitParams
+    COORDINATE_STEP = 0.01  # Шаг координаты на который разносим немоделируемые. ~3 мм, чтоб они не стояли в одном месте и чтоб не растягивали чертеж своим существованием
+    DESCRIPTION_PARAM_NAME = 'ФОП_ВИС_Назначение'  # Пока нет в платформе, будет добавлено и перенесено в RevitParams
 
     # Значения параметра "ФОП_ВИС_Назначение" по которому определяется удалять элемент или нет
-    empty_description = 'Пустая строка'
-    import_description = 'Импорт немоделируемых'
-    material_description = 'Расчет краски и креплений'
-    consumable_description = 'Расходники изоляции'
-    ai_description = 'Элементы АИ'
+    EMPTY_DESCRIPTION = 'Пустая строка'
+    IMPORT_DESCRIPTION = 'Импорт немоделируемых'
+    MATERIAL_DESCRIPTION = 'Расчет краски и креплений'
+    CONSUMABLE_DESCRIPTION = 'Расходники изоляции'
+    AI_DESCRIPTION = 'Элементы АИ'
 
     # Значение группирования для элементов
-    consumable_group = '12. Расходники изоляции'
+    CONSUMABLE_GROUP = '12. Расходники изоляции'
 
     # Имена расчетов
     PIPE_METAL_RULE_NAME = 'Металлические крепления для трубопроводов'
@@ -170,9 +170,9 @@ class UnmodelingFactory:
     CLAMPS_RULE_NAME = 'Хомут трубный под шпильку М8'
     PIN_RULE_NAME = 'Шпилька М8 1м/1шт'
 
-    family_name = '_Якорный элемент'
-    out_of_system_value = '!Нет системы'
-    out_of_function_value = '!Нет функции'
+    FAMILY_NAME = '_Якорный элемент'
+    OUT_OF_SYSTEM_VALUE = '!Нет системы'
+    OUT_OF_FUNCTION_VALUE = '!Нет функции'
     ws_id = None
 
     edited_reports = [] # Перчень редакторов элементов
@@ -231,7 +231,7 @@ class UnmodelingFactory:
         return RowOfSpecification(
             system,
             function,
-            self.consumable_group,
+            self.CONSUMABLE_GROUP,
             consumable.name,
             consumable.mark,
             '',  # У расходников не будет кода изделия
@@ -276,9 +276,9 @@ class UnmodelingFactory:
             Tuple[str, str]: Кортеж из значений системы и функции.
         """
         system = element.GetParamValueOrDefault(SharedParamsConfig.Instance.VISSystemName,
-                                                self.out_of_system_value)
+                                                self.OUT_OF_SYSTEM_VALUE)
         function = element.GetParamValueOrDefault(SharedParamsConfig.Instance.EconomicFunction,
-                                                  self.out_of_function_value)
+                                                  self.OUT_OF_FUNCTION_VALUE)
         return system, function
 
     def get_base_location(self, doc):
@@ -295,7 +295,7 @@ class UnmodelingFactory:
             # Фильтруем элементы, чтобы получить только те, у которых имя семейства равно "_Якорный элемент"
             generic_models = self.get_elements_by_category(doc, BuiltInCategory.OST_GenericModel)
             filtered_generics = [elem for elem in generic_models if elem.GetElementType()
-                                 .GetParamValue(BuiltInParameter.ALL_MODEL_FAMILY_NAME) == self.family_name]
+                                 .GetParamValue(BuiltInParameter.ALL_MODEL_FAMILY_NAME) == self.FAMILY_NAME]
 
             if len(filtered_generics) == 0:
                 return XYZ(0, 0, 0)
@@ -313,9 +313,9 @@ class UnmodelingFactory:
                     max_y = y_value
                     base_location_point = location_point
 
-            return XYZ(0, self.coordinate_step + max_y, 0)
+            return XYZ(0, self.COORDINATE_STEP + max_y, 0)
 
-        return XYZ(0, self.coordinate_step + self.max_location_y, 0)
+        return XYZ(0, self.COORDINATE_STEP + self.max_location_y, 0)
 
     def update_location(self, loc):
         """
@@ -327,7 +327,7 @@ class UnmodelingFactory:
         Returns:
             XYZ: Обновленная локация.
         """
-        return XYZ(0, loc.Y + self.coordinate_step, 0)
+        return XYZ(0, loc.Y + self.COORDINATE_STEP, 0)
 
     def get_ruleset(self):
         """
@@ -468,7 +468,7 @@ class UnmodelingFactory:
         collector = FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_GenericModel).OfClass(FamilySymbol)
 
         for element in collector:
-            if element.Family.Name == self.family_name:
+            if element.Family.Name == self.FAMILY_NAME:
                 return element
 
         return None
@@ -500,7 +500,7 @@ class UnmodelingFactory:
         # Фильтруем элементы, чтобы получить только те, у которых имя семейства равно "_Якорный элемент"
         generic_model_collection = \
             [elem for elem in self.get_elements_by_category(doc, BuiltInCategory.OST_GenericModel) if elem.GetElementType()
-            .GetParamValue(BuiltInParameter.ALL_MODEL_FAMILY_NAME) == self.family_name]
+            .GetParamValue(BuiltInParameter.ALL_MODEL_FAMILY_NAME) == self.FAMILY_NAME]
 
         for element in generic_model_collection:
             self.is_elemet_edited(doc, element)
@@ -509,12 +509,12 @@ class UnmodelingFactory:
 
         with revit.Transaction("BIM: Очистка немоделируемых"):
             for element in generic_model_collection:
-                if element.IsExistsParam(self.description_param_name):
+                if element.IsExistsParam(self.DESCRIPTION_PARAM_NAME):
                     elem_type = doc.GetElement(element.GetTypeId())
                     current_name = elem_type.get_Parameter(BuiltInParameter.ALL_MODEL_FAMILY_NAME).AsString()
-                    current_description = element.GetParamValueOrDefault(self.description_param_name)
+                    current_description = element.GetParamValueOrDefault(self.DESCRIPTION_PARAM_NAME)
 
-                    if current_name == self.family_name:
+                    if current_name == self.FAMILY_NAME:
                         if current_description is None or description in current_description:
                             doc.Delete(element.Id)
 
@@ -536,7 +536,7 @@ class UnmodelingFactory:
         new_row_data.number = round(new_row_data.number, 2) # заранее округляем, на случай значений типа 0.001. Для этого
         # можно не генерировать строки
 
-        if new_row_data.number == 0 and description != self.empty_description:
+        if new_row_data.number == 0 and description != self.EMPTY_DESCRIPTION:
             return
 
 
@@ -565,7 +565,7 @@ class UnmodelingFactory:
         set_param_value(SharedParamsConfig.Instance.VISMass, new_row_data.mass)
         set_param_value(SharedParamsConfig.Instance.VISNote, new_row_data.note)
         set_param_value(SharedParamsConfig.Instance.EconomicFunction, new_row_data.function)
-        description_param = family_inst.GetParam(self.description_param_name)
+        description_param = family_inst.GetParam(self.DESCRIPTION_PARAM_NAME)
         description_param.Set(description)
 
     def startup_checks(self, doc):
@@ -645,7 +645,7 @@ class UnmodelingFactory:
             List: Список отсутствующих параметров.
         """
         param_names_list = [
-            self.description_param_name,
+            self.DESCRIPTION_PARAM_NAME,
             SharedParamsConfig.Instance.VISNote.Name,
             SharedParamsConfig.Instance.VISMass.Name,
             SharedParamsConfig.Instance.VISPosition.Name,
