@@ -283,28 +283,31 @@ def separate_element(ai_element, variants_pool, pipe_insulation_stock, pipe_stoc
     sorted_variants_pool = sorted(variants_pool, key=lambda x: x.length, reverse=True)
 
     result = []
-    for variant in sorted_variants_pool:
-        if ai_element_len <= 0:
+    MINIMAL_LEN = 50
+    for index, variant in enumerate(sorted_variants_pool):
+        if ai_element_len <= MINIMAL_LEN:
             break
 
-        number = ai_element_len // variant.length
+        number = 0
+        # Проверяем, есть ли следующий вариант
+        if index + 1 < len(sorted_variants_pool):
+            next_variant = sorted_variants_pool[index + 1]
 
-        if number >= 1:
-            ai_element_len = ai_element_len % variant.length
-
-        len_not_minimal = ai_element_len > 50  # Принято что не считаем обрезки труб меньше 50мм
-        last_variant = variant == sorted_variants_pool[-1]  # Проверка есть ли еще вариаты
-
-        if last_variant and len_not_minimal:
-            number += 1
-            ai_element_len -= variant.length
+            if ai_element_len != next_variant.length:
+                # Увеличиваем number, пока ai_element_len больше длины следующего варианта
+                while ai_element_len > next_variant.length:
+                    ai_element_len -= variant.length
+                    number += 1
+        else:
+            # Если следующего варианта нет, увеличиваем number, пока ai_element_len больше длины текущего варианта
+            while ai_element_len >= variant.length:
+                ai_element_len -= variant.length
+                number += 1
 
         if number > 0:
             new_row = create_new_row(ai_element, variant, number)
+            result.append(new_row)
 
-            result.append(
-                new_row
-            )
     return result
 
 def process_ai_element(ai_element, cash, elements_to_generation, elements_to_update, catalog,
