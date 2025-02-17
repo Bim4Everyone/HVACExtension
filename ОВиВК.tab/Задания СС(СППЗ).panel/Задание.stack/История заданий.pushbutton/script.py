@@ -52,7 +52,10 @@ def script_execute(plugin_logger):
     if doc.IsFamilyDocument:
         forms.alert("Надстройка не предназначена для работы с семействами", "Ошибка", exitscript=True)
 
-    file_folder_path = operator.get_document_path()
+    file_folder_path, is_path_local = operator.get_document_path()
+
+    if is_path_local:
+        operator.show_local_path(file_folder_path)
 
     # Получаем данные из последнего по дате редактирования файла
     old_data = operator.get_json_data(file_folder_path)

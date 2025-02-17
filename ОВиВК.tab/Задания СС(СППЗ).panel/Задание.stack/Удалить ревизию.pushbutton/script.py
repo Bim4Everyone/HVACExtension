@@ -46,7 +46,10 @@ def script_execute(plugin_logger):
     if doc.IsFamilyDocument:
         forms.alert("Надстройка не предназначена для работы с семействами", "Ошибка", exitscript=True)
 
-    file_folder_path = operator.get_document_path()
+    file_folder_path, is_path_local = operator.get_document_path()
+
+    if is_path_local:
+        operator.show_local_path(file_folder_path)
 
     # Находим все JSON-файлы в директории
     json_files = glob.glob(os.path.join(file_folder_path, "*.json"))
@@ -56,7 +59,7 @@ def script_execute(plugin_logger):
     # Находим файл с самым поздним временем модификации
     latest_file = max(json_files, key=os.path.getmtime)
 
-    date = operator.get_moscow_date()
+    date = operator.get_utc_date()
 
     if date not in latest_file:
         forms.alert('Данные за сегодняшнее число не существуют.',

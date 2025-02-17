@@ -30,6 +30,7 @@ from dosymep_libs.bim4everyone import *
 clr.ImportExtensions(dosymep.Revit)
 clr.ImportExtensions(dosymep.Bim4Everyone)
 
+
 class EditedReport:
     edited_reports = []
     status_report = None
@@ -53,7 +54,7 @@ class EditedReport:
         if edited_by is None:
             return None
 
-        if edited_by.lower() in user_name.lower():
+        if edited_by.lower() == user_name.lower():
             return None
         return edited_by
 
@@ -100,7 +101,7 @@ class EditedReport:
 class LowVoltageSystemData:
     def __init__(self, id, creation_date=None, equipment_base_name=None,
                  autor_name=__revit__.Application.Username, json_name=None,
-                 deletion_date=None, element=None):
+                 deletion_date=None, element=None, closed_algorithm=None, open_algorithm=None):
         """
         Инициализация объекта LowVoltageSystemData.
 
@@ -119,6 +120,8 @@ class LowVoltageSystemData:
         self.creation_date = creation_date
         self.deletion_date = deletion_date
         self.element = element
+        self.closed_algorithm = closed_algorithm
+        self.open_algorithm = open_algorithm
 
     def to_dict(self):
         """
@@ -133,7 +136,9 @@ class LowVoltageSystemData:
             "autor_name": self.autor_name,
             "json_name": self.json_name,
             "creation_date": self.creation_date,
-            "deletion_date": self.deletion_date
+            "deletion_date": self.deletion_date,
+            "closed_algorithm": self.closed_algorithm,
+            "open_algorithm": self.open_algorithm
         }
 
     def insert(self, doc, time):
@@ -178,41 +183,37 @@ class JsonOperator:
         plugin_name = 'Задания СС(СППЗ)'
         version_number = self.uiapp.VersionNumber
         project_name = self.get_project_name()
-        base_root = version_number + "\\" + plugin_name + "\\" + project_name
-        my_documents_path = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments)
-        network_path = os.path.join(
-            "W:/Проектный институт/Отд.стандарт.BIM и RD/BIM-Ресурсы/"
-            "5-Надстройки/Bim4Everyone/A101/", base_root
-        )
+        base_root = os.path.join(version_number, plugin_name, project_name)
 
+        network_directory = os.path.join(
+            "W:/Проектный институт/Отд.стандарт.BIM и RD/BIM-Ресурсы/"
+            "5-Надстройки/Bim4Everyone/A101/"
+        )
+        is_local = False # Флаг для открытия папки с данными в моих документах
+
+        my_documents_path = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments)
+        network_path = os.path.join(network_directory, base_root)
         local_path = os.path.join(my_documents_path, 'dosymep', base_root)
 
-        if not (os.path.exists(network_path) and os.access(network_path, os.R_OK | os.W_OK)):
-            if not os.path.exists(local_path):
-                os.makedirs(local_path)
-
-            report = (
-                'Нет доступа к сетевому диску. Файлы задания обрабатываются из папки: {} \n'
-                'Открыть папку с файлами?'
-            ).format(local_path)
-
-            if self.show_dialog(report):
-                os.startfile(local_path)
-
-            return local_path
+        if not (os.path.exists(network_directory) and os.access(network_directory, os.R_OK | os.W_OK)):
+            path = local_path
+            is_local = True
         else:
-            return network_path
+            path = network_path
 
+        if not os.path.exists(path):
+            os.makedirs(path)
 
-    def create_folder_if_not_exist(self, project_path):
-        """
-        Создает папку, если она не существует.
+        return path, is_local
 
-        Args:
-            project_path (str): Путь к папке проекта.
-        """
-        if not os.path.exists(project_path):
-            os.makedirs(project_path)
+    def show_local_path(self, local_path):
+        report = (
+            'Нет доступа к сетевому диску. Файлы задания обрабатываются из папки: {} \n'
+            'Открыть папку с файлами?'
+        ).format(local_path)
+
+        if self.show_dialog(report):
+            os.startfile(local_path)
 
     def send_json_data(self, data, new_file_path):
         """
@@ -223,7 +224,7 @@ class JsonOperator:
             new_file_path (str): Путь к новому JSON файлу.
         """
         project_name = self.get_project_name()
-        time = self.get_moscow_date()
+        time = self.get_utc_date()
         new_file_path = new_file_path + "/СС(СППЗ)_" + project_name + "_" + time + ".json"
 
         data_dicts = [item.to_dict() for item in data]
@@ -241,6 +242,7 @@ class JsonOperator:
         Returns:
             list: Список объектов LowVoltageSystemData.
         """
+
         json_files = glob.glob(os.path.join(project_path, "*.json"))
         if not json_files:
             return {}
@@ -258,13 +260,15 @@ class JsonOperator:
                         equipment_base_name=item["equipment_base_name"],
                         autor_name=item["autor_name"],
                         json_name=item["json_name"],
-                        deletion_date=item["deletion_date"]
+                        deletion_date=item["deletion_date"],
+                        closed_algorithm=item["closed_algorithm"],
+                        open_algorithm=item["open_algorithm"]
                     )
                     for item in existing_data
                 ]
         return []
 
-    def get_moscow_date(self):
+    def get_utc_date(self):
         """
         Возвращает текущую дату в часовом поясе Москвы (UTC+3).
 
@@ -272,8 +276,7 @@ class JsonOperator:
             str: Текущая дата в формате "YYYY-MM-DD".
         """
         utc_time = datetime.utcnow()
-        moscow_time = utc_time + timedelta(hours=3)
-        formatted_time = moscow_time.strftime("%Y-%m-%d")
+        formatted_time = utc_time.strftime("%Y-%m-%d")
 
         return formatted_time
 
