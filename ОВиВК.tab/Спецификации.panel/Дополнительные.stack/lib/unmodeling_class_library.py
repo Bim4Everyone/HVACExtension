@@ -162,6 +162,14 @@ class UnmodelingFactory:
     # Значение группирования для элементов
     consumable_group = '12. Расходники изоляции'
 
+    # Имена расчетов
+    PIPE_METAL_RULE_NAME = 'Металлические крепления для трубопроводов'
+    DUCT_METAL_RULE_NAME = 'Металлические крепления для воздуховодов'
+    COLOR_RULE_NAME = 'Краска антикоррозионная за два раза'
+    GRUNT_RULE_NAME = 'Грунтовка для стальных труб'
+    CLAMPS_RULE_NAME = 'Хомут трубный под шпильку М8'
+    PIN_RULE_NAME = 'Шпилька М8 1м/1шт'
+
     family_name = '_Якорный элемент'
     out_of_system_value = '!Нет системы'
     out_of_function_value = '!Нет функции'
@@ -328,10 +336,12 @@ class UnmodelingFactory:
         Returns:
             List[GenerationRuleSet]: Список правил для генерации материалов.
         """
+
+        group = "12. Расчетные элементы"
         gen_list = [
             GenerationRuleSet(
-                group="12. Расчетные элементы",
-                name="Металлические крепления для воздуховодов",
+                group=group,
+                name=self.DUCT_METAL_RULE_NAME,
                 mark="",
                 code="",
                 unit="кг.",
@@ -339,8 +349,8 @@ class UnmodelingFactory:
                 method_name=SharedParamsConfig.Instance.VISIsFasteningMetalCalculation.Name,
                 category=BuiltInCategory.OST_DuctCurves),
             GenerationRuleSet(
-                group="12. Расчетные элементы",
-                name="Металлические крепления для трубопроводов",
+                group=group,
+                name=self.PIPE_METAL_RULE_NAME,
                 mark="",
                 code="",
                 unit="кг.",
@@ -348,8 +358,8 @@ class UnmodelingFactory:
                 method_name=SharedParamsConfig.Instance.VISIsFasteningMetalCalculation.Name,
                 category=BuiltInCategory.OST_PipeCurves),
             GenerationRuleSet(
-                group="12. Расчетные элементы",
-                name="Краска антикоррозионная за два раза",
+                group=group,
+                name=self.COLOR_RULE_NAME,
                 mark="БТ-177",
                 code="",
                 unit="кг.",
@@ -357,8 +367,8 @@ class UnmodelingFactory:
                 method_name=SharedParamsConfig.Instance.VISIsPaintCalculation.Name,
                 category=BuiltInCategory.OST_PipeCurves),
             GenerationRuleSet(
-                group="12. Расчетные элементы",
-                name="Грунтовка для стальных труб",
+                group=group,
+                name=self.GRUNT_RULE_NAME,
                 mark="ГФ-031",
                 code="",
                 unit="кг.",
@@ -366,8 +376,8 @@ class UnmodelingFactory:
                 method_name=SharedParamsConfig.Instance.VISIsPaintCalculation.Name,
                 category=BuiltInCategory.OST_PipeCurves),
             GenerationRuleSet(
-                group="12. Расчетные элементы",
-                name="Хомут трубный под шпильку М8",
+                group=group,
+                name=self.CLAMPS_RULE_NAME,
                 mark="",
                 code="",
                 unit="шт.",
@@ -375,8 +385,8 @@ class UnmodelingFactory:
                 method_name=SharedParamsConfig.Instance.VISIsClampsCalculation.Name,
                 category=BuiltInCategory.OST_PipeCurves),
             GenerationRuleSet(
-                group="12. Расчетные элементы",
-                name="Шпилька М8 1м/1шт",
+                group=group,
+                name=self.PIN_RULE_NAME,
                 mark="",
                 code="",
                 unit="шт.",
@@ -523,8 +533,12 @@ class UnmodelingFactory:
             if param_value is not None:
                 family_inst.SetParamValue(shared_param, param_value)
 
+        new_row_data.number = round(new_row_data.number, 2) # заранее округляем, на случай значений типа 0.001. Для этого
+        # можно не генерировать строки
+
         if new_row_data.number == 0 and description != self.empty_description:
             return
+
 
         self.max_location_y = loc.Y
 

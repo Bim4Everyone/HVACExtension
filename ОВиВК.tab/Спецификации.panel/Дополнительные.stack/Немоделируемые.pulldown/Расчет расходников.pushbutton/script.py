@@ -27,6 +27,11 @@ view = doc.ActiveView
 material_calculator = MaterialCalculator(doc)
 unmodeling_factory = UnmodelingFactory()
 
+class CalculationResult:
+    def __init__(self, number, area):
+        self.number = number
+        self.area = area
+
 def get_material_hosts(element_types, calculation_name, builtin_category):
     """ Проверяет для типов элементов можно ли на их базе создать расходники
 
@@ -118,23 +123,32 @@ def get_material_number_value(element, operation_name):
             element.GetParamValue(BuiltInParameter.RBS_CURVE_HEIGHT_PARAM),
             UnitTypeId.Millimeters)
 
-    if (operation_name == "Металлические крепления для трубопроводов"
+    if (operation_name == unmodeling_factory.PIPE_METAL_RULE_NAME
             and element.Category.IsId(BuiltInCategory.OST_PipeCurves)):
-        return material_calculator.get_pipe_material_mass(length, diameter)
-    if (operation_name == "Металлические крепления для воздуховодов"
-            and element.Category.IsId(BuiltInCategory.OST_DuctCurves)):
-        return material_calculator.get_duct_material_mass(element, diameter, width, height, area)
-    if (operation_name == "Краска антикоррозионная за два раза"
-            and element.Category.IsId(BuiltInCategory.OST_PipeCurves)):
-        return material_calculator.get_color_mass(area)
-    if (operation_name == "Грунтовка для стальных труб"
-            and element.Category.IsId(BuiltInCategory.OST_PipeCurves)):
-        return material_calculator.get_grunt_mass(area)
-    if (operation_name in ["Хомут трубный под шпильку М8", "Шпилька М8 1м/1шт"]
-            and element.Category.IsId(BuiltInCategory.OST_PipeCurves)):
-        return material_calculator.get_collars_and_pins_number(element, diameter, length)
 
-    return 0
+        result = CalculationResult(material_calculator.get_pipe_material_mass(length, diameter),
+                                   area)
+        return result
+    if (operation_name == unmodeling_factory.DUCT_METAL_RULE_NAME
+            and element.Category.IsId(BuiltInCategory.OST_DuctCurves)):
+        result = CalculationResult(
+            material_calculator.get_duct_material_mass(element, diameter, width, height, area),
+            area)
+        return result
+    if (operation_name == unmodeling_factory.COLOR_RULE_NAME
+            and element.Category.IsId(BuiltInCategory.OST_PipeCurves)):
+        result = CalculationResult(material_calculator.get_color_mass(area), area)
+        return result
+    if (operation_name == unmodeling_factory.GRUNT_RULE_NAME
+            and element.Category.IsId(BuiltInCategory.OST_PipeCurves)):
+        result = CalculationResult(material_calculator.get_grunt_mass(area), area)
+        return result
+    if (operation_name in [unmodeling_factory.CLAMPS_RULE_NAME, unmodeling_factory.PIN_RULE_NAME]
+            and element.Category.IsId(BuiltInCategory.OST_PipeCurves)):
+        result = CalculationResult(material_calculator.get_collars_and_pins_number(element, diameter, length), area)
+        return result
+
+    return CalculationResult(0, 0)
 
 def remove_old_models():
     """ Удаление уже размещенных в модели расходников и материалов перед новой генерацией"""
@@ -191,8 +205,15 @@ def process_materials(family_symbol, material_description):
                             material_location, family_symbol):
         new_row = unmodeling_factory.create_material_row_class_instance(system, function, rule_set,
                                                                         material_description)
+        area = 0
         for element in elements:
-            new_row.number += get_material_number_value(element, rule_set.name)
+            value = get_material_number_value(element, rule_set.name)
+            new_row.number += value.number
+            area += value.area
+
+        if rule_set.name in [unmodeling_factory.GRUNT_RULE_NAME, unmodeling_factory.COLOR_RULE_NAME]:
+            round_area = round(area, 2)
+            new_row.note = str(round_area) + ' м²'
 
         unmodeling_factory.create_new_position(doc, new_row, family_symbol, material_description, material_location)
 
@@ -300,6 +321,8 @@ def get_insulation_elements_list():
     insulations += unmodeling_factory.get_elements_by_category(doc, BuiltInCategory.OST_PipeInsulations)
     insulations += unmodeling_factory.get_elements_by_category(doc, BuiltInCategory.OST_DuctInsulations)
     return insulations
+
+
 
 @notification()
 @log_plugin(EXEC_PARAMS.command_name)
