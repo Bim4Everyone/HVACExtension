@@ -161,6 +161,7 @@ class UnmodelingFactory:
 
     # Значение группирования для элементов
     CONSUMABLE_GROUP = '12. Расходники изоляции'
+    MATERIAL_GROUP = "12. Расчетные элементы"
 
     # Имена расчетов
     PIPE_METAL_RULE_NAME = 'Металлические крепления для трубопроводов'
@@ -337,10 +338,10 @@ class UnmodelingFactory:
             List[GenerationRuleSet]: Список правил для генерации материалов.
         """
 
-        group = "12. Расчетные элементы"
+
         gen_list = [
             GenerationRuleSet(
-                group=group,
+                group=self.MATERIAL_GROUP,
                 name=self.DUCT_METAL_RULE_NAME,
                 mark="",
                 code="",
@@ -349,7 +350,7 @@ class UnmodelingFactory:
                 method_name=SharedParamsConfig.Instance.VISIsFasteningMetalCalculation.Name,
                 category=BuiltInCategory.OST_DuctCurves),
             GenerationRuleSet(
-                group=group,
+                group=self.MATERIAL_GROUP,
                 name=self.PIPE_METAL_RULE_NAME,
                 mark="",
                 code="",
@@ -358,7 +359,7 @@ class UnmodelingFactory:
                 method_name=SharedParamsConfig.Instance.VISIsFasteningMetalCalculation.Name,
                 category=BuiltInCategory.OST_PipeCurves),
             GenerationRuleSet(
-                group=group,
+                group=self.MATERIAL_GROUP,
                 name=self.COLOR_RULE_NAME,
                 mark="БТ-177",
                 code="",
@@ -367,7 +368,7 @@ class UnmodelingFactory:
                 method_name=SharedParamsConfig.Instance.VISIsPaintCalculation.Name,
                 category=BuiltInCategory.OST_PipeCurves),
             GenerationRuleSet(
-                group=group,
+                group=self.MATERIAL_GROUP,
                 name=self.GRUNT_RULE_NAME,
                 mark="ГФ-031",
                 code="",
@@ -376,7 +377,7 @@ class UnmodelingFactory:
                 method_name=SharedParamsConfig.Instance.VISIsPaintCalculation.Name,
                 category=BuiltInCategory.OST_PipeCurves),
             GenerationRuleSet(
-                group=group,
+                group=self.MATERIAL_GROUP,
                 name=self.CLAMPS_RULE_NAME,
                 mark="",
                 code="",
@@ -385,7 +386,7 @@ class UnmodelingFactory:
                 method_name=SharedParamsConfig.Instance.VISIsClampsCalculation.Name,
                 category=BuiltInCategory.OST_PipeCurves),
             GenerationRuleSet(
-                group=group,
+                group=self.MATERIAL_GROUP,
                 name=self.PIN_RULE_NAME,
                 mark="",
                 code="",
