@@ -28,7 +28,7 @@ doc = __revit__.ActiveUIDocument.Document
 uiapp = __revit__.Application
 view = doc.ActiveView
 material_calculator = MaterialCalculator(doc)
-unmodeling_factory = UnmodelingFactory()
+unmodeling_factory = UnmodelingFactory(doc)
 
 class CSVRules:
     COMMENT = 'Комментарий к типоразмеру'
@@ -435,7 +435,7 @@ def show_dialog(instr, content=''):
 @log_plugin(EXEC_PARAMS.command_name)
 def script_execute(plugin_logger):
     # Стартовые проверки и поиск семейства якоря
-    family_symbol = unmodeling_factory.startup_checks(doc)
+    family_symbol = unmodeling_factory.startup_checks()
 
     # Получаем запасы из сведений. Если параметра нет - запасов тоже нет(1)
     pipe_insulation_stock, pipe_stock = get_stocks()
@@ -444,8 +444,8 @@ def script_execute(plugin_logger):
     ai_catalog = get_ai_catalog()
 
     elements = list(chain(
-        unmodeling_factory.get_elements_by_category(doc, BuiltInCategory.OST_PipeCurves),
-        unmodeling_factory.get_elements_by_category(doc, BuiltInCategory.OST_PipeInsulations)
+        unmodeling_factory.get_elements_by_category(BuiltInCategory.OST_PipeCurves),
+        unmodeling_factory.get_elements_by_category(BuiltInCategory.OST_PipeInsulations)
     ))
 
     # Фильтруем те элементы у которых в имени типа есть "_B4E_AI"
@@ -466,12 +466,12 @@ def script_execute(plugin_logger):
 
 
     # При каждом запуске затираем расходники с соответствующим описанием и генерируем заново
-    unmodeling_factory.remove_models(doc, unmodeling_factory.AI_DESCRIPTION)
+    unmodeling_factory.remove_models(unmodeling_factory.AI_DESCRIPTION)
 
     with revit.Transaction("BIM: Добавление расчетных элементов"):
         family_symbol.Activate()
 
-        material_location = unmodeling_factory.get_base_location(doc)
+        material_location = unmodeling_factory.get_base_location()
 
         # На данном этапе элементы созданы для каждого прямого участка трубы.
         # Для оптимизации работы превращаем одинаковые элементы в один, складывая их числа
@@ -480,12 +480,12 @@ def script_execute(plugin_logger):
         for element in elements_to_generation:
             material_location = unmodeling_factory.update_location(material_location)
 
-            unmodeling_factory.create_new_position(doc, element, family_symbol,
+            unmodeling_factory.create_new_position(element, family_symbol,
                                                    unmodeling_factory.AI_DESCRIPTION,
                                                    material_location)
 
         for data in elements_to_update:
-            if not unmodeling_factory.is_elemet_edited(doc, data.element):
+            if not unmodeling_factory.is_elemet_edited(data.element):
                 update_element(data.element, data.data)
 
             unmodeling_factory.show_report()

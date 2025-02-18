@@ -30,7 +30,7 @@ doc = __revit__.ActiveUIDocument.Document
 view = doc.ActiveView
 uidoc = __revit__.ActiveUIDocument
 selected_ids = uidoc.Selection.GetElementIds()
-unmodeling_factory = UnmodelingFactory()
+unmodeling_factory = UnmodelingFactory(doc)
 
 
 def process_new_position(family_symbol, rows_number):
@@ -43,7 +43,7 @@ def process_new_position(family_symbol, rows_number):
 
     """
     element = doc.GetElement(selected_ids[0])
-    location = unmodeling_factory.get_base_location(doc)
+    location = unmodeling_factory.get_base_location()
 
     parent_system, parent_function = unmodeling_factory.get_system_function(element)
     parent_group = element.GetParamValueOrDefault(SharedParamsConfig.Instance.VISGrouping, '')
@@ -59,8 +59,7 @@ def process_new_position(family_symbol, rows_number):
 
         location = unmodeling_factory.update_location(location)
 
-        unmodeling_factory.create_new_position(doc,
-                                               new_position,
+        unmodeling_factory.create_new_position(new_position,
                                                family_symbol,
                                                unmodeling_factory.EMPTY_DESCRIPTION,
                                                location)
@@ -68,7 +67,7 @@ def process_new_position(family_symbol, rows_number):
 @notification()
 @log_plugin(EXEC_PARAMS.command_name)
 def script_execute(plugin_logger):
-    family_symbol = unmodeling_factory.startup_checks(doc)
+    family_symbol = unmodeling_factory.startup_checks()
 
     if view.Category == None or not view.Category.IsId(BuiltInCategory.OST_Schedules):
         forms.alert(

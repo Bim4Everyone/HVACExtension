@@ -27,7 +27,7 @@ from Microsoft.Office.Interop import Excel
 from rpw.ui.forms import select_file
 
 doc = __revit__.ActiveUIDocument.Document
-unmodeling_factory = UnmodelingFactory()
+unmodeling_factory = UnmodelingFactory(doc)
 view = doc.ActiveView
 
 def find_column(worksheet, search_value):
@@ -54,7 +54,7 @@ def find_column(worksheet, search_value):
 @notification()
 @log_plugin(EXEC_PARAMS.command_name)
 def script_execute(plugin_logger):
-    family_symbol = unmodeling_factory.startup_checks(doc)
+    family_symbol = unmodeling_factory.startup_checks()
     exel = Excel.ApplicationClass()
     # Создание объекта TextInput
 
@@ -153,18 +153,17 @@ def script_execute(plugin_logger):
         row += 1
 
     # при каждом повторе расчета удаляем старые версии
-    unmodeling_factory.remove_models(doc, unmodeling_factory.IMPORT_DESCRIPTION)
+    unmodeling_factory.remove_models(unmodeling_factory.IMPORT_DESCRIPTION)
 
     with revit.Transaction("BIM: Импорт немоделируемых"):
         family_symbol.Activate()
 
-        element_location = unmodeling_factory.get_base_location(doc)
+        element_location = unmodeling_factory.get_base_location()
 
         for element in elements_to_generate:
             element_location = unmodeling_factory.update_location(element_location)
 
-            unmodeling_factory.create_new_position(doc,
-                                                   element,
+            unmodeling_factory.create_new_position(element,
                                                    family_symbol,
                                                    unmodeling_factory.IMPORT_DESCRIPTION,
                                                    element_location)

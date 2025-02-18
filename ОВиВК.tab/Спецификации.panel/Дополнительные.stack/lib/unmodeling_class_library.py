@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import math
-
+from System import Environment
+import os
 import clr
 
 clr.AddReference("dosymep.Revit.dll")
@@ -149,6 +150,8 @@ class InsulationConsumables:
 
 class UnmodelingFactory:
     """ Класс, оперирующий созданием немоделируемых элементов """
+    doc = None
+
     COORDINATE_STEP = 0.01  # Шаг координаты на который разносим немоделируемые. ~3 мм, чтоб они не стояли в одном месте и чтоб не растягивали чертеж своим существованием
     DESCRIPTION_PARAM_NAME = 'ФОП_ВИС_Назначение'  # Пока нет в платформе, будет добавлено и перенесено в RevitParams
 
@@ -184,24 +187,26 @@ class UnmodelingFactory:
     # при создании экземпляра якоря
     max_location_y = 0
 
-    def get_elements_types_by_category(self, doc, category):
+    def __init__(self, doc):
+        self.doc = doc
+
+    def get_elements_types_by_category(self, category):
         """
         Получает типы элементов по их категории.
 
         Args:
-            doc: Документ Revit.
             category: Категория элементов.
 
         Returns:
             List[Element]: Список типов элементов.
         """
-        col = FilteredElementCollector(doc) \
+        col = FilteredElementCollector(self.doc) \
             .OfCategory(category) \
             .WhereElementIsElementType() \
             .ToElements()
         return col
 
-    def get_pipe_duct_insulation_types(self, doc):
+    def get_pipe_duct_insulation_types(self):
         """
         Получает типы изоляции труб и воздуховодов.
 
@@ -212,8 +217,8 @@ class UnmodelingFactory:
             List[Element]: Список типов изоляции труб и воздуховодов.
         """
         result = []
-        result.extend(self.get_elements_types_by_category(doc, BuiltInCategory.OST_PipeInsulations))
-        result.extend(self.get_elements_types_by_category(doc, BuiltInCategory.OST_DuctInsulations))
+        result.extend(self.get_elements_types_by_category(BuiltInCategory.OST_PipeInsulations))
+        result.extend(self.get_elements_types_by_category(BuiltInCategory.OST_DuctInsulations))
         return result
 
     def create_consumable_row_class_instance(self, system, function, consumable, consumable_description):
@@ -282,19 +287,16 @@ class UnmodelingFactory:
                                                   self.OUT_OF_FUNCTION_VALUE)
         return system, function
 
-    def get_base_location(self, doc):
+    def get_base_location(self):
         """
         Получает базовую локацию для вставки первого из элементов.
-
-        Args:
-            doc: Документ Revit.
 
         Returns:
             XYZ: Базовая локация.
         """
         if self.max_location_y == 0:
             # Фильтруем элементы, чтобы получить только те, у которых имя семейства равно "_Якорный элемент"
-            generic_models = self.get_elements_by_category(doc, BuiltInCategory.OST_GenericModel)
+            generic_models = self.get_elements_by_category(BuiltInCategory.OST_GenericModel)
             filtered_generics = [elem for elem in generic_models if elem.GetElementType()
                                  .GetParamValue(BuiltInParameter.ALL_MODEL_FAMILY_NAME) == self.FAMILY_NAME]
 
@@ -337,7 +339,6 @@ class UnmodelingFactory:
         Returns:
             List[GenerationRuleSet]: Список правил для генерации материалов.
         """
-
 
         gen_list = [
             GenerationRuleSet(
@@ -416,11 +417,11 @@ class UnmodelingFactory:
             return None
         return edited_by
 
-    def is_elemet_edited(self, doc, element):
+    def is_elemet_edited(self, element):
         """
         Проверяет, заняты ли элементы другими пользователями.
         """
-        update_status = WorksharingUtils.GetModelUpdatesStatus(doc, element.Id)
+        update_status = WorksharingUtils.GetModelUpdatesStatus(self.doc, element.Id)
 
         if update_status == ModelUpdatesStatus.UpdatedInCentral or update_status == ModelUpdatesStatus.DeletedInCentral:
             self.sync_status_report = "Вы владеете элементами, но ваш файл устарел. Выполните синхронизацию. "
@@ -456,7 +457,16 @@ class UnmodelingFactory:
             else:
                 forms.alert(report_message, "Ошибка")
 
-    def is_family_in(self, doc):
+    def find_family_symbol(self):
+        collector = FilteredElementCollector(self.doc).OfCategory(BuiltInCategory.OST_GenericModel).OfClass(FamilySymbol)
+
+        for element in collector:
+            if element.Family.Name == self.FAMILY_NAME:
+                return element
+
+        return None
+
+    def is_family_in(self):
         """
         Проверяет, есть ли семейство в проекте.
 
@@ -466,65 +476,79 @@ class UnmodelingFactory:
         Returns:
             FamilySymbol: Символ семейства, если оно есть в проекте, иначе None.
         """
-        collector = FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_GenericModel).OfClass(FamilySymbol)
 
-        for element in collector:
-            if element.Family.Name == self.FAMILY_NAME:
-                return element
+        symbol = self.find_family_symbol()
 
-        return None
+        if not symbol:
+            user_profile_path = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)
+            local_path = os.path.join(
+                user_profile_path,
+                'AppData',
+                'Roaming',
+                'pyRevit',
+                'Extensions',
+                '04.OV-VK.extension',
+                'ОВиВК.tab',
+                'Спецификации.panel',
+                'Дополнительные.stack',
+                'lib',
+                self.FAMILY_NAME + '.rfa')
 
-    def get_elements_by_category(self, doc, category):
+            with revit.Transaction("BIM: Загрузка семейства"):
+                self.doc.LoadFamily(local_path)
+
+            return self.find_family_symbol()
+
+        return symbol
+
+    def get_elements_by_category(self, category):
         """
         Возвращает список элементов по их категории.
 
         Args:
-            doc: Документ Revit.
             category: Категория элементов.
 
         Returns:
             List[Element]: Список элементов.
         """
-        return FilteredElementCollector(doc) \
+        return FilteredElementCollector(self.doc) \
             .OfCategory(category) \
             .WhereElementIsNotElementType() \
             .ToElements()
 
-    def remove_models(self, doc, description):
+    def remove_models(self, description):
         """
         Удаляет элементы с переданным описанием.
 
         Args:
-            doc: Документ Revit.
             description: Описание элемента.
         """
         # Фильтруем элементы, чтобы получить только те, у которых имя семейства равно "_Якорный элемент"
         generic_model_collection = \
-            [elem for elem in self.get_elements_by_category(doc, BuiltInCategory.OST_GenericModel) if elem.GetElementType()
+            [elem for elem in self.get_elements_by_category(BuiltInCategory.OST_GenericModel) if elem.GetElementType()
             .GetParamValue(BuiltInParameter.ALL_MODEL_FAMILY_NAME) == self.FAMILY_NAME]
 
         for element in generic_model_collection:
-            self.is_elemet_edited(doc, element)
+            self.is_elemet_edited(element)
 
         self.show_report(exit_on_report=True)
 
         with revit.Transaction("BIM: Очистка немоделируемых"):
             for element in generic_model_collection:
                 if element.IsExistsParam(self.DESCRIPTION_PARAM_NAME):
-                    elem_type = doc.GetElement(element.GetTypeId())
+                    elem_type = self.doc.GetElement(element.GetTypeId())
                     current_name = elem_type.get_Parameter(BuiltInParameter.ALL_MODEL_FAMILY_NAME).AsString()
                     current_description = element.GetParamValueOrDefault(self.DESCRIPTION_PARAM_NAME)
 
                     if current_name == self.FAMILY_NAME:
                         if current_description is None or description in current_description:
-                            doc.Delete(element.Id)
+                            self.doc.Delete(element.Id)
 
-    def create_new_position(self, doc, new_row_data, family_symbol, description, loc):
+    def create_new_position(self, new_row_data, family_symbol, description, loc):
         """
         Генерирует пустые элементы в рабочем наборе немоделируемых.
 
         Args:
-            doc: Документ Revit.
             new_row_data: Данные новой строки.
             family_symbol: Символ семейства.
             description: Описание.
@@ -547,7 +571,7 @@ class UnmodelingFactory:
             forms.alert('Не удалось найти рабочий набор "99_Немоделируемые элементы"', "Ошибка", exitscript=True)
 
         # Создаем элемент и назначаем рабочий набор
-        family_inst = doc.Create.NewFamilyInstance(loc, family_symbol, Structure.StructuralType.NonStructural)
+        family_inst = self.doc.Create.NewFamilyInstance(loc, family_symbol, Structure.StructuralType.NonStructural)
 
         family_inst_workset = family_inst.get_Parameter(BuiltInParameter.ELEM_PARTITION_PARAM)
         family_inst_workset.Set(self.ws_id.IntegerValue)
@@ -569,7 +593,7 @@ class UnmodelingFactory:
         description_param = family_inst.GetParam(self.DESCRIPTION_PARAM_NAME)
         description_param.Set(description)
 
-    def startup_checks(self, doc):
+    def startup_checks(self):
         """
         Выполняет начальные проверки файла и семейства.
 
@@ -579,10 +603,10 @@ class UnmodelingFactory:
         Returns:
             FamilySymbol: Символ семейства.
         """
-        if doc.IsFamilyDocument:
+        if self.doc.IsFamilyDocument:
             forms.alert("Надстройка не предназначена для работы с семействами", "Ошибка", exitscript=True)
 
-        family_symbol = self.is_family_in(doc)
+        family_symbol = self.is_family_in()
 
         if family_symbol is None:
             forms.alert(
@@ -590,27 +614,25 @@ class UnmodelingFactory:
                 "Ошибка",
                 exitscript=True)
 
-        self.check_family(family_symbol, doc)
+        self.check_family(family_symbol)
 
-        self.check_worksets(doc)
+        self.check_worksets()
 
         # На всякий случай выполняем настройку параметров - в теории уже должны быть на месте, но лучше продублировать
         revit_params = [SharedParamsConfig.Instance.EconomicFunction,
                         SharedParamsConfig.Instance.VISSystemName]
 
-        project_parameters = ProjectParameters.Create(doc.Application)
-        project_parameters.SetupRevitParams(doc, revit_params)
+        project_parameters = ProjectParameters.Create(self.doc.Application)
+        project_parameters.SetupRevitParams(self.doc, revit_params)
 
         return family_symbol
 
-    def check_worksets(self, doc):
+    def check_worksets(self):
         """
         Проверяет наличие рабочего набора немоделируемых элементов.
 
-        Args:
-            doc: Документ Revit.
         """
-        if WorksetTable.IsWorksetNameUnique(doc, '99_Немоделируемые элементы'):
+        if WorksetTable.IsWorksetNameUnique(self.doc, '99_Немоделируемые элементы'):
             with revit.Transaction("Добавление рабочего набора"):
                 new_ws = Workset.Create(doc, '99_Немоделируемые элементы')
                 forms.alert('Был создан рабочий набор "99_Немоделируемые элементы". '
@@ -620,7 +642,7 @@ class UnmodelingFactory:
                             "Рабочие наборы")
                 self.ws_id = new_ws.Id
         else:
-            fws = FilteredWorksetCollector(doc).OfKind(WorksetKind.UserWorkset)
+            fws = FilteredWorksetCollector(self.doc).OfKind(WorksetKind.UserWorkset)
             for ws in fws:
                 if ws.Name == '99_Немоделируемые элементы':
                     self.ws_id = ws.Id
@@ -634,13 +656,12 @@ class UnmodelingFactory:
                     self.ws_id = ws.Id
                     return
 
-    def check_family(self, family_symbol, doc):
+    def check_family(self, family_symbol):
         """
         Проверяет семейство на наличие необходимых параметров.
 
         Args:
             family_symbol: Символ семейства.
-            doc: Документ Revit.
 
         Returns:
             List: Список отсутствующих параметров.
@@ -661,7 +682,7 @@ class UnmodelingFactory:
             ]
 
         family = family_symbol.Family
-        symbol_params = self.get_family_shared_parameter_names(doc, family)
+        symbol_params = self.get_family_shared_parameter_names(family)
 
         result = []
         missing_params = [param for param in param_names_list if param not in symbol_params]
@@ -673,19 +694,18 @@ class UnmodelingFactory:
 
         return result
 
-    def get_family_shared_parameter_names(self, doc, family):
+    def get_family_shared_parameter_names(self, family):
         """
         Получает список имен общих параметров семейства.
 
         Args:
-            doc: Документ Revit.
             family: Семейство.
 
         Returns:
             List[str]: Список имен общих параметров.
         """
         # Открываем документ семейства для редактирования
-        family_doc = doc.EditFamily(family)
+        family_doc = self.doc.EditFamily(family)
 
         shared_parameters = []
         try:

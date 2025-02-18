@@ -25,7 +25,7 @@ from dosymep_libs.bim4everyone import *
 doc = __revit__.ActiveUIDocument.Document
 view = doc.ActiveView
 material_calculator = MaterialCalculator(doc)
-unmodeling_factory = UnmodelingFactory()
+unmodeling_factory = UnmodelingFactory(doc)
 
 class CalculationResult:
     def __init__(self, number, area):
@@ -152,8 +152,8 @@ def get_material_number_value(element, operation_name):
 
 def remove_old_models():
     """ Удаление уже размещенных в модели расходников и материалов перед новой генерацией"""
-    unmodeling_factory.remove_models(doc, unmodeling_factory.MATERIAL_DESCRIPTION)
-    unmodeling_factory.remove_models(doc, unmodeling_factory.CONSUMABLE_DESCRIPTION)
+    unmodeling_factory.remove_models(unmodeling_factory.MATERIAL_DESCRIPTION)
+    unmodeling_factory.remove_models(unmodeling_factory.CONSUMABLE_DESCRIPTION)
 
 def process_materials(family_symbol, material_description):
     """ Обработка предопределенного списка материалов
@@ -189,7 +189,7 @@ def process_materials(family_symbol, material_description):
                 pipe_dict[full_diameter] = []
             pipe_dict[full_diameter].append(pipe)
 
-        material_location = unmodeling_factory.get_base_location(doc)
+        material_location = unmodeling_factory.get_base_location()
         for pipe_row in pipe_dict:
             new_row = unmodeling_factory.create_material_row_class_instance(
                 system, function, rule_set, material_description)
@@ -199,7 +199,7 @@ def process_materials(family_symbol, material_description):
 
             for element in pipe_dict[pipe_row]:
                 new_row.number += get_material_number_value(element, rule_set.name)
-            unmodeling_factory.create_new_position(doc, new_row, family_symbol, material_description, material_location)
+            unmodeling_factory.create_new_position(new_row, family_symbol, material_description, material_location)
 
     def process_other_rules(elements, system, function, rule_set, material_description,
                             material_location, family_symbol):
@@ -215,13 +215,13 @@ def process_materials(family_symbol, material_description):
             round_area = round(area, 2)
             new_row.note = str(round_area) + ' м²'
 
-        unmodeling_factory.create_new_position(doc, new_row, family_symbol, material_description, material_location)
+        unmodeling_factory.create_new_position(new_row, family_symbol, material_description, material_location)
 
-    material_location = unmodeling_factory.get_base_location(doc)
+    material_location = unmodeling_factory.get_base_location()
     generation_rules_list = unmodeling_factory.get_ruleset()
 
     for rule_set in generation_rules_list:
-        elem_types = unmodeling_factory.get_elements_types_by_category(doc, rule_set.category)
+        elem_types = unmodeling_factory.get_elements_types_by_category(rule_set.category)
         calculation_elements = get_material_hosts(elem_types, rule_set.method_name, rule_set.category)
 
         split_lists = split_calculation_elements_list(calculation_elements)
@@ -230,7 +230,7 @@ def process_materials(family_symbol, material_description):
             system, function = unmodeling_factory.get_system_function(elements[0])
             if rule_set.name == "Хомут трубный под шпильку М8":
                 process_pipe_clamps(elements, system, function, rule_set, material_description, family_symbol)
-                material_location = unmodeling_factory.get_base_location(doc)
+                material_location = unmodeling_factory.get_base_location()
             else:
                 material_location = unmodeling_factory.update_location(material_location)
 
@@ -244,13 +244,13 @@ def process_insulation_consumables(family_symbol, consumable_description):
         family_symbol: Символ семейства якорного элемента для создания новых экземпляров
         consumable_description: Описание расходника с которым он будет создан и по которому будет удален
     """
-    consumable_location = unmodeling_factory.get_base_location(doc)
+    consumable_location = unmodeling_factory.get_base_location()
     insulation_list = get_insulation_elements_list()
     split_insulation_lists = split_calculation_elements_list(insulation_list)
 
     consumables_by_insulation_type = {}
 
-    insulation_types = unmodeling_factory.get_pipe_duct_insulation_types(doc)
+    insulation_types = unmodeling_factory.get_pipe_duct_insulation_types()
 
     # кэшируем данные по расходникам изоляции для ее типов
     for insulation_type in insulation_types:
@@ -307,7 +307,7 @@ def process_insulation_consumables(family_symbol, consumable_description):
 
                     consumable_location = unmodeling_factory.update_location(consumable_location)
 
-                    unmodeling_factory.create_new_position(doc, new_consumable_row, family_symbol,
+                    unmodeling_factory.create_new_position(new_consumable_row, family_symbol,
                                                            consumable_description, consumable_location)
 
 def get_insulation_elements_list():
@@ -318,8 +318,8 @@ def get_insulation_elements_list():
         list: Лист из элементов изоляции
     """
     insulations = []
-    insulations += unmodeling_factory.get_elements_by_category(doc, BuiltInCategory.OST_PipeInsulations)
-    insulations += unmodeling_factory.get_elements_by_category(doc, BuiltInCategory.OST_DuctInsulations)
+    insulations += unmodeling_factory.get_elements_by_category(BuiltInCategory.OST_PipeInsulations)
+    insulations += unmodeling_factory.get_elements_by_category(BuiltInCategory.OST_DuctInsulations)
     return insulations
 
 
@@ -327,7 +327,7 @@ def get_insulation_elements_list():
 @notification()
 @log_plugin(EXEC_PARAMS.command_name)
 def script_execute(plugin_logger):
-    family_symbol = unmodeling_factory.startup_checks(doc)
+    family_symbol = unmodeling_factory.startup_checks()
 
     # При каждом запуске затираем расходники с соответствующим описанием и генерируем заново
     remove_old_models()
