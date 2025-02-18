@@ -198,7 +198,8 @@ def process_materials(family_symbol, material_description):
             material_location = unmodeling_factory.update_location(material_location)
 
             for element in pipe_dict[pipe_row]:
-                new_row.number += get_material_number_value(element, rule_set.name)
+                value = get_material_number_value(element, rule_set.name)
+                new_row.number += value.number
             unmodeling_factory.create_new_position(new_row, family_symbol, material_description, material_location)
 
     def process_other_rules(elements, system, function, rule_set, material_description,
