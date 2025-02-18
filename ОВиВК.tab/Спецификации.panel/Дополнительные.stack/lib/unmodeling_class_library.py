@@ -26,7 +26,77 @@ from dosymep.Bim4Everyone.Templates import ProjectParameters
 from dosymep_libs.bim4everyone import *
 from dosymep.Revit import *
 
-# класс-правило для генерации элементов, содержит имя метода, категорию и описание материала
+class ElementStocks:
+    """ Класс для вычисления запасов на элемент """
+    types_cash = {}
+    pipe_insulation_stock = None
+    duct_insulation_stock = None
+
+    def __init__(self, doc):
+        info = doc.ProjectInformation
+        pipe_insulatin_stock_param = SharedParamsConfig.Instance.VISPipeInsulationReserve
+        duct_insulation_stock_param = SharedParamsConfig.Instance.VISDuctInsulationReserve
+        pipe_and_duct_stock_param = SharedParamsConfig.Instance.VISPipeDuctReserve
+
+        self.pipe_insulation_stock = self.get_stock_value(info
+                                      .GetParamValueOrDefault(pipe_insulatin_stock_param))
+
+        self.duct_insulation_stock = self.get_stock_value(info
+                                      .GetParamValueOrDefault(duct_insulation_stock_param))
+
+        self.duct_and_pipe_stock = self.get_stock_value(info
+                                      .GetParamValueOrDefault(pipe_and_duct_stock_param))
+
+    def get_stock_value(self, param):
+        # На питоне не получается задать дефолтное значение 0, вылетает "Заданное приведение не является допустимым".
+        # Чтоб не ломаться о None - приводим к нулю руками
+        if param is None:
+            param = 0
+
+        return param/100
+
+    def get_individual_stock(self, element):
+        if element.InAnyCategory([BuiltInCategory.OST_DuctCurves,
+                                  BuiltInCategory.OST_PipeCurves,
+                                  BuiltInCategory.OST_DuctInsulations,
+                                  BuiltInCategory.OST_PipeInsulations]):
+            element_type = element.GetElementType()
+
+            # Проверяем, существует ли уже айди типа в кэше
+            if element_type.Id in self.types_cash:
+                individual_stock = self.types_cash[element_type.Id]
+            else:
+                individual_stock = self.get_stock_value(element_type.GetParamValueOrDefault(
+                    SharedParamsConfig.Instance.VISIndividualStock, 0))
+                self.types_cash[element_type.Id] = individual_stock
+
+            if individual_stock is None:
+                return 0
+
+            return individual_stock
+
+    def get_stock(self, element):
+        individual_stock = self.get_individual_stock(element)
+
+        if individual_stock != 0 and individual_stock is not None:
+            return 1 + individual_stock
+        if element.Category.IsId(BuiltInCategory.OST_PipeInsulations):
+            return 1 + self.pipe_insulation_stock
+        if element.Category.IsId(BuiltInCategory.OST_DuctInsulations):
+            return 1 + self.duct_insulation_stock
+        if element.Category.IsId(BuiltInCategory.OST_PipeCurves):
+            return 1 + self.duct_and_pipe_stock
+        if element.Category.IsId(BuiltInCategory.OST_DuctCurves):
+            return 1 + self.duct_and_pipe_stock
+
+        return 0
+
+class CalculationResult:
+    """ Класс для передачи результата расчетов материалов """
+    def __init__(self, number, area):
+        self.number = number
+        self.area = area
+
 class GenerationRuleSet:
     """
     Класс правило для генерации элементов, содержит имя метода, категорию и описание материала
@@ -73,7 +143,6 @@ class MaterialVariants:
         self.insulated_rate = insulated_rate
         self.not_insulated_rate = not_insulated_rate
 
-# класс содержащий все ячейки типовой спецификации
 class RowOfSpecification:
     """
     Класс, описывающий строку спецификации

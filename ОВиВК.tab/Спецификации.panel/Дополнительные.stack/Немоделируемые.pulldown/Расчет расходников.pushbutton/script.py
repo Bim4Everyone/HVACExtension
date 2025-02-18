@@ -23,74 +23,11 @@ from collections import defaultdict
 from unmodeling_class_library import *
 from dosymep_libs.bim4everyone import *
 
-class CalculationResult:
-    def __init__(self, number, area):
-        self.number = number
-        self.area = area
-
-class ElementStocks:
-    types_cash = {}
-    pipe_insulation_stock = None
-    duct_insulation_stock = None
-
-    def __init__(self):
-        info = doc.ProjectInformation
-        pipe_insulatin_stock_param = SharedParamsConfig.Instance.VISPipeInsulationReserve
-        duct_insulation_stock_param = SharedParamsConfig.Instance.VISDuctInsulationReserve
-        pipe_and_duct_stock_param = SharedParamsConfig.Instance.VISPipeDuctReserve
-
-        self.pipe_insulation_stock = (info
-                                      .GetParamValueOrDefault(pipe_insulatin_stock_param)) / 100
-
-        self.duct_insulation_stock = (info
-                                      .GetParamValueOrDefault(duct_insulation_stock_param)) / 100
-
-        self.duct_and_pipe_stock = (info
-                                      .GetParamValueOrDefault(pipe_and_duct_stock_param)) / 100
-
-    def get_individual_stock(self, element):
-        if element.InAnyCategory([BuiltInCategory.OST_DuctCurves,
-                                  BuiltInCategory.OST_PipeCurves,
-                                  BuiltInCategory.OST_DuctInsulations,
-                                  BuiltInCategory.OST_PipeInsulations]):
-            element_type = element.GetElementType()
-
-            # Проверяем, существует ли уже айди типа в кэше
-            if element_type.Id in self.types_cash:
-                individual_stock = self.types_cash[element_type.Id]
-            else:
-                individual_stock = element_type.GetParamValueOrDefault(
-                    SharedParamsConfig.Instance.VISIndividualStock) / 100
-                self.types_cash[element_type.Id] = individual_stock
-
-            if individual_stock is None:
-                return 0
-
-            return individual_stock
-
-    def get_stock(self, element):
-        individual_stock = self.get_individual_stock(element)
-
-        if individual_stock != 0 and individual_stock is not None:
-            return 1 + individual_stock
-
-        if element.Category.IsId(BuiltInCategory.OST_PipeInsulations):
-            return 1 + self.pipe_insulation_stock
-        if element.Category.IsId(BuiltInCategory.OST_DuctInsulations):
-            return 1 + self.duct_insulation_stock
-        if element.Category.IsId(BuiltInCategory.OST_PipeCurves):
-            return 1 + self.duct_and_pipe_stock
-        if element.Category.IsId(BuiltInCategory.OST_DuctCurves):
-            return 1 + self.duct_and_pipe_stock
-
-        return 0
-
-
 doc = __revit__.ActiveUIDocument.Document
 view = doc.ActiveView
 material_calculator = MaterialCalculator(doc)
 unmodeling_factory = UnmodelingFactory(doc)
-element_stocks = ElementStocks()
+element_stocks = ElementStocks(doc)
 
 def get_material_hosts(element_types, calculation_name, builtin_category):
     """ Проверяет для типов элементов можно ли на их базе создать расходники
