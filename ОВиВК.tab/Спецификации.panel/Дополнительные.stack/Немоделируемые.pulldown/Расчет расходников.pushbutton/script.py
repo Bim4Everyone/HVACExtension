@@ -295,12 +295,16 @@ def process_insulation_consumables(family_symbol, consumable_description):
 
                         stock = element_stocks.get_stock(element)
 
+                        length = length * stock
+                        area = area * stock
+
                         if (consumable.is_expenditure_by_linear_meter == 0
                                 or consumable.is_expenditure_by_linear_meter is None):
-                            value = consumable.expenditure * area + consumable.expenditure * area * stock
+                            value = consumable.expenditure * area
                             new_consumable_row.number += value
                         else:
-                            value = consumable.expenditure * length + consumable.expenditure * length * stock
+                            value = consumable.expenditure * length
+
                             new_consumable_row.number += value
 
                     consumable_location = unmodeling_factory.update_location(consumable_location)
