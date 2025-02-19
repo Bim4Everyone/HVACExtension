@@ -633,7 +633,6 @@ class UnmodelingFactory:
         if new_row_data.number == 0 and description != self.EMPTY_DESCRIPTION:
             return
 
-
         self.max_location_y = loc.Y
 
         if self.ws_id is None:
@@ -648,6 +647,11 @@ class UnmodelingFactory:
         group = '{}_{}_{}_{}_{}'.format(
             new_row_data.group, new_row_data.name, new_row_data.mark, new_row_data.maker, new_row_data.code)
 
+        if self.doc.IsExistsParam(SharedParamsConfig.Instance.VISSpecNumbersCurrency):
+            number_param = SharedParamsConfig.Instance.VISSpecNumbersCurrency
+        else:
+            number_param = SharedParamsConfig.Instance.VISSpecNumbers
+
         set_param_value(SharedParamsConfig.Instance.VISSystemName, new_row_data.system)
         set_param_value(SharedParamsConfig.Instance.VISGrouping, group)
         set_param_value(SharedParamsConfig.Instance.VISCombinedName, new_row_data.name)
@@ -655,7 +659,7 @@ class UnmodelingFactory:
         set_param_value(SharedParamsConfig.Instance.VISItemCode, new_row_data.code)
         set_param_value(SharedParamsConfig.Instance.VISManufacturer, new_row_data.maker)
         set_param_value(SharedParamsConfig.Instance.VISUnit, new_row_data.unit)
-        set_param_value(SharedParamsConfig.Instance.VISSpecNumbers, new_row_data.number)
+        set_param_value(number_param, new_row_data.number)
         set_param_value(SharedParamsConfig.Instance.VISMass, new_row_data.mass)
         set_param_value(SharedParamsConfig.Instance.VISNote, new_row_data.note)
         set_param_value(SharedParamsConfig.Instance.EconomicFunction, new_row_data.function)
