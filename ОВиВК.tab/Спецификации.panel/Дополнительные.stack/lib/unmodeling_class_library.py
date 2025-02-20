@@ -240,7 +240,7 @@ class UnmodelingFactory:
     PIPE_METAL_RULE_NAME = 'Металлические крепления для трубопроводов'
     DUCT_METAL_RULE_NAME = 'Металлические крепления для воздуховодов'
     COLOR_RULE_NAME = 'Краска антикоррозионная, покрытие в два слоя. Расход - 0.2 кг на м²'
-    GRUNT_RULE_NAME = 'Грунтовка для стальных труб, покрытие в один слой. Расход - 0.12 кг на м²'
+    GRUNT_RULE_NAME = 'Грунтовка для стальных труб, покрытие в один слой. Расход - 0.1 кг на м²'
     CLAMPS_RULE_NAME = 'Хомут трубный под шпильку М8'
     PIN_RULE_NAME = 'Шпилька М8 1м/1шт'
 
@@ -1036,7 +1036,7 @@ class MaterialCalculator:
         Returns:
             float: Масса грунтовки.
         """
-        number = pipe_area * 0.12
+        number = pipe_area * 0.1
         return number
 
     def get_color_mass(self, pipe_area):
