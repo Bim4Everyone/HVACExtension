@@ -14,6 +14,7 @@ clr.ImportExtensions(dosymep.Bim4Everyone)
 
 from Autodesk.Revit.DB import *
 
+from System.Collections.Generic import List
 from pyrevit import forms
 from pyrevit import revit
 from pyrevit import script
@@ -285,10 +286,15 @@ class UnmodelingFactory:
         Returns:
             List[Element]: Список типов изоляции труб и воздуховодов.
         """
-        result = []
-        result.extend(self.get_elements_types_by_category(BuiltInCategory.OST_PipeInsulations))
-        result.extend(self.get_elements_types_by_category(BuiltInCategory.OST_DuctInsulations))
-        return result
+        # Создаем список категорий
+        categories = List[BuiltInCategory]()
+        categories.Add(BuiltInCategory.OST_PipeInsulations)
+        categories.Add(BuiltInCategory.OST_DuctInsulations)
+
+        multicategory_filter = ElementMulticategoryFilter(categories)
+
+        return (FilteredElementCollector(self.doc).WherePasses(multicategory_filter)
+                .WhereElementIsElementType().ToElements())
 
     def create_consumable_row_class_instance(self, system, function, consumable, consumable_description):
         """
@@ -549,19 +555,8 @@ class UnmodelingFactory:
         symbol = self.find_family_symbol()
 
         if not symbol:
-            user_profile_path = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)
-            local_path = os.path.join(
-                user_profile_path,
-                'AppData',
-                'Roaming',
-                'pyRevit',
-                'Extensions',
-                '04.OV-VK.extension',
-                'ОВиВК.tab',
-                'Спецификации.panel',
-                'Дополнительные.stack',
-                'lib',
-                self.FAMILY_NAME + '.rfa')
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            local_path = os.path.join(script_dir, self.FAMILY_NAME + '.rfa')
 
             with revit.Transaction("BIM: Загрузка семейства"):
                 self.doc.LoadFamily(local_path)
