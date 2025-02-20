@@ -239,8 +239,8 @@ class UnmodelingFactory:
     # Имена расчетов
     PIPE_METAL_RULE_NAME = 'Металлические крепления для трубопроводов'
     DUCT_METAL_RULE_NAME = 'Металлические крепления для воздуховодов'
-    COLOR_RULE_NAME = 'Краска антикоррозионная за два раза'
-    GRUNT_RULE_NAME = 'Грунтовка для стальных труб'
+    COLOR_RULE_NAME = 'Краска антикоррозионная, покрытие в два слоя. Расход - 0.2 кг на м²'
+    GRUNT_RULE_NAME = 'Грунтовка для стальных труб, покрытие в один слой. Расход - расход 0.1 кг на м²'
     CLAMPS_RULE_NAME = 'Хомут трубный под шпильку М8'
     PIN_RULE_NAME = 'Шпилька М8 1м/1шт'
 
@@ -439,7 +439,7 @@ class UnmodelingFactory:
                 name=self.COLOR_RULE_NAME,
                 mark="БТ-177",
                 code="",
-                unit="кг.",
+                unit="м²",
                 maker="",
                 method_name=SharedParamsConfig.Instance.VISIsPaintCalculation.Name,
                 category=BuiltInCategory.OST_PipeCurves),
@@ -448,7 +448,7 @@ class UnmodelingFactory:
                 name=self.GRUNT_RULE_NAME,
                 mark="ГФ-031",
                 code="",
-                unit="кг.",
+                unit="м²",
                 maker="",
                 method_name=SharedParamsConfig.Instance.VISIsPaintCalculation.Name,
                 category=BuiltInCategory.OST_PipeCurves),
@@ -1036,7 +1036,7 @@ class MaterialCalculator:
         Returns:
             float: Масса грунтовки.
         """
-        number = pipe_area / 10
+        number = pipe_area # Возвращаем просто площадь, сметчики сами перемножат расход на нее
         return number
 
     def get_color_mass(self, pipe_area):
@@ -1049,7 +1049,7 @@ class MaterialCalculator:
         Returns:
             float: Масса краски.
         """
-        number = pipe_area * 0.2 * 2
+        number = pipe_area # Возвращаем просто площадь, сметчики сами перемножат расход на нее
         return number
 
     def get_consumables_class_instances(self, insulation_element_type):

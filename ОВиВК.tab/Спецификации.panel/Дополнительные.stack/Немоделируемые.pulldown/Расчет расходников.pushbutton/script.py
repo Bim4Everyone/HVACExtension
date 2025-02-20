@@ -214,10 +214,6 @@ def process_materials(family_symbol, material_description):
             new_row.number += value.number
             area += value.area
 
-        if rule_set.name in [unmodeling_factory.GRUNT_RULE_NAME, unmodeling_factory.COLOR_RULE_NAME]:
-            round_area = round(area, 2)
-            new_row.note = str(round_area) + ' м²'
-
         unmodeling_factory.create_new_position(new_row, family_symbol, material_description, material_location)
 
     material_location = unmodeling_factory.get_base_location()
