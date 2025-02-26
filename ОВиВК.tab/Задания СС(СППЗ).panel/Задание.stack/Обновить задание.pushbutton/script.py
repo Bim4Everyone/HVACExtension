@@ -227,6 +227,7 @@ def get_closed_max_numbers(old_data):
             continue
 
         match = re.search(r'^(.*)-([^-]+)$', data.json_name)
+        # условное выражение делит имя образца "НЗ-ДП3.4-2эт ДОО-1" на "НЗ-ДП3.4-2эт ДОО" и "1", отрезая последний дефис
 
         if match:
             base_name = match.group(1)
