@@ -471,8 +471,6 @@ class SpecificationFiller:
         Returns:
             Имя параметра или None если все в норме
         """
-
-
         for element in elements:
             if not element.InAnyCategory(self.mechanical_categories):
                 continue
