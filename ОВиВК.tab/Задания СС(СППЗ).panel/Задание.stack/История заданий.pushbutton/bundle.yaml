@@ -1,0 +1,14 @@
+title:
+  ru: История заданий
+  en_us: Task history
+
+tooltip:
+  ru: Демонстрирует оборудование, существующие в последней ревизии задания, но не существующее в модели.
+  en_us: Shows equipment that exists in the latest revision of the job but does not exist in the model.
+
+author: Redomine
+help_url: "https://kb.a101.ru/pages/viewpage.action?pageId=155549728"
+
+min_revit_version: 2022
+max_revit_version: 2024
+

@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import math
-
+from System import Environment
+import os
 import clr
 
 clr.AddReference("dosymep.Revit.dll")
@@ -13,6 +14,7 @@ clr.ImportExtensions(dosymep.Bim4Everyone)
 
 from Autodesk.Revit.DB import *
 
+from System.Collections.Generic import List
 from pyrevit import forms
 from pyrevit import revit
 from pyrevit import script
@@ -25,7 +27,77 @@ from dosymep.Bim4Everyone.Templates import ProjectParameters
 from dosymep_libs.bim4everyone import *
 from dosymep.Revit import *
 
-# класс-правило для генерации элементов, содержит имя метода, категорию и описание материала
+class ElementStocks:
+    """ Класс для вычисления запасов на элемент """
+    types_cash = {}
+    pipe_insulation_stock = None
+    duct_insulation_stock = None
+
+    def __init__(self, doc):
+        info = doc.ProjectInformation
+        pipe_insulatin_stock_param = SharedParamsConfig.Instance.VISPipeInsulationReserve
+        duct_insulation_stock_param = SharedParamsConfig.Instance.VISDuctInsulationReserve
+        pipe_and_duct_stock_param = SharedParamsConfig.Instance.VISPipeDuctReserve
+
+        self.pipe_insulation_stock = self.get_stock_value(info
+                                      .GetParamValueOrDefault(pipe_insulatin_stock_param))
+
+        self.duct_insulation_stock = self.get_stock_value(info
+                                      .GetParamValueOrDefault(duct_insulation_stock_param))
+
+        self.duct_and_pipe_stock = self.get_stock_value(info
+                                      .GetParamValueOrDefault(pipe_and_duct_stock_param))
+
+    def get_stock_value(self, param):
+        # На питоне не получается задать дефолтное значение 0, вылетает "Заданное приведение не является допустимым".
+        # Чтоб не ломаться о None - приводим к нулю руками
+        if param is None:
+            param = 0
+
+        return param/100
+
+    def get_individual_stock(self, element):
+        if element.InAnyCategory([BuiltInCategory.OST_DuctCurves,
+                                  BuiltInCategory.OST_PipeCurves,
+                                  BuiltInCategory.OST_DuctInsulations,
+                                  BuiltInCategory.OST_PipeInsulations]):
+            element_type = element.GetElementType()
+
+            # Проверяем, существует ли уже айди типа в кэше
+            if element_type.Id in self.types_cash:
+                individual_stock = self.types_cash[element_type.Id]
+            else:
+                individual_stock = self.get_stock_value(element_type.GetParamValueOrDefault(
+                    SharedParamsConfig.Instance.VISIndividualStock, 0))
+                self.types_cash[element_type.Id] = individual_stock
+
+            if individual_stock is None:
+                return 0
+
+            return individual_stock
+
+    def get_stock(self, element):
+        individual_stock = self.get_individual_stock(element)
+
+        if individual_stock != 0 and individual_stock is not None:
+            return 1 + individual_stock
+        if element.Category.IsId(BuiltInCategory.OST_PipeInsulations):
+            return 1 + self.pipe_insulation_stock
+        if element.Category.IsId(BuiltInCategory.OST_DuctInsulations):
+            return 1 + self.duct_insulation_stock
+        if element.Category.IsId(BuiltInCategory.OST_PipeCurves):
+            return 1 + self.duct_and_pipe_stock
+        if element.Category.IsId(BuiltInCategory.OST_DuctCurves):
+            return 1 + self.duct_and_pipe_stock
+
+        return 0
+
+class CalculationResult:
+    """ Класс для передачи результата расчетов материалов """
+    def __init__(self, number, area):
+        self.number = number
+        self.area = area
+
 class GenerationRuleSet:
     """
     Класс правило для генерации элементов, содержит имя метода, категорию и описание материала
@@ -72,7 +144,6 @@ class MaterialVariants:
         self.insulated_rate = insulated_rate
         self.not_insulated_rate = not_insulated_rate
 
-# класс содержащий все ячейки типовой спецификации
 class RowOfSpecification:
     """
     Класс, описывающий строку спецификации
@@ -149,45 +220,63 @@ class InsulationConsumables:
 
 class UnmodelingFactory:
     """ Класс, оперирующий созданием немоделируемых элементов """
-    coordinate_step = 0.01  # Шаг координаты на который разносим немоделируемые. ~3 мм, чтоб они не стояли в одном месте и чтоб не растягивали чертеж своим существованием
-    description_param_name = 'ФОП_ВИС_Назначение'  # Пока нет в платформе, будет добавлено и перенесено в RevitParams
+    doc = None
+
+    COORDINATE_STEP = 0.01  # Шаг координаты на который разносим немоделируемые. ~3 мм, чтоб они не стояли в одном месте и чтоб не растягивали чертеж своим существованием
+    DESCRIPTION_PARAM_NAME = 'ФОП_ВИС_Назначение'  # Пока нет в платформе, будет добавлено и перенесено в RevitParams
 
     # Значения параметра "ФОП_ВИС_Назначение" по которому определяется удалять элемент или нет
-    empty_description = 'Пустая строка'
-    import_description = 'Импорт немоделируемых'
-    material_description = 'Расчет краски и креплений'
-    consumable_description = 'Расходники изоляции'
+    EMPTY_DESCRIPTION = 'Пустая строка'
+    IMPORT_DESCRIPTION = 'Импорт немоделируемых'
+    MATERIAL_DESCRIPTION = 'Расчет краски и креплений'
+    CONSUMABLE_DESCRIPTION = 'Расходники изоляции'
+    AI_DESCRIPTION = 'Элементы АИ'
 
     # Значение группирования для элементов
-    consumable_group = '12. Расходники изоляции'
+    CONSUMABLE_GROUP = '12. Расходники изоляции'
+    MATERIAL_GROUP = "12. Расчетные элементы"
 
-    family_name = '_Якорный элемент'
-    out_of_system_value = '!Нет системы'
-    out_of_function_value = '!Нет функции'
+    # Имена расчетов
+    PIPE_METAL_RULE_NAME = 'Металлические крепления для трубопроводов'
+    DUCT_METAL_RULE_NAME = 'Металлические крепления для воздуховодов'
+    COLOR_RULE_NAME = 'Краска антикоррозионная, покрытие в два слоя. Расход - 0.2 кг на м²'
+    GRUNT_RULE_NAME = 'Грунтовка для стальных труб, покрытие в один слой. Расход - 0.1 кг на м²'
+    CLAMPS_RULE_NAME = 'Хомут трубный под шпильку М8'
+    PIN_RULE_NAME = 'Шпилька М8 1м/1шт'
+
+    FAMILY_NAME = '_Якорный элемент'
+    OUT_OF_SYSTEM_VALUE = '!Нет системы'
+    OUT_OF_FUNCTION_VALUE = '!Нет функции'
     ws_id = None
+
+    edited_reports = [] # Перчень редакторов элементов
+    sync_status_report = None # Отчет о статусе необходимости синхронизации
+    edited_status_report = None # Отчет о статусе занятых элементов
 
     # Максимальная встреченная координата в проекте. Обновляется в первый раз в get_base_location, далее обновляется в
     # при создании экземпляра якоря
     max_location_y = 0
 
-    def get_elements_types_by_category(self, doc, category):
+    def __init__(self, doc):
+        self.doc = doc
+
+    def get_elements_types_by_category(self, category):
         """
         Получает типы элементов по их категории.
 
         Args:
-            doc: Документ Revit.
             category: Категория элементов.
 
         Returns:
             List[Element]: Список типов элементов.
         """
-        col = FilteredElementCollector(doc) \
+        col = FilteredElementCollector(self.doc) \
             .OfCategory(category) \
             .WhereElementIsElementType() \
             .ToElements()
         return col
 
-    def get_pipe_duct_insulation_types(self, doc):
+    def get_pipe_duct_insulation_types(self):
         """
         Получает типы изоляции труб и воздуховодов.
 
@@ -197,10 +286,15 @@ class UnmodelingFactory:
         Returns:
             List[Element]: Список типов изоляции труб и воздуховодов.
         """
-        result = []
-        result.extend(self.get_elements_types_by_category(doc, BuiltInCategory.OST_PipeInsulations))
-        result.extend(self.get_elements_types_by_category(doc, BuiltInCategory.OST_DuctInsulations))
-        return result
+        # Создаем список категорий
+        categories = List[BuiltInCategory]()
+        categories.Add(BuiltInCategory.OST_PipeInsulations)
+        categories.Add(BuiltInCategory.OST_DuctInsulations)
+
+        multicategory_filter = ElementMulticategoryFilter(categories)
+
+        return (FilteredElementCollector(self.doc).WherePasses(multicategory_filter)
+                .WhereElementIsElementType().ToElements())
 
     def create_consumable_row_class_instance(self, system, function, consumable, consumable_description):
         """
@@ -218,7 +312,7 @@ class UnmodelingFactory:
         return RowOfSpecification(
             system,
             function,
-            self.consumable_group,
+            self.CONSUMABLE_GROUP,
             consumable.name,
             consumable.mark,
             '',  # У расходников не будет кода изделия
@@ -263,26 +357,23 @@ class UnmodelingFactory:
             Tuple[str, str]: Кортеж из значений системы и функции.
         """
         system = element.GetParamValueOrDefault(SharedParamsConfig.Instance.VISSystemName,
-                                                self.out_of_system_value)
+                                                self.OUT_OF_SYSTEM_VALUE)
         function = element.GetParamValueOrDefault(SharedParamsConfig.Instance.EconomicFunction,
-                                                  self.out_of_function_value)
+                                                  self.OUT_OF_FUNCTION_VALUE)
         return system, function
 
-    def get_base_location(self, doc):
+    def get_base_location(self):
         """
         Получает базовую локацию для вставки первого из элементов.
-
-        Args:
-            doc: Документ Revit.
 
         Returns:
             XYZ: Базовая локация.
         """
         if self.max_location_y == 0:
             # Фильтруем элементы, чтобы получить только те, у которых имя семейства равно "_Якорный элемент"
-            generic_models = self.get_elements_by_category(doc, BuiltInCategory.OST_GenericModel)
+            generic_models = self.get_elements_by_category(BuiltInCategory.OST_GenericModel)
             filtered_generics = [elem for elem in generic_models if elem.GetElementType()
-                                 .GetParamValue(BuiltInParameter.ALL_MODEL_FAMILY_NAME) == self.family_name]
+                                 .GetParamValue(BuiltInParameter.ALL_MODEL_FAMILY_NAME) == self.FAMILY_NAME]
 
             if len(filtered_generics) == 0:
                 return XYZ(0, 0, 0)
@@ -300,9 +391,9 @@ class UnmodelingFactory:
                     max_y = y_value
                     base_location_point = location_point
 
-            return XYZ(0, self.coordinate_step + max_y, 0)
+            return XYZ(0, self.COORDINATE_STEP + max_y, 0)
 
-        return XYZ(0, self.coordinate_step + self.max_location_y, 0)
+        return XYZ(0, self.COORDINATE_STEP + self.max_location_y, 0)
 
     def update_location(self, loc):
         """
@@ -314,7 +405,7 @@ class UnmodelingFactory:
         Returns:
             XYZ: Обновленная локация.
         """
-        return XYZ(0, loc.Y + self.coordinate_step, 0)
+        return XYZ(0, loc.Y + self.COORDINATE_STEP, 0)
 
     def get_ruleset(self):
         """
@@ -323,10 +414,11 @@ class UnmodelingFactory:
         Returns:
             List[GenerationRuleSet]: Список правил для генерации материалов.
         """
+
         gen_list = [
             GenerationRuleSet(
-                group="12. Расчетные элементы",
-                name="Металлические крепления для воздуховодов",
+                group=self.MATERIAL_GROUP,
+                name=self.DUCT_METAL_RULE_NAME,
                 mark="",
                 code="",
                 unit="кг.",
@@ -334,8 +426,8 @@ class UnmodelingFactory:
                 method_name=SharedParamsConfig.Instance.VISIsFasteningMetalCalculation.Name,
                 category=BuiltInCategory.OST_DuctCurves),
             GenerationRuleSet(
-                group="12. Расчетные элементы",
-                name="Металлические крепления для трубопроводов",
+                group=self.MATERIAL_GROUP,
+                name=self.PIPE_METAL_RULE_NAME,
                 mark="",
                 code="",
                 unit="кг.",
@@ -343,8 +435,8 @@ class UnmodelingFactory:
                 method_name=SharedParamsConfig.Instance.VISIsFasteningMetalCalculation.Name,
                 category=BuiltInCategory.OST_PipeCurves),
             GenerationRuleSet(
-                group="12. Расчетные элементы",
-                name="Краска антикоррозионная за два раза",
+                group=self.MATERIAL_GROUP,
+                name=self.COLOR_RULE_NAME,
                 mark="БТ-177",
                 code="",
                 unit="кг.",
@@ -352,8 +444,8 @@ class UnmodelingFactory:
                 method_name=SharedParamsConfig.Instance.VISIsPaintCalculation.Name,
                 category=BuiltInCategory.OST_PipeCurves),
             GenerationRuleSet(
-                group="12. Расчетные элементы",
-                name="Грунтовка для стальных труб",
+                group=self.MATERIAL_GROUP,
+                name=self.GRUNT_RULE_NAME,
                 mark="ГФ-031",
                 code="",
                 unit="кг.",
@@ -361,8 +453,8 @@ class UnmodelingFactory:
                 method_name=SharedParamsConfig.Instance.VISIsPaintCalculation.Name,
                 category=BuiltInCategory.OST_PipeCurves),
             GenerationRuleSet(
-                group="12. Расчетные элементы",
-                name="Хомут трубный под шпильку М8",
+                group=self.MATERIAL_GROUP,
+                name=self.CLAMPS_RULE_NAME,
                 mark="",
                 code="",
                 unit="шт.",
@@ -370,8 +462,8 @@ class UnmodelingFactory:
                 method_name=SharedParamsConfig.Instance.VISIsClampsCalculation.Name,
                 category=BuiltInCategory.OST_PipeCurves),
             GenerationRuleSet(
-                group="12. Расчетные элементы",
-                name="Шпилька М8 1м/1шт",
+                group=self.MATERIAL_GROUP,
+                name=self.PIN_RULE_NAME,
                 mark="",
                 code="",
                 unit="шт.",
@@ -381,7 +473,6 @@ class UnmodelingFactory:
         ]
         return gen_list
 
-    # Возвращает имя занявшего элемент или None
     def get_element_editor_name(self, element):
         """
         Возвращает имя пользователя, который последним редактировал элемент.
@@ -401,7 +492,56 @@ class UnmodelingFactory:
             return None
         return edited_by
 
-    def is_family_in(self, doc):
+    def is_elemet_edited(self, element):
+        """
+        Проверяет, заняты ли элементы другими пользователями.
+        """
+        update_status = WorksharingUtils.GetModelUpdatesStatus(self.doc, element.Id)
+
+        if update_status == ModelUpdatesStatus.UpdatedInCentral or update_status == ModelUpdatesStatus.DeletedInCentral:
+            self.sync_status_report = "Вы владеете элементами, но ваш файл устарел. Выполните синхронизацию. "
+
+        name = self.get_element_editor_name(element)
+        if name is not None and name not in self.edited_reports:
+            self.edited_reports.append(name)
+
+        if name is not None or update_status == ModelUpdatesStatus.UpdatedInCentral:
+            return True
+
+        return False
+
+    def show_report(self, exit_on_report = False):
+        if len(self.edited_reports) > 0:
+            self.edited_status_report = (
+                "Часть элементов занята пользователями: {}".format(
+                    ", ".join(self.edited_reports)
+                )
+            )
+
+        if self.edited_status_report is not None or self.sync_status_report is not None:
+            report_message = ''
+            if self.sync_status_report is not None:
+                report_message += self.sync_status_report
+            if self.edited_status_report is not None:
+                if report_message:
+                    report_message += '\n'
+                report_message += self.edited_status_report
+
+            if exit_on_report:
+                forms.alert(report_message, "Ошибка", exitscript=True)
+            else:
+                forms.alert(report_message, "Ошибка")
+
+    def find_family_symbol(self):
+        collector = FilteredElementCollector(self.doc).OfCategory(BuiltInCategory.OST_GenericModel).OfClass(FamilySymbol)
+
+        for element in collector:
+            if element.Family.Name == self.FAMILY_NAME:
+                return element
+
+        return None
+
+    def is_family_in(self):
         """
         Проверяет, есть ли семейство в проекте.
 
@@ -411,67 +551,68 @@ class UnmodelingFactory:
         Returns:
             FamilySymbol: Символ семейства, если оно есть в проекте, иначе None.
         """
-        collector = FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_GenericModel).OfClass(FamilySymbol)
 
-        for element in collector:
-            if element.Family.Name == self.family_name:
-                return element
+        symbol = self.find_family_symbol()
 
-        return None
+        if not symbol:
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            local_path = os.path.join(script_dir, self.FAMILY_NAME + '.rfa')
 
-    def get_elements_by_category(self, doc, category):
+            with revit.Transaction("BIM: Загрузка семейства"):
+                self.doc.LoadFamily(local_path)
+
+            return self.find_family_symbol()
+
+        return symbol
+
+    def get_elements_by_category(self, category):
         """
         Возвращает список элементов по их категории.
 
         Args:
-            doc: Документ Revit.
             category: Категория элементов.
 
         Returns:
             List[Element]: Список элементов.
         """
-        return FilteredElementCollector(doc) \
+        return FilteredElementCollector(self.doc) \
             .OfCategory(category) \
             .WhereElementIsNotElementType() \
             .ToElements()
 
-    def remove_models(self, doc, description):
+    def remove_models(self, description):
         """
         Удаляет элементы с переданным описанием.
 
         Args:
-            doc: Документ Revit.
             description: Описание элемента.
         """
-        user_name = __revit__.Application.Username
         # Фильтруем элементы, чтобы получить только те, у которых имя семейства равно "_Якорный элемент"
         generic_model_collection = \
-            [elem for elem in self.get_elements_by_category(doc, BuiltInCategory.OST_GenericModel) if elem.GetElementType()
-            .GetParamValue(BuiltInParameter.ALL_MODEL_FAMILY_NAME) == self.family_name]
+            [elem for elem in self.get_elements_by_category(BuiltInCategory.OST_GenericModel) if elem.GetElementType()
+            .GetParamValue(BuiltInParameter.ALL_MODEL_FAMILY_NAME) == self.FAMILY_NAME]
 
         for element in generic_model_collection:
-            edited_by = self.get_element_editor_name(element)
-            if edited_by:
-                forms.alert("Якорные элементы не были обработаны, так как были заняты пользователями:" + edited_by,
-                            "Ошибка",
-                            exitscript=True)
+            self.is_elemet_edited(element)
 
-        for element in generic_model_collection:
-            if element.IsExistsParam(self.description_param_name):
-                elem_type = doc.GetElement(element.GetTypeId())
-                current_name = elem_type.get_Parameter(BuiltInParameter.ALL_MODEL_FAMILY_NAME).AsString()
-                current_description = element.GetParamValueOrDefault(self.description_param_name)
+        self.show_report(exit_on_report=True)
 
-                if current_name == self.family_name:
-                    if current_description is None or description in current_description:
-                        doc.Delete(element.Id)
+        with revit.Transaction("BIM: Очистка немоделируемых"):
+            for element in generic_model_collection:
+                if element.IsExistsParam(self.DESCRIPTION_PARAM_NAME):
+                    elem_type = self.doc.GetElement(element.GetTypeId())
+                    current_name = elem_type.get_Parameter(BuiltInParameter.ALL_MODEL_FAMILY_NAME).AsString()
+                    current_description = element.GetParamValueOrDefault(self.DESCRIPTION_PARAM_NAME)
 
-    def create_new_position(self, doc, new_row_data, family_symbol, description, loc):
+                    if current_name == self.FAMILY_NAME:
+                        if current_description is None or description in current_description:
+                            self.doc.Delete(element.Id)
+
+    def create_new_position(self, new_row_data, family_symbol, description, loc):
         """
         Генерирует пустые элементы в рабочем наборе немоделируемых.
 
         Args:
-            doc: Документ Revit.
             new_row_data: Данные новой строки.
             family_symbol: Символ семейства.
             description: Описание.
@@ -481,7 +622,10 @@ class UnmodelingFactory:
             if param_value is not None:
                 family_inst.SetParamValue(shared_param, param_value)
 
-        if new_row_data.number == 0 and description != self.empty_description:
+        new_row_data.number = round(new_row_data.number, 2) # заранее округляем, на случай значений типа 0.001. Для этого
+        # можно не генерировать строки
+
+        if new_row_data.number == 0 and description != self.EMPTY_DESCRIPTION:
             return
 
         self.max_location_y = loc.Y
@@ -490,13 +634,18 @@ class UnmodelingFactory:
             forms.alert('Не удалось найти рабочий набор "99_Немоделируемые элементы"', "Ошибка", exitscript=True)
 
         # Создаем элемент и назначаем рабочий набор
-        family_inst = doc.Create.NewFamilyInstance(loc, family_symbol, Structure.StructuralType.NonStructural)
+        family_inst = self.doc.Create.NewFamilyInstance(loc, family_symbol, Structure.StructuralType.NonStructural)
 
         family_inst_workset = family_inst.get_Parameter(BuiltInParameter.ELEM_PARTITION_PARAM)
         family_inst_workset.Set(self.ws_id.IntegerValue)
 
         group = '{}_{}_{}_{}_{}'.format(
             new_row_data.group, new_row_data.name, new_row_data.mark, new_row_data.maker, new_row_data.code)
+
+        if self.doc.IsExistsParam(SharedParamsConfig.Instance.VISSpecNumbersCurrency):
+            number_param = SharedParamsConfig.Instance.VISSpecNumbersCurrency
+        else:
+            number_param = SharedParamsConfig.Instance.VISSpecNumbers
 
         set_param_value(SharedParamsConfig.Instance.VISSystemName, new_row_data.system)
         set_param_value(SharedParamsConfig.Instance.VISGrouping, group)
@@ -505,14 +654,14 @@ class UnmodelingFactory:
         set_param_value(SharedParamsConfig.Instance.VISItemCode, new_row_data.code)
         set_param_value(SharedParamsConfig.Instance.VISManufacturer, new_row_data.maker)
         set_param_value(SharedParamsConfig.Instance.VISUnit, new_row_data.unit)
-        set_param_value(SharedParamsConfig.Instance.VISSpecNumbers, new_row_data.number)
+        set_param_value(number_param, new_row_data.number)
         set_param_value(SharedParamsConfig.Instance.VISMass, new_row_data.mass)
         set_param_value(SharedParamsConfig.Instance.VISNote, new_row_data.note)
         set_param_value(SharedParamsConfig.Instance.EconomicFunction, new_row_data.function)
-        description_param = family_inst.GetParam(self.description_param_name)
+        description_param = family_inst.GetParam(self.DESCRIPTION_PARAM_NAME)
         description_param.Set(description)
 
-    def startup_checks(self, doc):
+    def startup_checks(self):
         """
         Выполняет начальные проверки файла и семейства.
 
@@ -522,10 +671,10 @@ class UnmodelingFactory:
         Returns:
             FamilySymbol: Символ семейства.
         """
-        if doc.IsFamilyDocument:
+        if self.doc.IsFamilyDocument:
             forms.alert("Надстройка не предназначена для работы с семействами", "Ошибка", exitscript=True)
 
-        family_symbol = self.is_family_in(doc)
+        family_symbol = self.is_family_in()
 
         if family_symbol is None:
             forms.alert(
@@ -533,27 +682,25 @@ class UnmodelingFactory:
                 "Ошибка",
                 exitscript=True)
 
-        self.check_family(family_symbol, doc)
+        self.check_family(family_symbol)
 
-        self.check_worksets(doc)
+        self.check_worksets()
 
         # На всякий случай выполняем настройку параметров - в теории уже должны быть на месте, но лучше продублировать
         revit_params = [SharedParamsConfig.Instance.EconomicFunction,
                         SharedParamsConfig.Instance.VISSystemName]
 
-        project_parameters = ProjectParameters.Create(doc.Application)
-        project_parameters.SetupRevitParams(doc, revit_params)
+        project_parameters = ProjectParameters.Create(self.doc.Application)
+        project_parameters.SetupRevitParams(self.doc, revit_params)
 
         return family_symbol
 
-    def check_worksets(self, doc):
+    def check_worksets(self):
         """
         Проверяет наличие рабочего набора немоделируемых элементов.
 
-        Args:
-            doc: Документ Revit.
         """
-        if WorksetTable.IsWorksetNameUnique(doc, '99_Немоделируемые элементы'):
+        if WorksetTable.IsWorksetNameUnique(self.doc, '99_Немоделируемые элементы'):
             with revit.Transaction("Добавление рабочего набора"):
                 new_ws = Workset.Create(doc, '99_Немоделируемые элементы')
                 forms.alert('Был создан рабочий набор "99_Немоделируемые элементы". '
@@ -563,7 +710,7 @@ class UnmodelingFactory:
                             "Рабочие наборы")
                 self.ws_id = new_ws.Id
         else:
-            fws = FilteredWorksetCollector(doc).OfKind(WorksetKind.UserWorkset)
+            fws = FilteredWorksetCollector(self.doc).OfKind(WorksetKind.UserWorkset)
             for ws in fws:
                 if ws.Name == '99_Немоделируемые элементы':
                     self.ws_id = ws.Id
@@ -577,19 +724,18 @@ class UnmodelingFactory:
                     self.ws_id = ws.Id
                     return
 
-    def check_family(self, family_symbol, doc):
+    def check_family(self, family_symbol):
         """
         Проверяет семейство на наличие необходимых параметров.
 
         Args:
             family_symbol: Символ семейства.
-            doc: Документ Revit.
 
         Returns:
             List: Список отсутствующих параметров.
         """
         param_names_list = [
-            self.description_param_name,
+            self.DESCRIPTION_PARAM_NAME,
             SharedParamsConfig.Instance.VISNote.Name,
             SharedParamsConfig.Instance.VISMass.Name,
             SharedParamsConfig.Instance.VISPosition.Name,
@@ -604,7 +750,7 @@ class UnmodelingFactory:
             ]
 
         family = family_symbol.Family
-        symbol_params = self.get_family_shared_parameter_names(doc, family)
+        symbol_params = self.get_family_shared_parameter_names(family)
 
         result = []
         missing_params = [param for param in param_names_list if param not in symbol_params]
@@ -616,19 +762,18 @@ class UnmodelingFactory:
 
         return result
 
-    def get_family_shared_parameter_names(self, doc, family):
+    def get_family_shared_parameter_names(self, family):
         """
         Получает список имен общих параметров семейства.
 
         Args:
-            doc: Документ Revit.
             family: Семейство.
 
         Returns:
             List[str]: Список имен общих параметров.
         """
         # Открываем документ семейства для редактирования
-        family_doc = doc.EditFamily(family)
+        family_doc = self.doc.EditFamily(family)
 
         shared_parameters = []
         try:
@@ -891,7 +1036,7 @@ class MaterialCalculator:
         Returns:
             float: Масса грунтовки.
         """
-        number = pipe_area / 10
+        number = pipe_area * 0.1
         return number
 
     def get_color_mass(self, pipe_area):

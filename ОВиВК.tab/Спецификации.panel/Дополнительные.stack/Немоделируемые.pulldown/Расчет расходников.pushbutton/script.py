@@ -4,6 +4,7 @@
 
 import clr
 
+
 clr.AddReference("RevitAPI")
 clr.AddReference("RevitAPIUI")
 clr.AddReference("dosymep.Revit.dll")
@@ -25,7 +26,8 @@ from dosymep_libs.bim4everyone import *
 doc = __revit__.ActiveUIDocument.Document
 view = doc.ActiveView
 material_calculator = MaterialCalculator(doc)
-unmodeling_factory = UnmodelingFactory()
+unmodeling_factory = UnmodelingFactory(doc)
+element_stocks = ElementStocks(doc)
 
 def get_material_hosts(element_types, calculation_name, builtin_category):
     """ Проверяет для типов элементов можно ли на их базе создать расходники
@@ -65,9 +67,9 @@ def split_calculation_elements_list(elements):
 
     for element in elements:
         shared_function = element.GetSharedParamValueOrDefault(
-            SharedParamsConfig.Instance.EconomicFunction.Name, unmodeling_factory.out_of_function_value)
+            SharedParamsConfig.Instance.EconomicFunction.Name, unmodeling_factory.OUT_OF_FUNCTION_VALUE)
         shared_system = element.GetSharedParamValueOrDefault(
-            SharedParamsConfig.Instance.VISSystemName.Name, unmodeling_factory.out_of_system_value)
+            SharedParamsConfig.Instance.VISSystemName.Name, unmodeling_factory.OUT_OF_SYSTEM_VALUE)
         function_system_key = shared_function + "_" + shared_system
 
         # Добавляем элемент в соответствующий список в словаре
@@ -95,6 +97,11 @@ def get_material_number_value(element, operation_name):
 
     length, area = material_calculator.get_curve_len_area_parameters_values(element)
 
+    stock = element_stocks.get_stock(element)
+
+    length = length * stock
+    area = area * stock
+
     if element.Category.IsId(BuiltInCategory.OST_PipeCurves):
         outer_diameter = UnitUtils.ConvertFromInternalUnits(
             element.GetParamValue(BuiltInParameter.RBS_PIPE_OUTER_DIAMETER),
@@ -118,28 +125,37 @@ def get_material_number_value(element, operation_name):
             element.GetParamValue(BuiltInParameter.RBS_CURVE_HEIGHT_PARAM),
             UnitTypeId.Millimeters)
 
-    if (operation_name == "Металлические крепления для трубопроводов"
+    if (operation_name == unmodeling_factory.PIPE_METAL_RULE_NAME
             and element.Category.IsId(BuiltInCategory.OST_PipeCurves)):
-        return material_calculator.get_pipe_material_mass(length, diameter)
-    if (operation_name == "Металлические крепления для воздуховодов"
-            and element.Category.IsId(BuiltInCategory.OST_DuctCurves)):
-        return material_calculator.get_duct_material_mass(element, diameter, width, height, area)
-    if (operation_name == "Краска антикоррозионная за два раза"
-            and element.Category.IsId(BuiltInCategory.OST_PipeCurves)):
-        return material_calculator.get_color_mass(area)
-    if (operation_name == "Грунтовка для стальных труб"
-            and element.Category.IsId(BuiltInCategory.OST_PipeCurves)):
-        return material_calculator.get_grunt_mass(area)
-    if (operation_name in ["Хомут трубный под шпильку М8", "Шпилька М8 1м/1шт"]
-            and element.Category.IsId(BuiltInCategory.OST_PipeCurves)):
-        return material_calculator.get_collars_and_pins_number(element, diameter, length)
 
-    return 0
+        result = CalculationResult(material_calculator.get_pipe_material_mass(length, diameter),
+                                   area)
+        return result
+    if (operation_name == unmodeling_factory.DUCT_METAL_RULE_NAME
+            and element.Category.IsId(BuiltInCategory.OST_DuctCurves)):
+        result = CalculationResult(
+            material_calculator.get_duct_material_mass(element, diameter, width, height, area),
+            area)
+        return result
+    if (operation_name == unmodeling_factory.COLOR_RULE_NAME
+            and element.Category.IsId(BuiltInCategory.OST_PipeCurves)):
+        result = CalculationResult(material_calculator.get_color_mass(area), area)
+        return result
+    if (operation_name == unmodeling_factory.GRUNT_RULE_NAME
+            and element.Category.IsId(BuiltInCategory.OST_PipeCurves)):
+        result = CalculationResult(material_calculator.get_grunt_mass(area), area)
+        return result
+    if (operation_name in [unmodeling_factory.CLAMPS_RULE_NAME, unmodeling_factory.PIN_RULE_NAME]
+            and element.Category.IsId(BuiltInCategory.OST_PipeCurves)):
+        result = CalculationResult(material_calculator.get_collars_and_pins_number(element, diameter, length), area)
+        return result
+
+    return CalculationResult(0, 0)
 
 def remove_old_models():
     """ Удаление уже размещенных в модели расходников и материалов перед новой генерацией"""
-    unmodeling_factory.remove_models(doc, unmodeling_factory.material_description)
-    unmodeling_factory.remove_models(doc, unmodeling_factory.consumable_description)
+    unmodeling_factory.remove_models(unmodeling_factory.MATERIAL_DESCRIPTION)
+    unmodeling_factory.remove_models(unmodeling_factory.CONSUMABLE_DESCRIPTION)
 
 def process_materials(family_symbol, material_description):
     """ Обработка предопределенного списка материалов
@@ -175,7 +191,7 @@ def process_materials(family_symbol, material_description):
                 pipe_dict[full_diameter] = []
             pipe_dict[full_diameter].append(pipe)
 
-        material_location = unmodeling_factory.get_base_location(doc)
+        material_location = unmodeling_factory.get_base_location()
         for pipe_row in pipe_dict:
             new_row = unmodeling_factory.create_material_row_class_instance(
                 system, function, rule_set, material_description)
@@ -184,23 +200,31 @@ def process_materials(family_symbol, material_description):
             material_location = unmodeling_factory.update_location(material_location)
 
             for element in pipe_dict[pipe_row]:
-                new_row.number += get_material_number_value(element, rule_set.name)
-            unmodeling_factory.create_new_position(doc, new_row, family_symbol, material_description, material_location)
+                value = get_material_number_value(element, rule_set.name)
+                new_row.number += value.number
+            unmodeling_factory.create_new_position(new_row, family_symbol, material_description, material_location)
 
     def process_other_rules(elements, system, function, rule_set, material_description,
                             material_location, family_symbol):
         new_row = unmodeling_factory.create_material_row_class_instance(system, function, rule_set,
                                                                         material_description)
+        area = 0
         for element in elements:
-            new_row.number += get_material_number_value(element, rule_set.name)
+            value = get_material_number_value(element, rule_set.name)
+            new_row.number += value.number
+            area += value.area
 
-        unmodeling_factory.create_new_position(doc, new_row, family_symbol, material_description, material_location)
+        if rule_set.name in [unmodeling_factory.GRUNT_RULE_NAME, unmodeling_factory.COLOR_RULE_NAME]:
+            round_area = round(area, 2)
+            new_row.note = str(round_area) + ' м², площадь за раз'
 
-    material_location = unmodeling_factory.get_base_location(doc)
+        unmodeling_factory.create_new_position(new_row, family_symbol, material_description, material_location)
+
+    material_location = unmodeling_factory.get_base_location()
     generation_rules_list = unmodeling_factory.get_ruleset()
 
     for rule_set in generation_rules_list:
-        elem_types = unmodeling_factory.get_elements_types_by_category(doc, rule_set.category)
+        elem_types = unmodeling_factory.get_elements_types_by_category(rule_set.category)
         calculation_elements = get_material_hosts(elem_types, rule_set.method_name, rule_set.category)
 
         split_lists = split_calculation_elements_list(calculation_elements)
@@ -209,7 +233,7 @@ def process_materials(family_symbol, material_description):
             system, function = unmodeling_factory.get_system_function(elements[0])
             if rule_set.name == "Хомут трубный под шпильку М8":
                 process_pipe_clamps(elements, system, function, rule_set, material_description, family_symbol)
-                material_location = unmodeling_factory.get_base_location(doc)
+                material_location = unmodeling_factory.get_base_location()
             else:
                 material_location = unmodeling_factory.update_location(material_location)
 
@@ -223,13 +247,13 @@ def process_insulation_consumables(family_symbol, consumable_description):
         family_symbol: Символ семейства якорного элемента для создания новых экземпляров
         consumable_description: Описание расходника с которым он будет создан и по которому будет удален
     """
-    consumable_location = unmodeling_factory.get_base_location(doc)
+    consumable_location = unmodeling_factory.get_base_location()
     insulation_list = get_insulation_elements_list()
     split_insulation_lists = split_calculation_elements_list(insulation_list)
 
     consumables_by_insulation_type = {}
 
-    insulation_types = unmodeling_factory.get_pipe_duct_insulation_types(doc)
+    insulation_types = unmodeling_factory.get_pipe_duct_insulation_types()
 
     # кэшируем данные по расходникам изоляции для ее типов
     for insulation_type in insulation_types:
@@ -269,24 +293,23 @@ def process_insulation_consumables(family_symbol, consumable_description):
                     for element in elements:
                         length, area = material_calculator.get_curve_len_area_parameters_values(element)
 
-                        if element.Category.IsId(BuiltInCategory.OST_PipeInsulations):
-                            stock = (doc.ProjectInformation
-                                     .GetParamValueOrDefault(SharedParamsConfig.Instance.VISPipeInsulationReserve))/100
-                        else:
-                            stock = (doc.ProjectInformation
-                                     .GetParamValueOrDefault(SharedParamsConfig.Instance.VISDuctInsulationReserve))/100
+                        stock = element_stocks.get_stock(element)
+
+                        length = length * stock
+                        area = area * stock
 
                         if (consumable.is_expenditure_by_linear_meter == 0
                                 or consumable.is_expenditure_by_linear_meter is None):
-                            value = consumable.expenditure * area + consumable.expenditure * area * stock
+                            value = consumable.expenditure * area
                             new_consumable_row.number += value
                         else:
-                            value = consumable.expenditure * length + consumable.expenditure * length * stock
+                            value = consumable.expenditure * length
+
                             new_consumable_row.number += value
 
                     consumable_location = unmodeling_factory.update_location(consumable_location)
 
-                    unmodeling_factory.create_new_position(doc, new_consumable_row, family_symbol,
+                    unmodeling_factory.create_new_position(new_consumable_row, family_symbol,
                                                            consumable_description, consumable_location)
 
 def get_insulation_elements_list():
@@ -297,23 +320,25 @@ def get_insulation_elements_list():
         list: Лист из элементов изоляции
     """
     insulations = []
-    insulations += unmodeling_factory.get_elements_by_category(doc, BuiltInCategory.OST_PipeInsulations)
-    insulations += unmodeling_factory.get_elements_by_category(doc, BuiltInCategory.OST_DuctInsulations)
+    insulations += unmodeling_factory.get_elements_by_category(BuiltInCategory.OST_PipeInsulations)
+    insulations += unmodeling_factory.get_elements_by_category(BuiltInCategory.OST_DuctInsulations)
     return insulations
+
+
 
 @notification()
 @log_plugin(EXEC_PARAMS.command_name)
 def script_execute(plugin_logger):
-    family_symbol = unmodeling_factory.startup_checks(doc)
+    family_symbol = unmodeling_factory.startup_checks()
+
+    # При каждом запуске затираем расходники с соответствующим описанием и генерируем заново
+    remove_old_models()
 
     with revit.Transaction("BIM: Добавление расчетных элементов"):
         family_symbol.Activate()
 
-        # При каждом запуске затираем расходники с соответствующим описанием и генерируем заново
-        remove_old_models()
-
-        process_materials(family_symbol, unmodeling_factory.material_description)
-        process_insulation_consumables(family_symbol, unmodeling_factory.consumable_description)
+        process_materials(family_symbol, unmodeling_factory.MATERIAL_DESCRIPTION)
+        process_insulation_consumables(family_symbol, unmodeling_factory.CONSUMABLE_DESCRIPTION)
 
 
 script_execute()
