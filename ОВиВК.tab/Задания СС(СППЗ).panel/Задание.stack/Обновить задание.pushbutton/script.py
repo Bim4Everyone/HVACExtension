@@ -132,11 +132,13 @@ def use_closed_algorithm(valves, old_data):
         for equipment_base_name, valve_data_instances_group in valve_groups.items():
             count = 0
             for valve_data in valve_data_instances_group:
-                if valve_data.equipment_base_name in max_numbers and count < max_numbers[floor_name]:
-                    count = max_numbers[floor_name] + 1
+                json_base_name = "НЗ-" + valve_data.equipment_base_name
+
+                if json_base_name in max_numbers and count <= max_numbers[json_base_name]:
+                    count = max_numbers[json_base_name] + 1
                 else:
                     count += 1
-                valve_data.json_name = "НЗ-" + valve_data.equipment_base_name + "-" + str(count)
+                valve_data.json_name = json_base_name + "-" + str(count)
 
                 result.append(valve_data)
 
@@ -224,7 +226,8 @@ def get_closed_max_numbers(old_data):
         if data.open_algorithm:
             continue
 
-        match = re.search(r'^(.*-\d+-)(\d+)$', data.json_name)
+        match = re.search(r'^(.*)-([^-]+)$', data.json_name)
+        # условное выражение делит имя образца "НЗ-ДП3.4-2эт ДОО-1" на "НЗ-ДП3.4-2эт ДОО" и "1", отрезая последний дефис
 
         if match:
             base_name = match.group(1)
