@@ -322,9 +322,13 @@ def separate_element(ai_element, variants_pool, pipe_insulation_stock, pipe_stoc
                     number += 1
         else:
             # Если следующего варианта нет, увеличиваем number, пока ai_element_len больше длины текущего варианта
-            while ai_element_len >= variant.length:
+            # do-while в Python 2.7 нет, а иначе цикл не сработает, если кусок трубы больше 50, но меньше variant.length
+            # поэтому используем while True
+            while True:
                 ai_element_len -= variant.length
                 number += 1
+                if ai_element_len < variant.length:
+                    break
 
         if number > 0:
             new_row = create_new_row(ai_element, variant, number)
