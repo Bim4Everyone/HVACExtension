@@ -1,6 +1,5 @@
 #! /usr/bin/env python
 # -*- coding: utf-8 -*-
-import os.path as op
 import clr
 clr.AddReference("dosymep.Revit.dll")
 clr.AddReference("dosymep.Bim4Everyone.dll")
@@ -12,10 +11,6 @@ clr.ImportExtensions(dosymep.Revit)
 clr.ImportExtensions(dosymep.Bim4Everyone)
 
 from numerate_class_library import *
-from pyrevit import revit
-from pyrevit.script import output
-from pyrevit import script
-from pyrevit import HOST_APP
 from pyrevit import EXEC_PARAMS
 
 @notification()

@@ -14,6 +14,7 @@ clr.ImportExtensions(dosymep.Bim4Everyone)
 
 from Autodesk.Revit.DB import *
 import Autodesk.Revit.Exceptions
+import form_class
 
 from pyrevit import forms
 from pyrevit import revit
@@ -530,20 +531,13 @@ class SpecificationFiller:
 
         return int(first_index)
 
-    def fill_position_and_notes(self, fill_numbers=False, fill_areas=False):
-        """
-        Основной метод для заполнения позиций и примечаний в спецификации.
-
-        Args:
-            fill_numbers (bool): Флаг для заполнения номеров
-            fill_areas (bool): Флаг для заполнения площадей
-        """
+    def __statup_checks(self):
         if self.doc.IsFamilyDocument:
             forms.alert("Надстройка не предназначена для работы с семействами", "Ошибка", exitscript=True)
 
         if self.active_view.Category is None or not self.active_view.Category.IsId(BuiltInCategory.OST_Schedules):
             forms.alert(
-                "Нумерация и вынесение площади воздуховодов сработают только на активном виде целевой спецификации",
+                "Надстройка предназначена только для работы на активном виде целевой спецификации",
                 "Ошибка", exitscript=True)
 
         # На всякий случай выполняем настройку параметров - в теории уже должны быть на месте, но лучше продублировать
@@ -557,14 +551,46 @@ class SpecificationFiller:
         # Если хоть один элемент спеки на редактировании - отменяем выполнение, нужно освобождать
         self.__check_edited_elements(elements)
 
-        # Выясняем с какого числа стартует нумерация
-        first_index = self.__get_first_index(fill_numbers)
-
         # Получаем правила по которым работает спека
         specification_settings = SpecificationSettings(self.active_view.Definition)
+
+        return elements, specification_settings
+
+    def __get_table_params(self, definition):
+        paramList = []
+        for scheduleGroupField in definition.GetFieldOrder():
+            scheduleField = definition.GetField(scheduleGroupField)
+            paramList.append(scheduleField.GetName())
+        return paramList
+
+    def fill_position_and_notes(self, fill_numbers=False, fill_areas=False):
+        """
+        Основной метод для заполнения позиций и примечаний в спецификации.
+
+        Args:
+            fill_numbers (bool): Флаг для заполнения номеров
+            fill_areas (bool): Флаг для заполнения площадей
+        """
+
+        elements, specification_settings = self.__statup_checks()
+
+        # Выясняем с какого числа стартует нумерация
+        first_index = self.__get_first_index(fill_numbers)
 
         # Заполняем айди в параметр позиции элементов для их чтения
         self.__fill_id_to_schedule_param(specification_settings, elements)
 
         # заполняем значения нумерации и, для воздуховодов их фитингов, примечаний
         self.__fill_values(specification_settings, elements, fill_areas, fill_numbers, first_index)
+
+    def replace_parameter_values(self):
+        elements, specification_settings = self.__statup_checks()
+
+        table_params = self.__get_table_params(specification_settings.definition)
+        # print(table_params)
+
+        form = form_class.SelectParametersForm(table_params)
+
+        selected_param_name_in, selected_param_name_out = form.show_form()
+
+        # selected_option1, selected_option2 = form.show_form()
