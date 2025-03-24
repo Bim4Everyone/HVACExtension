@@ -563,6 +563,12 @@ class SpecificationFiller:
             paramList.append(scheduleField.GetName())
         return paramList
 
+    def __get_cell_text(self, element, param_name, position_index, row):
+        if element.IsExistsParam(param_name):
+            value = element.GetParamValue(param_name)
+        else:
+            value = self.active_view.GetCellText(SectionType.Body, row, position_index)
+
     def fill_position_and_notes(self, fill_numbers=False, fill_areas=False):
         """
         Основной метод для заполнения позиций и примечаний в спецификации.
@@ -587,10 +593,23 @@ class SpecificationFiller:
         elements, specification_settings = self.__statup_checks()
 
         table_params = self.__get_table_params(specification_settings.definition)
-        # print(table_params)
 
-        form = form_class.SelectParametersForm(table_params)
+        selection_form = form_class.SelectParametersForm(table_params)
 
-        selected_param_name_in, selected_param_name_out = form.show_form()
+        selected_param_name_in, selected_param_name_out = selection_form.show_form()
 
-        # selected_option1, selected_option2 = form.show_form()
+        with revit.Transaction("BIM: Перенос параметров"):
+
+            # Заполняем айди в параметр позиции элементов для их чтения
+            self.__fill_id_to_schedule_param(specification_settings, elements)
+
+
+            specification_settings.repair_specification()
+
+            for element in elements:
+                self.__set_if_not_ro(element, position_param, '')
+
+
+
+
+
