@@ -1,0 +1,27 @@
+title:
+  ru: Элементы АИ
+  en_us: AI Elements
+
+tooltip:
+  ru: Генерирует в модели элементы обобщенных моделей на основе таблиц выбора для архитектурных интерьеров.
+    
+    1. Отметьте трубопроводы или материалы изоляции для них как "_B4E_AI" в имени типоразмера.
+
+    2. Выполните полное обновление для актуальности систем и функций.
+  
+    3. В случае неактуальности данных в каталоге или его отсутствии направьте запрос в BIM-отдел.
+
+  en_us: Generates elements of generalized models in the model based on selection tables for architectural interiors.
+
+    1. Mark piping or insulation materials for them as "_B4E_AI" in the size name.
+    
+    2. Perform a full update to ensure that systems and functions are up-to-date.
+    
+    3. If the data in the catalog is out of date or missing, send a request to the BIM department.
+
+
+author: Redomine
+help_url: "https://kb.a101.ru/pages/viewpage.action?pageId=155549754"
+
+min_revit_version: 2022
+max_revit_version: 2024

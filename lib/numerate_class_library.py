@@ -156,6 +156,24 @@ class SpecificationFiller:
     duct_stock = 0  # Запас изоляции из сведений о проекте
     types_cash = {}  # Кэш данных по индивидуальным запасов из типов воздуховодов-фитингов
 
+    mechanical_categories = [
+        BuiltInCategory.OST_DuctFitting,
+        BuiltInCategory.OST_PipeFitting,
+        BuiltInCategory.OST_PipeCurves,
+        BuiltInCategory.OST_DuctCurves,
+        BuiltInCategory.OST_FlexDuctCurves,
+        BuiltInCategory.OST_FlexPipeCurves,
+        BuiltInCategory.OST_DuctTerminal,
+        BuiltInCategory.OST_DuctAccessory,
+        BuiltInCategory.OST_PipeAccessory,
+        BuiltInCategory.OST_MechanicalEquipment,
+        BuiltInCategory.OST_DuctInsulations,
+        BuiltInCategory.OST_PipeInsulations,
+        BuiltInCategory.OST_PlumbingFixtures,
+        BuiltInCategory.OST_Sprinklers,
+        BuiltInCategory.OST_CableTray
+    ]
+
     def __init__(self, doc, active_view):
         """
         Инициализация экземпляра класса SpecificationFiller.
@@ -389,6 +407,9 @@ class SpecificationFiller:
             shared_param: RevitParam с платформы
             value: Устанавливаемое значение
         """
+        if not element.IsExistsParam(shared_param):
+            return
+
         param = element.GetParam(shared_param)
         if not param.IsReadOnly:
             element.SetParamValue(shared_param, value)
@@ -451,6 +472,9 @@ class SpecificationFiller:
             Имя параметра или None если все в норме
         """
         for element in elements:
+            if not element.InAnyCategory(self.mechanical_categories):
+                continue
+
             if not element.IsExistsSharedParam(revit_param.Name):
                 return revit_param.Name
         return None
@@ -469,7 +493,7 @@ class SpecificationFiller:
 
         if results:
             forms.alert(
-                'Параметры {} найдены не у всех экземпляров воздуховодов/труб.'.format(', '.join(results)),
+                'Параметры {} найдены не у всех элементов спецификации.'.format(', '.join(results)),
                 "Внимание")
 
     def __setup_params(self):

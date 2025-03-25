@@ -24,11 +24,10 @@ from unmodeling_class_library import  *
 from dosymep_libs.bim4everyone import *
 
 from Microsoft.Office.Interop import Excel
-from Redomine import *
 from rpw.ui.forms import select_file
 
 doc = __revit__.ActiveUIDocument.Document
-unmodeling_factory = UnmodelingFactory()
+unmodeling_factory = UnmodelingFactory(doc)
 view = doc.ActiveView
 
 def find_column(worksheet, search_value):
@@ -55,7 +54,7 @@ def find_column(worksheet, search_value):
 @notification()
 @log_plugin(EXEC_PARAMS.command_name)
 def script_execute(plugin_logger):
-    family_symbol = unmodeling_factory.startup_checks(doc)
+    family_symbol = unmodeling_factory.startup_checks()
     exel = Excel.ApplicationClass()
     # Создание объекта TextInput
 
@@ -113,10 +112,10 @@ def script_execute(plugin_logger):
             break
 
         if function is None:
-            function = unmodeling_factory.out_of_function_value
+            function = unmodeling_factory.OUT_OF_FUNCTION_VALUE
 
         if system is None:
-            system = unmodeling_factory.out_of_system_value
+            system = unmodeling_factory.OUT_OF_SYSTEM_VALUE
 
         try:
             number = float(number)
@@ -144,7 +143,7 @@ def script_execute(plugin_logger):
                 code,
                 maker,
                 unit,
-                unmodeling_factory.import_description,
+                unmodeling_factory.IMPORT_DESCRIPTION,
                 number,
                 mass,
                 note
@@ -153,21 +152,20 @@ def script_execute(plugin_logger):
 
         row += 1
 
+    # при каждом повторе расчета удаляем старые версии
+    unmodeling_factory.remove_models(unmodeling_factory.IMPORT_DESCRIPTION)
+
     with revit.Transaction("BIM: Импорт немоделируемых"):
         family_symbol.Activate()
 
-        # при каждом повторе расчета удаляем старые версии
-        unmodeling_factory.remove_models(doc, unmodeling_factory.import_description)
-
-        element_location = unmodeling_factory.get_base_location(doc)
+        element_location = unmodeling_factory.get_base_location()
 
         for element in elements_to_generate:
             element_location = unmodeling_factory.update_location(element_location)
 
-            unmodeling_factory.create_new_position(doc,
-                                                   element,
+            unmodeling_factory.create_new_position(element,
                                                    family_symbol,
-                                                   unmodeling_factory.import_description,
+                                                   unmodeling_factory.IMPORT_DESCRIPTION,
                                                    element_location)
 
     # Закрываем рабочую книгу без сохранения изменений
