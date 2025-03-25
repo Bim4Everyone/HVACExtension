@@ -229,7 +229,6 @@ def get_network_element_name(element, changing_flow):
         if str(element.MEPModel.PartType) == 'Tee':
             name = 'Тройник'
         if str(element.MEPModel.PartType) == 'TapAdjustable':
-            passed_elements.Add(element.Id)
             if changing_flow:
                 name = "Боковое ответвление"
             else:
@@ -264,11 +263,10 @@ def get_network_element_real_size(element, element_type):
             value,
             UnitTypeId.Meters)
 
-    size = element.GetParamValueOrDefault('ФОП_ВИС_Живое сечение, м2', 0)
-    if size == 0:
-        element_type.GetParamValueOrDefault('ФОП_ВИС_Живое сечение, м2', 0)
-
-    if size == 0:
+    size = element.GetParamValueOrDefault('ФОП_ВИС_Живое сечение, м2')
+    if not size:
+        size = element_type.GetParamValueOrDefault('ФОП_ВИС_Живое сечение, м2')
+    if not size:
 
         connectors = calculator.get_connectors(element)
         size_variants = []
@@ -373,11 +371,11 @@ def script_execute(plugin_logger):
         system = doc.GetElement(selected_system.system.Id)
         path_numbers = system.GetCriticalPathSectionNumbers()
 
-        path = []
+        critical_path_numbers = []
         for number in path_numbers:
-            path.append(number)
+            critical_path_numbers.append(number)
         if system.SystemType == DuctSystemType.SupplyAir:
-            path.reverse()
+            critical_path_numbers.reverse()
 
         data = []
         count = 0
@@ -391,13 +389,18 @@ def script_execute(plugin_logger):
         print 'Плотность воздушной среды: ' + str(density) + ' кг/м3'
 
         pressure_total = 0
-        for number in path:
+        for number in critical_path_numbers:
             section = system.GetSectionByNumber(number)
+            count += 1
             elements_ids = section.GetElementIds()
             for element_id in elements_ids:
-                # if element_id in passed_elements:
-                #     continue
+                if element_id in passed_elements:
+                    continue
+
                 element = doc.GetElement(element_id)
+                if not element.Category.IsId(BuiltInCategory.OST_DuctCurves):
+                    passed_elements.append(element_id)
+
                 element_type = element.GetElementType()
 
                 length = get_network_element_length(section, element_id)
@@ -412,9 +415,6 @@ def script_execute(plugin_logger):
 
                 name = get_network_element_name(element, old_flow < flow)
 
-                if old_flow < flow:
-                    old_flow = flow
-                    count += 1
 
                 pressure_drop = get_network_element_pressure_drop(section, element, density, velocity)
 
