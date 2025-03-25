@@ -415,22 +415,7 @@ class SpecificationFiller:
         if not param.IsReadOnly:
             element.SetParamValue(shared_param, value)
 
-    def __copy_value(self, element, target_param_name, value):
-        target_param = element.GetParam(target_param_name)
 
-        if target_param.IsReadOnly:
-            return
-
-
-        if target_param.StorageType == StorageType.Double:
-            value = 0 if not value else float(value)
-            element.SetParamValue(target_param_name, UnitUtils.ConvertToInternalUnits(value, endParaObj.unitType))
-
-        elif target_param.StorageType == StorageType.Integer:
-            target_param.Set(int(value) if value else 0)
-
-        elif target_param.StorageType == StorageType.String:
-            element.SetParamValue(target_param_name, str(value) or '')
 
     def __fill_id_to_schedule_param(self, specification_settings, elements):
         """
@@ -598,12 +583,12 @@ class SpecificationFiller:
 
         return selection_form.show_form()
 
-    def __process_copy(self,
-                       row_number,
-                       specification_settings,
-                       copy_column_number,
-                       selected_param_name_original,
-                       selected_param_name_target):
+    def __process_copy_by_row(self,
+                              row_number,
+                              specification_settings,
+                              copy_column_number,
+                              selected_param_name_original,
+                              selected_param_name_target):
         element_id = self.active_view.GetCellText(
             SectionType.Body,
             row_number,
@@ -620,7 +605,24 @@ class SpecificationFiller:
                 copy_column_number,
                 row_number)
 
-            self.__copy_value(element, selected_param_name_target, copy_value)
+            self.__execute_value_copy(element, selected_param_name_target, copy_value)
+            
+    def __execute_value_copy(self, element, target_param_name, value):
+        target_param = element.GetParam(target_param_name)
+
+        if target_param.IsReadOnly:
+            return
+
+
+        if target_param.StorageType == StorageType.Double:
+            value = 0 if not value else float(value)
+            element.SetParamValue(target_param_name, UnitUtils.ConvertToInternalUnits(value, endParaObj.unitType))
+
+        elif target_param.StorageType == StorageType.Integer:
+            target_param.Set(int(value) if value else 0)
+
+        elif target_param.StorageType == StorageType.String:
+            element.SetParamValue(target_param_name, str(value) or '')
 
     def fill_position_and_notes(self, fill_numbers=False, fill_areas=False):
         """
@@ -645,7 +647,8 @@ class SpecificationFiller:
     def replace_parameter_values(self):
         elements, specification_settings = self.__startup_checks()
 
-        selected_param_name_original, selected_param_name_target = self.__select_params(elements, specification_settings)
+        selected_param_name_original, selected_param_name_target = self.__select_params(elements, 
+                                                                                        specification_settings)
 
         with revit.Transaction("BIM: заполнение ID"):
             # Заполняем айди в параметр позиции элементов для их чтения
@@ -661,11 +664,11 @@ class SpecificationFiller:
                 if row_number > section_data.LastRowNumber:
                     break
 
-                self.__process_copy(row_number,
-                                    specification_settings,
-                                    copy_column_number,
-                                    selected_param_name_original,
-                                    selected_param_name_target)
+                self.__process_copy_by_row(row_number,
+                                           specification_settings,
+                                           copy_column_number,
+                                           selected_param_name_original,
+                                           selected_param_name_target)
 
             specification_settings.repair_specification()
 

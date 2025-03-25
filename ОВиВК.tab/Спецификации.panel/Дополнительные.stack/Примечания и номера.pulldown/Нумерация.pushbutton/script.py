@@ -10,7 +10,7 @@ import dosymep
 clr.ImportExtensions(dosymep.Revit)
 clr.ImportExtensions(dosymep.Bim4Everyone)
 
-from numerate_class_library import *
+from table_class_library import *
 from pyrevit import EXEC_PARAMS
 
 @notification()
