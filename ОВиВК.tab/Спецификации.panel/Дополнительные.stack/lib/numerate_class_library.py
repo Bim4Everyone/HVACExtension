@@ -68,8 +68,8 @@ class SpecificationSettings:
         """
         self.definition = definition
 
-        self.position_index = self.__get_schedule_parameter_index(position_param.Name)
-        self.group_index = self.__get_schedule_parameter_index(group_param.Name)
+        self.position_index = self.get_schedule_parameter_index(position_param.Name)
+        self.group_index = self.get_schedule_parameter_index(group_param.Name)
         self.sort_para_group_indexes = self.__get_sorting_params_indexes()
 
         # Если заголовки показаны изначально или если спека изначально развернута - сворачивать назад не нужно
@@ -122,7 +122,7 @@ class SpecificationSettings:
 
         return sorting_params_indexes
 
-    def __get_schedule_parameter_index(self, name):
+    def get_schedule_parameter_index(self, name):
         """
         Возвращает индекс параметра спецификации по имени.
 
@@ -415,6 +415,24 @@ class SpecificationFiller:
         if not param.IsReadOnly:
             element.SetParamValue(shared_param, value)
 
+    def __copy_value(self, element, target_param_name, value):
+        target_param = element.GetParam(target_param_name)
+
+        if target_param.IsReadOnly:
+            return
+
+
+        if target_param.StorageType == StorageType.Double:
+            value = 0 if not value else float(value)
+            element.SetParamValue(target_param_name, UnitUtils.ConvertToInternalUnits(value, endParaObj.unitType))
+
+        elif target_param.StorageType == StorageType.Integer:
+            target_param.Set(int(value) if value else 0)
+
+        elif target_param.StorageType == StorageType.String:
+            element.SetParamValue(target_param_name, str(value) or '')
+
+
     def __fill_id_to_schedule_param(self, specification_settings, elements):
         """
         Заполняет параметр позиции айди элементов.
@@ -543,7 +561,7 @@ class SpecificationFiller:
         # На всякий случай выполняем настройку параметров - в теории уже должны быть на месте, но лучше продублировать
         self.__setup_params()
 
-        elements = FilteredElementCollector(self.doc, self.doc.ActiveView.Id)
+        elements = FilteredElementCollector(self.doc, self.doc.ActiveView.Id).ToElements()
 
         # Проверяем параметры. Они могли быть добавлены ранее или сидеть в семействах в типе
         self.__check_params_instance(elements)
@@ -563,11 +581,12 @@ class SpecificationFiller:
             paramList.append(scheduleField.GetName())
         return paramList
 
-    def __get_cell_text(self, element, param_name, position_index, row):
+    def __get_cell_text(self, element, param_name, column_number, row):
         if element.IsExistsParam(param_name):
             value = element.GetParamValue(param_name)
         else:
-            value = self.active_view.GetCellText(SectionType.Body, row, position_index)
+            value = self.active_view.GetCellText(SectionType.Body, row, column_number)
+        return value
 
     def fill_position_and_notes(self, fill_numbers=False, fill_areas=False):
         """
@@ -592,17 +611,54 @@ class SpecificationFiller:
     def replace_parameter_values(self):
         elements, specification_settings = self.__statup_checks()
 
-        table_params = self.__get_table_params(specification_settings.definition)
+        table_column_names = self.__get_table_params(specification_settings.definition)
 
-        selection_form = form_class.SelectParametersForm(table_params)
+        table_params = []
 
-        selected_param_name_in, selected_param_name_out = selection_form.show_form()
+        for table_column_name in table_column_names:
 
-        with revit.Transaction("BIM: Перенос параметров"):
+            if elements[0].IsExistsParam(table_column_name):
+                table_params.append(table_column_name)
+
+
+        selection_form = form_class.SelectParametersForm(table_column_names, table_params)
+
+        selected_param_name_original, selected_param_name_target = selection_form.show_form()
+
+        print(selected_param_name_original)
+
+        with revit.Transaction("BIM: заполнение ID"):
 
             # Заполняем айди в параметр позиции элементов для их чтения
             self.__fill_id_to_schedule_param(specification_settings, elements)
 
+
+        with revit.Transaction("BIM: Перенос параметров"):
+            section_data = self.active_view.GetTableData().GetSectionData(SectionType.Body)
+            row_number = section_data.FirstRowNumber
+            copy_column_number = specification_settings.get_schedule_parameter_index(selected_param_name_original)
+            while True:
+                row_number += 1
+                if row_number > section_data.LastRowNumber:
+                    break
+
+                element_id = self.active_view.GetCellText(
+                    SectionType.Body,
+                    row_number,
+                    specification_settings.position_index)
+                if element_id.isdigit():
+                    element = self.doc.GetElement(ElementId(int(element_id)))
+
+                    if not element.IsExistsParam(selected_param_name_target):
+                        continue
+
+                    copy_value = self.__get_cell_text(
+                        element,
+                        selected_param_name_original,
+                        copy_column_number,
+                        row_number)
+
+                    self.__copy_value(element, selected_param_name_target, copy_value)
 
             specification_settings.repair_specification()
 

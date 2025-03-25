@@ -28,10 +28,10 @@ class SelectParametersForm:
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
 
-            <Label Grid.Row="0" Content="Выберите первый вариант:"/>
+            <Label Grid.Row="0" Content="Выберите откуда копируем:"/>
             <ComboBox Grid.Row="1" Name="combobox1" Width="250"/>
 
-            <Label Grid.Row="2" Content="Выберите второй вариант:"/>
+            <Label Grid.Row="2" Content="Выберите куда копируем:"/>
             <ComboBox Grid.Row="3" Name="combobox2" Width="250"/>
 
             <Button Grid.Row="4" Name="okButton" Content="OK" Width="75" Height="25" HorizontalAlignment="Right" Margin="0,10,0,0"/>
@@ -39,7 +39,8 @@ class SelectParametersForm:
     </Window>
     '''
 
-    def __init__(self, table_params):
+    def __init__(self, table_column_names, table_params):
+        self.table_column_names = table_column_names
         self.table_params = table_params
         self.result = (None, None)
 
@@ -51,9 +52,9 @@ class SelectParametersForm:
 
         # Функция для заполнения комбобоксов с разными начальными значениями
         def initialize_comboboxes():
-            if len(self.table_params) < 2:
-                w.combobox1.Items.Add(self.table_params[0])
-                w.combobox2.Items.Add(self.table_params[0])
+            if len(self.table_column_names) < 2:
+                w.combobox1.Items.Add(self.table_column_names[0])
+                w.combobox2.Items.Add(self.table_column_names[0])
                 w.combobox1.SelectedIndex = 0
                 w.combobox2.SelectedIndex = 0
                 return
@@ -61,8 +62,10 @@ class SelectParametersForm:
             w.combobox1.Items.Clear()
             w.combobox2.Items.Clear()
 
-            for value in self.table_params:
+            for value in self.table_column_names:
                 w.combobox1.Items.Add(value)
+
+            for value in self.table_params:
                 w.combobox2.Items.Add(value)
 
             w.combobox1.SelectedIndex = 0
@@ -103,7 +106,7 @@ class SelectParametersForm:
             selected2 = w.combobox2.SelectedItem
 
             w.combobox1.Items.Clear()
-            for value in self.table_params:
+            for value in self.table_column_names:
                 if value != selected2:
                     w.combobox1.Items.Add(value)
 
