@@ -432,7 +432,6 @@ class SpecificationFiller:
         elif target_param.StorageType == StorageType.String:
             element.SetParamValue(target_param_name, str(value) or '')
 
-
     def __fill_id_to_schedule_param(self, specification_settings, elements):
         """
         Заполняет параметр позиции айди элементов.
@@ -549,7 +548,7 @@ class SpecificationFiller:
 
         return int(first_index)
 
-    def __statup_checks(self):
+    def __startup_checks(self):
         if self.doc.IsFamilyDocument:
             forms.alert("Надстройка не предназначена для работы с семействами", "Ошибка", exitscript=True)
 
@@ -575,11 +574,11 @@ class SpecificationFiller:
         return elements, specification_settings
 
     def __get_table_params(self, definition):
-        paramList = []
+        param_list = []
         for scheduleGroupField in definition.GetFieldOrder():
-            scheduleField = definition.GetField(scheduleGroupField)
-            paramList.append(scheduleField.GetName())
-        return paramList
+            schedule_field = definition.GetField(scheduleGroupField)
+            param_list.append(schedule_field.GetName())
+        return param_list
 
     def __get_cell_text(self, element, param_name, column_number, row):
         if element.IsExistsParam(param_name):
@@ -587,6 +586,41 @@ class SpecificationFiller:
         else:
             value = self.active_view.GetCellText(SectionType.Body, row, column_number)
         return value
+
+    def __select_params(self, elements, specification_settings):
+        table_column_names = self.__get_table_params(specification_settings.definition)
+        table_params = []
+        for table_column_name in table_column_names:
+            if elements[0].IsExistsParam(table_column_name):
+                table_params.append(table_column_name)
+
+        selection_form = form_class.SelectParametersForm(table_column_names, table_params)
+
+        return selection_form.show_form()
+
+    def __process_copy(self,
+                       row_number,
+                       specification_settings,
+                       copy_column_number,
+                       selected_param_name_original,
+                       selected_param_name_target):
+        element_id = self.active_view.GetCellText(
+            SectionType.Body,
+            row_number,
+            specification_settings.position_index)
+        if element_id.isdigit():
+            element = self.doc.GetElement(ElementId(int(element_id)))
+
+            if not element.IsExistsParam(selected_param_name_target):
+                return
+
+            copy_value = self.__get_cell_text(
+                element,
+                selected_param_name_original,
+                copy_column_number,
+                row_number)
+
+            self.__copy_value(element, selected_param_name_target, copy_value)
 
     def fill_position_and_notes(self, fill_numbers=False, fill_areas=False):
         """
@@ -597,7 +631,7 @@ class SpecificationFiller:
             fill_areas (bool): Флаг для заполнения площадей
         """
 
-        elements, specification_settings = self.__statup_checks()
+        elements, specification_settings = self.__startup_checks()
 
         # Выясняем с какого числа стартует нумерация
         first_index = self.__get_first_index(fill_numbers)
@@ -609,56 +643,29 @@ class SpecificationFiller:
         self.__fill_values(specification_settings, elements, fill_areas, fill_numbers, first_index)
 
     def replace_parameter_values(self):
-        elements, specification_settings = self.__statup_checks()
+        elements, specification_settings = self.__startup_checks()
 
-        table_column_names = self.__get_table_params(specification_settings.definition)
-
-        table_params = []
-
-        for table_column_name in table_column_names:
-
-            if elements[0].IsExistsParam(table_column_name):
-                table_params.append(table_column_name)
-
-
-        selection_form = form_class.SelectParametersForm(table_column_names, table_params)
-
-        selected_param_name_original, selected_param_name_target = selection_form.show_form()
-
-        print(selected_param_name_original)
+        selected_param_name_original, selected_param_name_target = self.__select_params(elements, specification_settings)
 
         with revit.Transaction("BIM: заполнение ID"):
-
             # Заполняем айди в параметр позиции элементов для их чтения
             self.__fill_id_to_schedule_param(specification_settings, elements)
-
 
         with revit.Transaction("BIM: Перенос параметров"):
             section_data = self.active_view.GetTableData().GetSectionData(SectionType.Body)
             row_number = section_data.FirstRowNumber
             copy_column_number = specification_settings.get_schedule_parameter_index(selected_param_name_original)
+
             while True:
                 row_number += 1
                 if row_number > section_data.LastRowNumber:
                     break
 
-                element_id = self.active_view.GetCellText(
-                    SectionType.Body,
-                    row_number,
-                    specification_settings.position_index)
-                if element_id.isdigit():
-                    element = self.doc.GetElement(ElementId(int(element_id)))
-
-                    if not element.IsExistsParam(selected_param_name_target):
-                        continue
-
-                    copy_value = self.__get_cell_text(
-                        element,
-                        selected_param_name_original,
-                        copy_column_number,
-                        row_number)
-
-                    self.__copy_value(element, selected_param_name_target, copy_value)
+                self.__process_copy(row_number,
+                                    specification_settings,
+                                    copy_column_number,
+                                    selected_param_name_original,
+                                    selected_param_name_target)
 
             specification_settings.repair_specification()
 
