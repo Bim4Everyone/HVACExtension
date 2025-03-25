@@ -1,9 +1,6 @@
 #! /usr/bin/env python
 # -*- coding: utf-8 -*-
 
-__title__ = 'Пересчет КМС'
-__doc__ = "Пересчитывает КМС соединительных деталей воздуховодов"
-
 import clr
 
 clr.AddReference("RevitAPI")
@@ -414,7 +411,6 @@ def script_execute(plugin_logger):
                 velocity = get_velocity(flow, real_size)
 
                 name = get_network_element_name(element, old_flow < flow)
-
 
                 pressure_drop = get_network_element_pressure_drop(section, element, density, velocity)
 

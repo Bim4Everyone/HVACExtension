@@ -1,0 +1,32 @@
+title:
+  ru: Расчет аэродинамики
+  en_us: Aerodynamics calculation
+
+tooltip:
+  ru: Обновляет марки для выдачи задания в СС(СППЗ).
+  
+    1. Заполните параметры имени системы и принадлежности к этажу.
+
+    2. После нажатия кнопки все оборудование, помеченное к выдаче задания, будет сохранено под своей нумерацией.
+
+    3. Нумерация будет сохраняться при каждом обновлении.
+    
+    4. В случае удаления элемента, который был ранее пронумерован, его номер будет сохранен.
+
+
+  en_us: Updates the tags for issuing a task to the transmission network.
+
+    1. Fill in the parameters of the system name and floor affiliation.
+
+    2. After pressing the button, all equipment marked for issuing a task will be saved under its numbering.
+
+    3. The numbering will be saved with each update.
+
+    4. In case of deleting an element that was previously numbered, its number will be saved.
+
+author: Redomine
+help_url: "https://kb.a101.ru/pages/viewpage.action?pageId=155549728"
+
+min_revit_version: 2022
+max_revit_version: 2024
+
