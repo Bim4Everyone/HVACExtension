@@ -34,6 +34,7 @@ from System.Collections.Generic import List
 from System import Guid
 from pyrevit import revit
 from collections import namedtuple
+from collections import defaultdict
 
 from dosymep.Bim4Everyone.Templates import ProjectParameters
 from dosymep.Bim4Everyone.SharedParams import SharedParamsConfig
@@ -325,6 +326,16 @@ def round_floats(value):
         return round(value, 3)
     return value
 
+# Функция для сортировки по приоритету категорий
+def sort_key(element):
+    if element.Category.IsId(BuiltInCategory.OST_DuctTerminal):
+        return 0
+    elif element.Category.IsId(BuiltInCategory.OST_DuctCurves):
+        return 1
+    elif element.Category.IsId(BuiltInCategory.OST_DuctFitting):
+        return 2
+    return 3  # Все остальные
+
 
 doc = __revit__.ActiveUIDocument.Document  # type: Document
 uidoc = __revit__.ActiveUIDocument
@@ -386,10 +397,14 @@ def script_execute(plugin_logger):
         print 'Плотность воздушной среды: ' + str(density) + ' кг/м3'
 
         pressure_total = 0
+
         for number in critical_path_numbers:
             section = system.GetSectionByNumber(number)
             count += 1
+            # data.append(['Участок №' + str(count)])
             elements_ids = section.GetElementIds()
+
+            segment_elements = []
             for element_id in elements_ids:
                 if element_id in passed_elements:
                     continue
@@ -398,6 +413,11 @@ def script_execute(plugin_logger):
                 if not element.Category.IsId(BuiltInCategory.OST_DuctCurves):
                     passed_elements.append(element_id)
 
+                segment_elements.append(element)
+
+            segment_elements.sort(key=sort_key)
+
+            for element in segment_elements:
                 element_type = element.GetElementType()
 
                 length = get_network_element_length(section, element_id)
@@ -426,11 +446,49 @@ def script_execute(plugin_logger):
                     coefficient,
                     pressure_drop,
                     pressure_total,
-                    output.linkify(element_id)]
+                    output.linkify(element.Id)]
 
                 rounded_value = [round_floats(item) for item in value]
 
                 data.append(rounded_value)
+
+    # Подсчет количества вхождений каждого count и замена одиночных count
+    count_occurrences = defaultdict(int)
+    for data_massive in data:
+        count_occurrences[data_massive[0]] += 1
+
+    count_mapping = {}
+    new_count = 1
+    old_count = None
+    i = 0  # Индекс для вставки элементов
+
+    while i < len(data):
+        count = data[i][0]
+
+        # Если count встречается только один раз, ищем замену
+        if count_occurrences[count] == 1:
+            for j in range(i + 1, len(data)):
+                next_count = data[j][0]
+                if count_occurrences[next_count] > 1:
+                    count = next_count
+                    break
+
+        # Присваиваем новый count, если он еще не заменен
+        if count not in count_mapping:
+            count_mapping[count] = new_count
+            new_count += 1
+
+        data[i][0] = count_mapping[count]
+
+        # Вставка заголовка, если count изменился
+        if old_count is not None and old_count != data[i][0]:
+            data.insert(i, ['Участок №' + str(data[i][0])])
+            i += 1  # Увеличиваем индекс, чтобы не зациклиться
+
+        old_count = data[i][0]
+        i += 1  # Переход к следующему элементу
+
+    data.insert(0, ['Участок №1'])
 
     show_network_report(data, selected_system, output)
 
