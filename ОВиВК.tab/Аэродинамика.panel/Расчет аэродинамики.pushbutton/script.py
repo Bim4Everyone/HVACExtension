@@ -336,6 +336,99 @@ def sort_key(element):
         return 2
     return 3  # Все остальные
 
+def optimise_data(data):
+    # Подсчет количества вхождений каждого count и замена одиночных count
+    count_occurrences = defaultdict(int)
+    for data_massive in data:
+        count_occurrences[data_massive[0]] += 1
+
+    count_mapping = {}
+    new_count = 1
+    old_count = None
+    i = 0  # Индекс для вставки элементов
+
+    while i < len(data):
+        count = data[i][0]
+
+        # Если count встречается только один раз, ищем замену
+        if count_occurrences[count] == 1:
+            for j in range(i + 1, len(data)):
+                next_count = data[j][0]
+                if count_occurrences[next_count] > 1:
+                    count = next_count
+                    break
+
+        # Присваиваем новый count, если он еще не заменен
+        if count not in count_mapping:
+            count_mapping[count] = new_count
+            new_count += 1
+
+        data[i][0] = count_mapping[count]
+
+        # Вставка заголовка, если count изменился
+        if old_count is not None and old_count != data[i][0]:
+            data.insert(i, ['Участок №' + str(data[i][0])])
+            i += 1  # Увеличиваем индекс, чтобы не зациклиться
+
+        old_count = data[i][0]
+        i += 1  # Переход к следующему элементу
+
+    data.insert(0, ['Участок №1'])
+
+    return data
+
+def prepare_section_elements(section):
+    elements_ids = section.GetElementIds()
+
+    segment_elements = []
+    for element_id in elements_ids:
+        if element_id in passed_elements:
+            continue
+
+        element = doc.GetElement(element_id)
+        if not element.Category.IsId(BuiltInCategory.OST_DuctCurves):
+            passed_elements.append(element_id)
+
+        segment_elements.append(element)
+
+    segment_elements.sort(key=sort_key)
+
+    return segment_elements
+
+def get_table_data_per_element(density, section, element, count, pressure_total, output, old_flow):
+    element_type = element.GetElementType()
+
+    length = get_network_element_length(section, element.Id)
+
+    coefficient = get_network_element_coefficient(section, element)
+
+    real_size = get_network_element_real_size(element, element_type)
+
+    flow = get_flow(section)
+
+    velocity = get_velocity(flow, real_size)
+
+    name = get_network_element_name(element, old_flow < flow)
+
+    pressure_drop = get_network_element_pressure_drop(section, element, density, velocity)
+
+    pressure_total += pressure_drop
+
+    value = [
+        count,
+        name,
+        length,
+        real_size,
+        flow,
+        velocity,
+        coefficient,
+        pressure_drop,
+        pressure_total,
+        output.linkify(element.Id)]
+
+    rounded_value = [round_floats(item) for item in value]
+
+    return rounded_value, pressure_total, flow
 
 doc = __revit__.ActiveUIDocument.Document  # type: Document
 uidoc = __revit__.ActiveUIDocument
@@ -390,105 +483,31 @@ def script_execute(plugin_logger):
 
         output = script.get_output()
 
-        old_flow = 0
+
 
         settings = DuctSettings.GetDuctSettings(doc)
         density = settings.AirDensity * 35.3146667215
         print 'Плотность воздушной среды: ' + str(density) + ' кг/м3'
 
         pressure_total = 0
-
+        old_flow = 0
         for number in critical_path_numbers:
             section = system.GetSectionByNumber(number)
             count += 1
-            # data.append(['Участок №' + str(count)])
-            elements_ids = section.GetElementIds()
 
-            segment_elements = []
-            for element_id in elements_ids:
-                if element_id in passed_elements:
-                    continue
-
-                element = doc.GetElement(element_id)
-                if not element.Category.IsId(BuiltInCategory.OST_DuctCurves):
-                    passed_elements.append(element_id)
-
-                segment_elements.append(element)
-
-            segment_elements.sort(key=sort_key)
+            segment_elements = prepare_section_elements(section)
 
             for element in segment_elements:
-                element_type = element.GetElementType()
+                value, pressure_total, old_flow = get_table_data_per_element(density,
+                                                                             section,
+                                                                             element,
+                                                                             count,
+                                                                             pressure_total,
+                                                                             output,
+                                                                             old_flow)
+                data.append(value)
 
-                length = get_network_element_length(section, element_id)
-
-                coefficient = get_network_element_coefficient(section, element)
-
-                real_size = get_network_element_real_size(element, element_type)
-
-                flow = get_flow(section)
-
-                velocity = get_velocity(flow, real_size)
-
-                name = get_network_element_name(element, old_flow < flow)
-
-                pressure_drop = get_network_element_pressure_drop(section, element, density, velocity)
-
-                pressure_total += pressure_drop
-
-                value = [
-                    count,
-                    name,
-                    length,
-                    real_size,
-                    flow,
-                    velocity,
-                    coefficient,
-                    pressure_drop,
-                    pressure_total,
-                    output.linkify(element.Id)]
-
-                rounded_value = [round_floats(item) for item in value]
-
-                data.append(rounded_value)
-
-    # Подсчет количества вхождений каждого count и замена одиночных count
-    count_occurrences = defaultdict(int)
-    for data_massive in data:
-        count_occurrences[data_massive[0]] += 1
-
-    count_mapping = {}
-    new_count = 1
-    old_count = None
-    i = 0  # Индекс для вставки элементов
-
-    while i < len(data):
-        count = data[i][0]
-
-        # Если count встречается только один раз, ищем замену
-        if count_occurrences[count] == 1:
-            for j in range(i + 1, len(data)):
-                next_count = data[j][0]
-                if count_occurrences[next_count] > 1:
-                    count = next_count
-                    break
-
-        # Присваиваем новый count, если он еще не заменен
-        if count not in count_mapping:
-            count_mapping[count] = new_count
-            new_count += 1
-
-        data[i][0] = count_mapping[count]
-
-        # Вставка заголовка, если count изменился
-        if old_count is not None and old_count != data[i][0]:
-            data.insert(i, ['Участок №' + str(data[i][0])])
-            i += 1  # Увеличиваем индекс, чтобы не зациклиться
-
-        old_count = data[i][0]
-        i += 1  # Переход к следующему элементу
-
-    data.insert(0, ['Участок №1'])
+    data = optimise_data(data)
 
     show_network_report(data, selected_system, output)
 
