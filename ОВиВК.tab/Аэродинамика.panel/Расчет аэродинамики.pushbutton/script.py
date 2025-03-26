@@ -167,7 +167,7 @@ def set_method(element, method):
     if current_guid != calculator.LOSS_GUID_CONST:
         param.Set(method.server_id.ToString())
 
-def set_method_value(element, method, value = 0):
+def set_method_value(element, method):
     local_section_coefficient = 0
 
     if element.Category.IsId(BuiltInCategory.OST_DuctFitting):
@@ -181,7 +181,7 @@ def set_method_value(element, method, value = 0):
 
         entity = element.GetEntity(method.schema)
 
-        entity.Set(method.coefficient_field, str(value))
+        entity.Set(method.coefficient_field, str(local_section_coefficient))
         element.SetEntity(entity)
 
 def split_elements(system_elements):
@@ -253,7 +253,11 @@ def get_network_element_coefficient(section, element):
     if element.Category.IsId(BuiltInCategory.OST_DuctFitting):
         coefficient = fitting_coefficient_cash[element.Id.IntegerValue]  # КМС
 
-    return coefficient
+    # Округляем, если есть цифры после запятой
+    if isinstance(coefficient, (int, float)):
+        coefficient = int(coefficient) if coefficient == int(coefficient) else round(coefficient, 2)
+
+    return str(coefficient)
 
 def get_network_element_real_size(element, element_type):
     def convert_to_meters(value):
@@ -280,14 +284,20 @@ def get_network_element_real_size(element, element_type):
             UnitTypeId.SquareMeters)
     return size
 
+
 def get_network_element_pressure_drop(section, element, density, velocity):
+    if element.Category.IsId(BuiltInCategory.OST_DuctTerminal):
+        return 10  # Фиксированное значение для воздухораспределителя
+
     if element.Category.IsId(BuiltInCategory.OST_DuctFitting):
         Pd = (density * velocity * velocity) / 2  # Динамическое давление
-
         K = fitting_coefficient_cash[element.Id.IntegerValue]  # КМС
         pressure_drop = Pd * K
     else:
-        pressure_drop = section.GetPressureDrop(element.Id) * 3.280839895
+        pressure_drop = section.GetPressureDrop(element.Id)
+
+    # Конвертация в Паскали
+    pressure_drop = UnitUtils.ConvertFromInternalUnits(pressure_drop, UnitTypeId.Pascals)
 
     return pressure_drop
 
@@ -309,11 +319,16 @@ def show_network_report(data, selected_system, output):
                        formats=['', '', ''],
                        )
 
-def get_flow(section):
-    flow = section.Flow * 101.941317259
-    flow = int(flow)
+def get_flow(section, element):
+    if element.Category.IsId(BuiltInCategory.OST_DuctTerminal):
+        flow = element.GetParamValue(BuiltInParameter.RBS_DUCT_FLOW_PARAM)
+    else:
+        flow = section.Flow
 
-    return flow
+    # Конвертация из внутренних единиц в м³/ч (кубометры в час)
+    flow = UnitUtils.ConvertFromInternalUnits(flow, UnitTypeId.CubicMetersPerHour)
+
+    return int(flow)
 
 def get_velocity(flow, real_size):
 
@@ -404,7 +419,7 @@ def get_table_data_per_element(density, section, element, count, pressure_total,
 
     real_size = get_network_element_real_size(element, element_type)
 
-    flow = get_flow(section)
+    flow = get_flow(section, element)
 
     velocity = get_velocity(flow, real_size)
 
@@ -483,8 +498,6 @@ def script_execute(plugin_logger):
 
         output = script.get_output()
 
-
-
         settings = DuctSettings.GetDuctSettings(doc)
         density = settings.AirDensity * 35.3146667215
         print 'Плотность воздушной среды: ' + str(density) + ' кг/м3'
@@ -498,6 +511,11 @@ def script_execute(plugin_logger):
             segment_elements = prepare_section_elements(section)
 
             for element in segment_elements:
+                if element.Category.IsId(BuiltInCategory.OST_DuctFitting) and element.MEPModel.PartType == element.MEPModel.PartType.Cap:
+                    continue
+                if element.Category.IsId(BuiltInCategory.OST_DuctCurves) and get_flow(section, element) == 0:
+                    continue
+
                 value, pressure_total, old_flow = get_table_data_per_element(density,
                                                                              section,
                                                                              element,

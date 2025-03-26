@@ -117,21 +117,21 @@ class Aerodinamiccoefficientcalculator:
                 return in_duct_con
 
     def get_coef_elbow(self, element):
-        coefficient = 0.1
+        coefficient = 3
 
         return coefficient
 
     def get_coef_transition(self, element):
-        coefficient = 0.1
+        coefficient = 3
 
         return coefficient
 
     def get_coef_tee(self, element):
-        coefficient = 0.1
+        coefficient = 3
 
         return coefficient
 
     def get_coef_tap_adjustable(self, element):
-        coefficient = 0.1
+        coefficient = 3
 
         return coefficient
