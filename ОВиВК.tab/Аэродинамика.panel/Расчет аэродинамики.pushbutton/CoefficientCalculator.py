@@ -330,8 +330,6 @@ class Aerodinamiccoefficientcalculator:
 
         return type
 
-
-
     def get_coef_tee(self, element):
         try:
             conSet = self.get_connectors(element)
