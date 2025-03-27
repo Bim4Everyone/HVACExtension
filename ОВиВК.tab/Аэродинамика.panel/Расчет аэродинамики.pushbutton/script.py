@@ -290,13 +290,20 @@ def get_network_element_pressure_drop(section, element, density, velocity, coeff
         return 10  # Фиксированное значение для воздухораспределителя
 
     if element.Category.IsId(BuiltInCategory.OST_DuctFitting) or element.Category.IsId(BuiltInCategory.OST_DuctAccessory):
-        Pd = (density * velocity * velocity) / 2  # Динамическое давление
-        pressure_drop = Pd * float(coefficient)
+        pressure_drop = (density * velocity * velocity) / 2  # Динамическое давление
     else:
         pressure_drop = section.GetPressureDrop(element.Id)
+    # if element.Id.IntegerValue == 2648443:
+    #     print('До конвертации ' + str(pressure_drop))
 
-    # Конвертация в Паскали
-    pressure_drop = UnitUtils.ConvertFromInternalUnits(pressure_drop, UnitTypeId.Pascals)
+    if element.Category.IsId(BuiltInCategory.OST_DuctFitting) or element.Category.IsId(
+            BuiltInCategory.OST_DuctAccessory):
+        # if element.Id.IntegerValue == 2648443:
+        #     print('Плотность: '+ str(density))
+        #     print('Скорость: ' + str(velocity))
+        #     print('Потери напора без КМС: ' +str(pressure_drop))
+        #     print('КМС: '+ str(coefficient))
+        pressure_drop = pressure_drop * float(coefficient)
 
     return pressure_drop
 
