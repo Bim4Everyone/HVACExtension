@@ -285,14 +285,13 @@ def get_network_element_real_size(element, element_type):
     return size
 
 
-def get_network_element_pressure_drop(section, element, density, velocity):
+def get_network_element_pressure_drop(section, element, density, velocity, coefficient):
     if element.Category.IsId(BuiltInCategory.OST_DuctTerminal):
         return 10  # Фиксированное значение для воздухораспределителя
 
-    if element.Category.IsId(BuiltInCategory.OST_DuctFitting):
+    if element.Category.IsId(BuiltInCategory.OST_DuctFitting) or element.Category.IsId(BuiltInCategory.OST_DuctAccessory):
         Pd = (density * velocity * velocity) / 2  # Динамическое давление
-        K = fitting_coefficient_cash[element.Id.IntegerValue]  # КМС
-        pressure_drop = Pd * K
+        pressure_drop = Pd * float(coefficient)
     else:
         pressure_drop = section.GetPressureDrop(element.Id)
 
@@ -425,7 +424,7 @@ def get_table_data_per_element(density, section, element, count, pressure_total,
 
     name = get_network_element_name(element, old_flow < flow)
 
-    pressure_drop = get_network_element_pressure_drop(section, element, density, velocity)
+    pressure_drop = get_network_element_pressure_drop(section, element, density, velocity, coefficient)
 
     pressure_total += pressure_drop
 
