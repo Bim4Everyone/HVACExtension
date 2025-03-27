@@ -665,9 +665,6 @@ class UnmodelingFactory:
         """
         Выполняет начальные проверки файла и семейства.
 
-        Args:
-            doc: Документ Revit.
-
         Returns:
             FamilySymbol: Символ семейства.
         """
@@ -683,7 +680,6 @@ class UnmodelingFactory:
                 exitscript=True)
 
         self.check_family(family_symbol)
-
         self.check_worksets()
 
         # На всякий случай выполняем настройку параметров - в теории уже должны быть на месте, но лучше продублировать
@@ -702,7 +698,7 @@ class UnmodelingFactory:
         """
         if WorksetTable.IsWorksetNameUnique(self.doc, '99_Немоделируемые элементы'):
             with revit.Transaction("Добавление рабочего набора"):
-                new_ws = Workset.Create(doc, '99_Немоделируемые элементы')
+                new_ws = Workset.Create(self.doc, '99_Немоделируемые элементы')
                 forms.alert('Был создан рабочий набор "99_Немоделируемые элементы". '
                             'Откройте диспетчер рабочих наборов и снимите галочку с параметра "Видимый на всех видах". '
                             'В данном рабочем наборе будут создаваться немоделируемые элементы '
