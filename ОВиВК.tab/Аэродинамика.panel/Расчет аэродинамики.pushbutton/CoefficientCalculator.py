@@ -35,6 +35,44 @@ from dosymep.Bim4Everyone.Templates import ProjectParameters
 from dosymep.Bim4Everyone.SharedParams import SharedParamsConfig
 
 
+class ConnectorData:
+    radius = None
+    height = None
+    width = None
+    area = None
+    angle = None
+    connected_element = None
+
+    def __init__(self, connector):
+        self.connector_element = connector
+        self.shape = connector.Shape
+        self.get_connected_element()
+
+        if connector.Shape == ConnectorProfileType.Round:
+            self.radius = UnitUtils.ConvertFromInternalUnits(connector.Radius, UnitTypeId.Millimeters)
+            self.area = math.pi * self.radius ** 2
+        elif connector.Shape == ConnectorProfileType.Rectangular:
+            self.height = UnitUtils.ConvertFromInternalUnits(connector.Height, UnitTypeId.Millimeters)
+            self.width = UnitUtils.ConvertFromInternalUnits(connector.Width, UnitTypeId.Millimeters)
+            self.area = self.height * self.width
+        else:
+            forms.alert(
+                "Не предусмотрена обработка овальных коннекторов.",
+                "Ошибка",
+                exitscript=True)
+
+    def get_connector_angle(self):
+        radians = self.connector_element.Angle
+        angle = radians * (180 / math.pi)
+        return angle
+
+    def get_connected_element(self):
+        for reference in self.connector_element.AllRefs:
+            if ((reference.Owner.Category.IsId(BuiltInCategory.OST_DuctCurves) or
+                    reference.Owner.Category.IsId(BuiltInCategory.OST_DuctFitting)) or
+                    reference.Owner.Category.IsId(BuiltInCategory.OST_MechanicalEquipment)):
+                self.connected_element = reference.Owner
+
 
 class Aerodinamiccoefficientcalculator:
     LOSS_GUID_CONST = "46245996-eebb-4536-ac17-9c1cd917d8cf" # Гуид для удельных потерь
@@ -87,6 +125,13 @@ class Aerodinamiccoefficientcalculator:
 
         return connectors
 
+    def get_connector_data_instances(self, element):
+        connectors = self.get_connectors(element)
+        connector_data_instances = []
+        for connector in connectors:
+            connector_data_instances.append(ConnectorData(connector))
+        return connector_data_instances
+
     def get_con_coords(self, connector):
         a0 = connector.Origin.ToString()
         a0 = a0.replace("(", "")
@@ -118,28 +163,41 @@ class Aerodinamiccoefficientcalculator:
                 in_duct_con = self.get_con_coords(duct_con)
                 return in_duct_con
 
+    def get_connector_angle(self, connector):
+        radians = connector.Angle
+        angle = radians * (180 / math.pi)
+        return angle
+
+
     def get_coef_elbow(self, element):
-        a = self.get_connectors(element)
-        angle = a[1].Angle
+        '''
+        90 гр=0,25 * (b/h)^0,25 * ( 1,07 * e^(2/(2(R+b/2)/b+1)) -1 )^2
+        45 гр=0,708*КМС90гр
 
-        try:
-            sizes = [a[0].Height * 304.8, a[0].Width * 304.8]
-            H = max(sizes)
-            B = min(sizes)
-            E = 2.71828182845904
+        Непонятно откуда формула, но ее результаты сходятся с прил. 3 в ВСН и прил. 25.11 в учебнике Краснова.
+        Формулы из ВСН и Посохина похожие, но они явно с опечатками, кривой результат
 
-            coefficient = (0.25 * (B / H) ** 0.25) * (1.07 * E ** (2 / (2 * (100 + B / 2) / B + 1)) - 1) ** 2
+        '''
 
-            if angle <= 1:
+        connector_data_element = self.get_connector_data_instances(element)[0]
+
+        if connector_data_element.shape == ConnectorProfileType.Rectangular:
+            h = connector_data_element.height
+            b = connector_data_element.width
+
+            coefficient = (0.25 * (b / h) ** 0.25) * (1.07 * math.e ** (2 / (2 * (100 + b / 2) / b + 1)) - 1) ** 2
+
+            if connector_data_element.angle <= 60:
                 coefficient = coefficient * 0.708
 
-        except:
-            if angle > 1:
+        if connector_data_element.shape == ConnectorProfileType.Round:
+            if connector_data_element.angle > 85:
                 coefficient = 0.33
             else:
                 coefficient = 0.18
 
         return coefficient
+
 
     def get_coef_transition(self, element):
         a = self.get_connectors(element)
