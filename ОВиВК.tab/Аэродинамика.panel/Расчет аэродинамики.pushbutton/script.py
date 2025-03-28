@@ -139,6 +139,13 @@ def get_system_elements():
 
     return selected_system
 
+
+def setup_params():
+    revit_params = [cross_section_param, coefficient_param]
+
+    project_parameters = ProjectParameters.Create(doc.Application)
+    project_parameters.SetupRevitParams(doc, revit_params)
+
 def get_loss_methods():
     service_id = ExternalServices.BuiltInExternalServices.DuctFittingAndAccessoryPressureDropService
 
@@ -246,7 +253,7 @@ def get_network_element_length(section, element_id):
     return length
 
 def get_network_element_coefficient(section, element):
-    coefficient = element.GetParamValueOrDefault('ФОП_ВИС_КМС')
+    coefficient = element.GetParamValueOrDefault(coefficient_param)
 
     if coefficient is None:
         coefficient = section.GetCoefficient(element.Id)
@@ -265,9 +272,9 @@ def get_network_element_real_size(element, element_type):
             value,
             UnitTypeId.Meters)
 
-    size = element.GetParamValueOrDefault('ФОП_ВИС_Живое сечение, м2')
+    size = element.GetParamValueOrDefault(cross_section_param)
     if not size:
-        size = element_type.GetParamValueOrDefault('ФОП_ВИС_Живое сечение, м2')
+        size = element_type.GetParamValueOrDefault(cross_section_param)
     if not size:
 
         connectors = calculator.get_connectors(element)
@@ -455,6 +462,9 @@ doc = __revit__.ActiveUIDocument.Document  # type: Document
 uidoc = __revit__.ActiveUIDocument
 view = doc.ActiveView
 
+coefficient_param = SharedParamsConfig.Instance.VISLocalResistanceCoef # ФОП_ВИС_КМС
+cross_section_param = SharedParamsConfig.Instance.VISCrossSection # ФОП_ВИС_Живое сечение, м2
+
 calculator = CoefficientCalculator.Aerodinamiccoefficientcalculator(doc, uidoc, view)
 editor_report = EditorReport()
 fitting_coefficient_cash = {}
@@ -463,6 +473,8 @@ passed_elements = []
 @notification()
 @log_plugin(EXEC_PARAMS.command_name)
 def script_execute(plugin_logger):
+    setup_params()
+
     selected_system = get_system_elements()
 
     if selected_system.elements is None:
