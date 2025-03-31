@@ -8,7 +8,6 @@ import clr
 
 clr.AddReference("RevitAPI")
 clr.AddReference("RevitAPIUI")
-clr.AddReference('Microsoft.Office.Interop.Excel, Version=11.0.0.0, Culture=neutral, PublicKeyToken=71e9bce111e9429c')
 clr.AddReference("dosymep.Revit.dll")
 clr.AddReference("dosymep.Bim4Everyone.dll")
 import dosymep
@@ -30,6 +29,10 @@ from System.Collections.Generic import List
 from System import Guid
 from pyrevit import revit
 from collections import namedtuple
+from Autodesk.Revit.DB.ExternalService import *
+from Autodesk.Revit.DB.ExtensibleStorage import *
+from Autodesk.Revit.DB.Mechanical import *
+
 
 from dosymep.Bim4Everyone.Templates import ProjectParameters
 from dosymep.Bim4Everyone.SharedParams import SharedParamsConfig
@@ -72,6 +75,9 @@ class ConnectorData:
                     reference.Owner.Category.IsId(BuiltInCategory.OST_DuctFitting)) or
                     reference.Owner.Category.IsId(BuiltInCategory.OST_MechanicalEquipment)):
                 self.connected_element = reference.Owner
+
+
+
 
 
 class Aerodinamiccoefficientcalculator:
@@ -168,7 +174,6 @@ class Aerodinamiccoefficientcalculator:
         angle = radians * (180 / math.pi)
         return angle
 
-
     def get_coef_elbow(self, element):
         '''
         90 гр=0,25 * (b/h)^0,25 * ( 1,07 * e^(2/(2(R+b/2)/b+1)) -1 )^2
@@ -197,7 +202,6 @@ class Aerodinamiccoefficientcalculator:
                 coefficient = 0.18
 
         return coefficient
-
 
     def get_coef_transition(self, element):
         a = self.get_connectors(element)
@@ -388,6 +392,65 @@ class Aerodinamiccoefficientcalculator:
 
         return type
 
+    def get_tee_orientation(self, element, system):
+        connector_data_instances = self.get_connector_data_instances(element)
+
+        path_numbers = system.GetCriticalPathSectionNumbers()
+        critical_path_numbers = []
+
+        for number in path_numbers:
+            critical_path_numbers.append(number)
+        if system.SystemType == DuctSystemType.SupplyAir:
+            critical_path_numbers.reverse()
+
+        input_connector = None # Первый на пути следования воздуха коннектор
+        output_connector = None # Второй на пути следования воздуха коннектор
+        branch_connector = None # Коннектор-ответвление
+
+        for number in critical_path_numbers:
+            section = system.GetSectionByNumber(number)
+            elements_ids = section.GetElementIds()
+
+            for connector_data in connector_data_instances:
+                if connector_data.connected_element.Id in elements_ids:
+                    if input_connector is None:
+                        input_connector = connector_data
+                    else:
+                        output_connector = connector_data
+
+            if input_connector is not None and output_connector is not None:
+                break # Нет смысла продолжать перебор сегментов если нужный тройник уже обработан
+
+        # Определяем branch_connector как оставшийся коннектор
+        for connector_data in connector_data_instances:
+            if connector_data != input_connector and connector_data != output_connector:
+                branch_connector = connector_data
+                break
+
+        # Получаем координаты центров соединений
+        input_origin = input_connector.connector_element.Origin
+        output_origin = output_connector.connector_element.Origin
+        branch_origin = branch_connector.connector_element.Origin
+
+        # Создаем векторы направлений
+        vec_input_output = output_origin - input_origin
+        vec_input_branch = branch_origin - input_origin
+
+        # Вычисляем углы
+        def calculate_angle(vec1, vec2):
+            dot_product = vec1.DotProduct(vec2)
+            norm1 = vec1.GetLength()
+            norm2 = vec2.GetLength()
+            return math.degrees(math.acos(dot_product / (norm1 * norm2)))
+
+        input_output_angle = calculate_angle(vec_input_output, -vec_input_branch)
+        input_branch_angle = calculate_angle(vec_input_output, vec_input_branch)
+
+        print('Инпут-аутпут: ' + str(input_output_angle))
+        print('Инпут-бранч: ' + str(input_branch_angle))
+
+
+
     def get_coef_tee(self, element):
         try:
             conSet = self.get_connectors(element)
@@ -525,11 +588,19 @@ class Aerodinamiccoefficientcalculator:
 
         for ductCon in ductCons:
             Flow.append(ductCon.Flow * 101.94)
-            try:
-                Fc = conSet[0].Height * 0.3048 * ductCon.Width * 0.3048
-                Fp = Fc
-            except:
+            # try:
+            #     Fc = conSet[0].Height * 0.3048 * ductCon.Width * 0.3048
+            #     Fp = Fc
+            # except:
+            #     Fc = 3.14 * 0.3048 * 0.3048 * ductCon.Radius ** 2
+            #     Fp = Fc
+
+            if ductCon.Shape == ConnectorProfileType.Round:
                 Fc = 3.14 * 0.3048 * 0.3048 * ductCon.Radius ** 2
+                Fp = Fc
+
+            elif ductCon.Shape == ConnectorProfileType.Rectangular:
+                Fc = ductCon.Height * 0.3048 * ductCon.Width * 0.3048
                 Fp = Fc
 
         Lc = max(Flow)

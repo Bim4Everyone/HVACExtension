@@ -174,11 +174,11 @@ def set_method(element, method):
     if current_guid != calculator.LOSS_GUID_CONST:
         param.Set(method.server_id.ToString())
 
-def set_method_value(element, method):
+def set_method_value(element, method, system):
     local_section_coefficient = 0
 
     if element.Category.IsId(BuiltInCategory.OST_DuctFitting):
-        local_section_coefficient = get_local_coefficient(element)
+        local_section_coefficient = get_local_coefficient(element, system)
 
     param = element.get_Parameter(BuiltInParameter.RBS_DUCT_FITTING_LOSS_METHOD_SERVER_PARAM)
     current_guid = param.AsString()
@@ -201,7 +201,7 @@ def split_elements(system_elements):
 
     return elements
 
-def get_local_coefficient(fitting):
+def get_local_coefficient(fitting, system):
     part_type = fitting.MEPModel.PartType
 
     if part_type == fitting.MEPModel.PartType.Elbow:
@@ -209,6 +209,7 @@ def get_local_coefficient(fitting):
     elif part_type == fitting.MEPModel.PartType.Transition:
         local_section_coefficient = calculator.get_coef_transition(fitting)
     elif part_type == fitting.MEPModel.PartType.Tee:
+        test = calculator.get_tee_orientation(fitting, system)
         local_section_coefficient = calculator.get_coef_tee(fitting)
     elif part_type == fitting.MEPModel.PartType.TapAdjustable:
         local_section_coefficient = calculator.get_coef_tap_adjustable(fitting)
@@ -290,7 +291,6 @@ def get_network_element_real_size(element, element_type):
             size,
             UnitTypeId.SquareMeters)
     return size
-
 
 def get_network_element_pressure_drop(section, element, density, velocity, coefficient):
     if element.Category.IsId(BuiltInCategory.OST_DuctTerminal):
@@ -497,7 +497,7 @@ def script_execute(plugin_logger):
     with revit.Transaction("BIM: Пересчет потерь напора"):
         for element in network_elements:
             # устанавливаем 0 на арматуру, чтоб она не убивала расчеты и считаем на фитинги
-            set_method_value(element, method)
+            set_method_value(element, method, doc.GetElement(selected_system.system.Id))
 
     with revit.Transaction("BIM: Вывод отчета"):
         # заново забираем систему  через ID, мы в прошлой транзакции обновили потери напора на элементах, поэтому данные
