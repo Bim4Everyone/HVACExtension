@@ -396,30 +396,31 @@ class Aerodinamiccoefficientcalculator:
         connector_data_instances = self.get_connector_data_instances(element)
 
         path_numbers = system.GetCriticalPathSectionNumbers()
-        critical_path_numbers = []
+        critical_path_numbers = list(path_numbers)
 
-        for number in path_numbers:
-            critical_path_numbers.append(number)
         if system.SystemType == DuctSystemType.SupplyAir:
             critical_path_numbers.reverse()
 
-        input_connector = None # Первый на пути следования воздуха коннектор
-        output_connector = None # Второй на пути следования воздуха коннектор
-        branch_connector = None # Коннектор-ответвление
+        input_connector = None  # Первый на пути следования воздуха коннектор
+        output_connector = None  # Второй на пути следования воздуха коннектор
+        branch_connector = None  # Коннектор-ответвление
 
+        passed_elements = []
         for number in critical_path_numbers:
             section = system.GetSectionByNumber(number)
             elements_ids = section.GetElementIds()
 
             for connector_data in connector_data_instances:
-                if connector_data.connected_element.Id in elements_ids:
+                if connector_data.connected_element.Id in elements_ids and connector_data.connected_element.Id not in passed_elements:
+                    passed_elements.append(connector_data.connected_element.Id)
+
                     if input_connector is None:
                         input_connector = connector_data
                     else:
                         output_connector = connector_data
 
             if input_connector is not None and output_connector is not None:
-                break # Нет смысла продолжать перебор сегментов если нужный тройник уже обработан
+                break  # Нет смысла продолжать перебор сегментов, если нужный тройник уже обработан
 
         # Определяем branch_connector как оставшийся коннектор
         for connector_data in connector_data_instances:
@@ -432,23 +433,27 @@ class Aerodinamiccoefficientcalculator:
         output_origin = output_connector.connector_element.Origin
         branch_origin = branch_connector.connector_element.Origin
 
-        # Создаем векторы направлений
-        vec_input_output = output_origin - input_origin
-        vec_input_branch = branch_origin - input_origin
+        # Получаем координату точки вставки тройника
+        location = element.Location.Point
 
-        # Вычисляем углы
+        # Создаем векторы направлений от точки вставки тройника
+        vec_input_location = input_origin - location
+        vec_output_location = output_origin - location
+        vec_branch_location = branch_origin - location
+
+        # Функция вычисления угла между векторами
         def calculate_angle(vec1, vec2):
             dot_product = vec1.DotProduct(vec2)
             norm1 = vec1.GetLength()
             norm2 = vec2.GetLength()
             return math.degrees(math.acos(dot_product / (norm1 * norm2)))
 
-        input_output_angle = calculate_angle(vec_input_output, -vec_input_branch)
-        input_branch_angle = calculate_angle(vec_input_output, vec_input_branch)
+        # Вычисляем углы
+        input_output_angle = calculate_angle(vec_input_location, vec_output_location)
+        input_branch_angle = calculate_angle(vec_input_location, vec_branch_location)
 
         print('Инпут-аутпут: ' + str(input_output_angle))
         print('Инпут-бранч: ' + str(input_branch_angle))
-
 
 
     def get_coef_tee(self, element):
