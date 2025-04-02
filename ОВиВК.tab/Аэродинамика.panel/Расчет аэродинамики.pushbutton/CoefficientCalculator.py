@@ -293,195 +293,76 @@ class Aerodinamiccoefficientcalculator:
 
         return coefficient
 
-    def getTeeOrient(self, element):
-        connectors = self.get_connectors(element)
-
-        exitCons = []
-        exhaustAirCons = []
-
-        for connector in connectors:
-            if str(connectors[0].DuctSystemType) == "SupplyAir":
-                if connector.Flow != max(connectors[0].Flow, connectors[1].Flow, connectors[2].Flow):
-                    exitCons.append(connector)
-            if str(connectors[0].DuctSystemType) == "ExhaustAir" or str(connectors[0].DuctSystemType) == "ReturnAir":
-                # а что делать если на на разветвлении расход одинаковы?
-                if connector.Flow == max(connectors[0].Flow, connectors[1].Flow, connectors[2].Flow):
-                    exitCons.append(connector)
-                else:
-                    exhaustAirCons.append(connector)
-                # для входа в тройник ищем координаты начала входящего воздуховода чтоб построить прямую через эти две точки
-
-            if str(connectors[0].DuctSystemType) == "SupplyAir":
-                if str(connector.Direction) == "In":
-                    inTeeCon = self.get_con_coords(connector)
-                    # выбираем из коннектора подключенный воздуховод
-                    inDuctCon = self.get_duct_coords(inTeeCon, connector)
-
-        # в случе вытяжной системы, чтоб выбрать коннектор с выходящим воздухом из второстепенных, берем два коннектора у которых расход не максимальны
-        # (максимальный точно выходной у вытяжной системы) и сравниваем. Тот что самый малый - ответветвление
-        # а второй - точка вхождения потока воздуха из которой берем координаты для построения вектора
-
-        if str(connectors[0].DuctSystemType) == "ExhaustAir" or str(connectors[0].DuctSystemType) == "ReturnAir":
-
-            if exhaustAirCons[0].Flow < exhaustAirCons[1].Flow:
-                exitCons.append(exhaustAirCons[0])
-                inTeeCon = self.get_con_coords(exhaustAirCons[1])
-                inDuctCon = self.get_duct_coords(inTeeCon, exhaustAirCons[1])
-            else:
-                exitCons.append(exhaustAirCons[1])
-                inTeeCon = self.get_con_coords(exhaustAirCons[0])
-                inDuctCon = self.get_duct_coords(inTeeCon, exhaustAirCons[0])
-
-        try:
-            # среди выходящих коннекторов ищем диктующий по большему расходу
-            if exitCons[0].Flow > exitCons[1].Flow:
-                exitCon = exitCons[0]
-                secondaryCon = exitCons[1]
-            else:
-                exitCon = exitCons[1]
-                secondaryCon = exitCons[0]
-
-            # диктующий коннектор
-            exitCon = self.get_con_coords(exitCon)
-
-            # вторичный коннектор
-            secondaryCon = self.get_con_coords(secondaryCon)
-
-
-            # найдем вектор по координатам точек AB = {Bx - Ax; By - Ay; Bz - Az}
-            ductToTee = [(float(inDuctCon[0]) - float(inTeeCon[0])), (float(inDuctCon[1]) - float(inTeeCon[1])),
-                         (float(inDuctCon[2]) - float(inTeeCon[2]))]
-
-            teeToExit = [(float(inTeeCon[0]) - float(exitCon[0])), (float(inTeeCon[1]) - float(exitCon[1])),
-                         (float(inTeeCon[2]) - float(exitCon[2]))]
-
-            # то же самое для вторичного отвода
-            teeToMinor = [(float(inTeeCon[0]) - float(secondaryCon[0])), (float(inTeeCon[1]) - float(secondaryCon[1])),
-                          (float(inTeeCon[2]) - float(secondaryCon[2]))]
-
-            # найдем скалярное произведение векторов AB · CD = ABx · CDx + ABy · CDy + ABz · CDz
-            teeToExit_ductToTee = ductToTee[0] * teeToExit[0] + ductToTee[1] * teeToExit[1] + ductToTee[2] * teeToExit[2]
-
-            # то же самое с вторичным коннектором
-            teeToMinor_ductToTee = ductToTee[0] * teeToMinor[0] + ductToTee[1] * teeToMinor[1] + ductToTee[2] * teeToMinor[
-                2]
-
-            # найдем длины векторов
-            len_ductToTee = ((ductToTee[0]) ** 2 + (ductToTee[1]) ** 2 + (ductToTee[2]) ** 2) ** 0.5
-            len_teeToExit = ((teeToExit[0]) ** 2 + (teeToExit[1]) ** 2 + (teeToExit[2]) ** 2) ** 0.5
-
-            # то же самое для вторичного вектора
-            len_teeToMinor = ((teeToMinor[0]) ** 2 + (teeToMinor[1]) ** 2 + (teeToMinor[2]) ** 2) ** 0.5
-
-            # найдем косинус
-            cosMain = (teeToExit_ductToTee) / (len_ductToTee * len_teeToExit)
-
-            # то же самое с вторичным вектором
-            cosMinor = (teeToMinor_ductToTee) / (len_ductToTee * len_teeToMinor)
-        except Exception:
-            if str(connectors[0].DuctSystemType) == "ExhaustAir" or str(connectors[0].DuctSystemType) == "ReturnAir":
-                return 1
-            else:
-                return 3
-
-        # Если угол расхождения между вектором входа воздуха и выхода больше 10 градусов(цифра с потолка) то считаем что идет буквой L
-        # Если нет, то считаем что идет по прямой буквой I
-
-        # тип 1
-        # вытяжной воздуховод zп
-        if math.acos(cosMain) < 0.10 and (
-                str(connectors[0].DuctSystemType) == "ExhaustAir" or str(connectors[0].DuctSystemType) == "ReturnAir"):
-            type = 1
-
-        # тип 2
-        # вытяжной воздуховод, zо
-        elif math.acos(cosMain) > 0.10 and (
-                str(connectors[0].DuctSystemType) == "ExhaustAir" or str(connectors[0].DuctSystemType) == "ReturnAir"):
-            type = 2
-
-        # тип 3
-        # подающий воздуховод, zп
-        elif math.acos(cosMain) < 0.10 and str(connectors[0].DuctSystemType) == "SupplyAir":
-            type = 3
-
-        # тип 4
-        # подающий воздуховод, zо
-        elif math.acos(cosMain) > 0.10 and str(connectors[0].DuctSystemType) == "SupplyAir":
-            type = 4
-
-
-        return type
-
-    def get_tee_orientation(self, element, system):
-        connector_data_instances = self.get_connector_data_instances(element)
-
-        path_numbers = system.GetCriticalPathSectionNumbers()
-        critical_path_numbers = list(path_numbers)
-
-        if system.SystemType == DuctSystemType.SupplyAir:
-            critical_path_numbers.reverse()
-
-        input_connector = None  # Первый на пути следования воздуха коннектор
-        output_connector = None  # Второй на пути следования воздуха коннектор
-        branch_connector = None  # Коннектор-ответвление
-
-        passed_elements = []
-        for number in critical_path_numbers:
-            section = system.GetSectionByNumber(number)
-            elements_ids = section.GetElementIds()
-
-            for connector_data in connector_data_instances:
-                if (connector_data.connected_element.Id in elements_ids and
-                        connector_data.connected_element.Id not in passed_elements):
-                    passed_elements.append(connector_data.connected_element.Id)
-
-                    if input_connector is None:
-                        input_connector = connector_data
-                    else:
-                        output_connector = connector_data
-
-            if input_connector is not None and output_connector is not None:
-                break  # Нет смысла продолжать перебор сегментов, если нужный тройник уже обработан
-
-        # Определяем branch_connector как оставшийся коннектор
-        for connector_data in connector_data_instances:
-            if connector_data != input_connector and connector_data != output_connector:
-                branch_connector = connector_data
-                break
-
-        # Получаем координаты центров соединений
-        input_origin = input_connector.connector_element.Origin
-        output_origin = output_connector.connector_element.Origin
-        branch_origin = branch_connector.connector_element.Origin
-
-        # Получаем координату точки вставки тройника
-        location = element.Location.Point
-
-        # Создаем векторы направлений от точки вставки тройника
-        vec_input_location = input_origin - location
-        vec_output_location = output_origin - location
-        vec_branch_location = branch_origin - location
-
-        # Функция вычисления угла между векторами
-        def calculate_angle(vec1, vec2):
-            dot_product = vec1.DotProduct(vec2)
-            norm1 = vec1.GetLength()
-            norm2 = vec2.GetLength()
-            return math.degrees(math.acos(dot_product / (norm1 * norm2)))
-
-        # Вычисляем углы
-        input_output_angle = calculate_angle(vec_input_location, vec_output_location)
-        input_branch_angle = calculate_angle(vec_input_location, vec_branch_location)
-
-        result = TeeOrientationResult(input_output_angle,
-                                      input_branch_angle,
-                                      input_connector,
-                                      output_connector,
-                                      branch_connector)
-
-        return result
-
     def get_coef_tee(self, element, system):
+        def get_tee_orientation(element, system):
+            connector_data_instances = self.get_connector_data_instances(element)
+
+            path_numbers = system.GetCriticalPathSectionNumbers()
+            critical_path_numbers = list(path_numbers)
+
+            if system.SystemType == DuctSystemType.SupplyAir:
+                critical_path_numbers.reverse()
+
+            input_connector = None  # Первый на пути следования воздуха коннектор
+            output_connector = None  # Второй на пути следования воздуха коннектор
+            branch_connector = None  # Коннектор-ответвление
+
+            passed_elements = []
+            for number in critical_path_numbers:
+                section = system.GetSectionByNumber(number)
+                elements_ids = section.GetElementIds()
+
+                for connector_data in connector_data_instances:
+                    if (connector_data.connected_element.Id in elements_ids and
+                            connector_data.connected_element.Id not in passed_elements):
+                        passed_elements.append(connector_data.connected_element.Id)
+
+                        if input_connector is None:
+                            input_connector = connector_data
+                        else:
+                            output_connector = connector_data
+
+                if input_connector is not None and output_connector is not None:
+                    break  # Нет смысла продолжать перебор сегментов, если нужный тройник уже обработан
+
+            # Определяем branch_connector как оставшийся коннектор
+            for connector_data in connector_data_instances:
+                if connector_data != input_connector and connector_data != output_connector:
+                    branch_connector = connector_data
+                    break
+
+            # Получаем координаты центров соединений
+            input_origin = input_connector.connector_element.Origin
+            output_origin = output_connector.connector_element.Origin
+            branch_origin = branch_connector.connector_element.Origin
+
+            # Получаем координату точки вставки тройника
+            location = element.Location.Point
+
+            # Создаем векторы направлений от точки вставки тройника
+            vec_input_location = input_origin - location
+            vec_output_location = output_origin - location
+            vec_branch_location = branch_origin - location
+
+            # Функция вычисления угла между векторами
+            def calculate_angle(vec1, vec2):
+                dot_product = vec1.DotProduct(vec2)
+                norm1 = vec1.GetLength()
+                norm2 = vec2.GetLength()
+                return math.degrees(math.acos(dot_product / (norm1 * norm2)))
+
+            # Вычисляем углы
+            input_output_angle = calculate_angle(vec_input_location, vec_output_location)
+            input_branch_angle = calculate_angle(vec_input_location, vec_branch_location)
+
+            result = TeeOrientationResult(input_output_angle,
+                                          input_branch_angle,
+                                          input_connector,
+                                          output_connector,
+                                          branch_connector)
+
+            return result
+
         def get_tee_type_name(system_type, tee_orientation, shape):
             flow_90_degree = tee_orientation.input_output_angle < 100
             branch_90_degree = tee_orientation.input_branch_angle < 100
@@ -658,7 +539,7 @@ class Aerodinamiccoefficientcalculator:
 
             return Lo, Lp, Lc, fo, fc, fp
 
-        tee_orientation = self.get_tee_orientation(element, system)
+        tee_orientation = get_tee_orientation(element, system)
         system_type = tee_orientation.input_connector_data.connector_element.DuctSystemType
         shape = tee_orientation.input_connector_data.shape
 
