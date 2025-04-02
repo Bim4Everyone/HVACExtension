@@ -76,13 +76,31 @@ class ConnectorData:
                     reference.Owner.Category.IsId(BuiltInCategory.OST_MechanicalEquipment)):
                 self.connected_element = reference.Owner
 
-
-
-
+class TeeOrientationResult:
+    def __init__(self,
+                 input_output_angle,
+                 input_branch_angle,
+                 input_connector_data,
+                 output_connector_data,
+                 branch_connector_data):
+        self.input_output_angle = input_output_angle
+        self.input_branch_angle = input_branch_angle
+        self.input_connector_data = input_connector_data
+        self.output_connector_data = output_connector_data
+        self.branch_connector_data = branch_connector_data
 
 class Aerodinamiccoefficientcalculator:
     LOSS_GUID_CONST = "46245996-eebb-4536-ac17-9c1cd917d8cf" # Гуид для удельных потерь
     COEFF_GUID_CONST = "5a598293-1504-46cc-a9c0-de55c82848b9" # Это - Гуид "Определенный коэффициент". Вроде бы одинаков всегда
+    TEE_SUPPLY_PASS_NAME = 'Тройник на проход нагнетание круглый/прямоуг'
+    TEE_SUPPLY_BRANCH_ROUND_NAME = 'Тройник нагнетание ответвление круглый'
+    TEE_SUPPLY_BRANCH_RECT_NAME = 'Тройник нагнетание ответвление прямоугольный'
+    TEE_SUPPLY_SEPARATION_NAME = 'Тройник симметричный разделение потока нагнетание'
+    TEE_EXHAUST_PASS_ROUND_NAME ='Тройник всасывание на проход круглый'
+    TEE_EXHAUST_PASS_RECT_NAME = 'Тройник всасывание на проход прямоугольный'
+    TEE_EXHAUST_BRANCH_ROUND_NAME = 'Тройник всасывание ответвление круглый'
+    TEE_EXHAUST_BRANCH_RECT_NAME = 'Тройник всасывание ответвление прямоугольный'
+    TEE_EXHAUST_MERGER_NAME = 'Тройник симметричный слияние'
 
     doc = None
     uidoc = None
@@ -411,7 +429,8 @@ class Aerodinamiccoefficientcalculator:
             elements_ids = section.GetElementIds()
 
             for connector_data in connector_data_instances:
-                if connector_data.connected_element.Id in elements_ids and connector_data.connected_element.Id not in passed_elements:
+                if (connector_data.connected_element.Id in elements_ids and
+                        connector_data.connected_element.Id not in passed_elements):
                     passed_elements.append(connector_data.connected_element.Id)
 
                     if input_connector is None:
@@ -452,109 +471,152 @@ class Aerodinamiccoefficientcalculator:
         input_output_angle = calculate_angle(vec_input_location, vec_output_location)
         input_branch_angle = calculate_angle(vec_input_location, vec_branch_location)
 
-        print('Инпут-аутпут: ' + str(input_output_angle))
-        print('Инпут-бранч: ' + str(input_branch_angle))
+        result = TeeOrientationResult(input_output_angle,
+                                      input_branch_angle,
+                                      input_connector,
+                                      output_connector,
+                                      branch_connector)
+
+        return result
+
+    def get_tee_xi(self, tee_type_name, Lo, Lp, Lc, fp, fo, fc):
+        '''
+
+        Расчетные формулы:
+
+        Тройник на проход нагнетание круглый/прямоуг.
+        0,45*(fп/(1-lо))^2+(0,6-1,7*fп)*fп/(1-lо)-(0,25-0,9*fп^2)+0,19*(1-lо)/fп
+        ВСН прил.1 формула 3
+        Посохин прил.2
 
 
-    def get_coef_tee(self, element):
-        try:
-            conSet = self.get_connectors(element)
+        Тройник нагнетание ответвление круглый:
+        (fо/lо)^2-0,58*fо/lо+0,54+0,025*lо/fо
+        ВСН прил.1 формула 4
 
-            type = self.getTeeOrient(element)
 
-            try:
-                type = self.getTeeOrient(element)
-            except Exception:
-                type = 'Ошибка'
+        Тройник нагнетание ответвление прямоугольный:
+        (fо/lо)^2-0,42*fо/lо+0,81-0,06*lо/fо
+        ВСН прил.1 формула 9
 
-            try:
-                S1 = conSet[0].Height * 0.3048 * conSet[0].Width * 0.3048
-            except:
-                S1 = 3.14 * 0.3048 * 0.3048 * conSet[0].Radius ** 2
-            try:
-                S2 = conSet[1].Height * 0.3048 * conSet[1].Width * 0.3048
-            except:
-                S2 = 3.14 * 0.3048 * 0.3048 * conSet[1].Radius ** 2
-            try:
-                S3 = conSet[2].Height * 0.3048 * conSet[2].Width * 0.3048
-            except:
-                S3 = 3.14 * 0.3048 * 0.3048 * conSet[2].Radius ** 2
 
-            if type != 'Ошибка':
-                v1 = conSet[0].Flow * 101.94
-                v2 = conSet[1].Flow * 101.94
-                v3 = conSet[2].Flow * 101.94
-                Vset = [v1, v2, v3]
-                Lc = max(Vset)
-                Vset.remove(Lc)
+        Тройник симметричный разделение потока нагнетание
+        1+0,3*(lо/fо)^2
+        Идельчик диаграмма 7-29, стр. 379
 
-                if Vset[0] > Vset[1]:
-                    Lo = Vset[1]
+
+        Тройник всасывание на проход круглый/прямоугольный
+        ((1-fп^0,5)+0,5*lо+0,05)*(1,7+(1/(2*fо)-1)*lо-((fп+fо)*lо)^0,5)*(fп/(1-lо))^2 - круглый
+        Посохин прил.2
+        ВСН прил.1 формула 1
+
+        (fп/(1-lо))^2*((1-fп)+0,5*lо+0,05)*(1,5+(1/(2*fо)-1)*lо-((fп+fо)*lо)^0,5) - прямоугольный
+        Посохин прил.2
+        ВСН прил.1 формула 7
+
+        Тройник всасывание ответвление круглый
+        (-0,7-6,05*(1-fп)^3)*(fо/lо)^2+(1,32+3,23*(1-fп)^2)*fо/lо+(0,5+0,42*fп)-0,167*lо/fо
+        ВСН прил.1 формула 2
+
+        Тройник всасывание ответвление прямоугольный
+        (fо/lо)^2*(4,1*(fп/fо)^1,25*lо^1,5*(fп+fо)^(0,3*(fо/fп)^0,5/lо-2)-0,5*fп/fо)
+        Посохин прил.2
+
+        '''
+
+        fp_normed = fp / fc  # Нормированная площадь прохода
+        fo_normed = fo / fc  # Нормированная площадь ответвления
+        Lo_normed = Lo / Lc  # Нормированый расход в ответвлении
+        Lp_normed = Lp / Lc  # Нормированный расход в проходе
+
+        vo_normed = Lo_normed / fo_normed
+        vp_normed = Lp_normed / fp_normed
+        fn_sqrt = math.sqrt(fp_normed)
+
+        if tee_type_name == self.TEE_SUPPLY_PASS_NAME:
+            return (0.45 * (vo_normed / (1 - Lo_normed)) ** 2
+                    + (0.6 - 1.7 * vo_normed) * (vo_normed / (1 - Lo_normed))
+                    - (0.25 - 0.9 * vo_normed ** 2)
+                    + 0.19 * (1 - Lo_normed) / vo_normed)
+
+        if tee_type_name == self.TEE_SUPPLY_BRANCH_ROUND_NAME:
+            return (fo_normed ** 2 - 0.58 * fo_normed + 0.54 + 0.025 * (Lo_normed / fo_normed))
+
+        if tee_type_name == self.TEE_SUPPLY_BRANCH_RECT_NAME:
+            return (fo_normed ** 2 - 0.42 * fo_normed + 0.81 - 0.06 * (Lo_normed / fo_normed) ** 2)
+
+        if tee_type_name == self.TEE_SUPPLY_SEPARATION_NAME:
+            return 1 + 0.3 * (Lo_normed / fo_normed) ** 2
+
+        if tee_type_name == self.TEE_EXHAUST_PASS_ROUND_NAME:
+            return ((1 - fn_sqrt) + 0.5 * Lo_normed + 0.05 * (
+                        1.7 + (1 / (2 * fo_normed) - 1) * Lo_normed - math.sqrt((fp_normed + fo_normed) * Lo_normed))
+                    * ((fp_normed / (1 - Lo_normed)) ** 2))
+
+        if tee_type_name == self.TEE_EXHAUST_PASS_RECT_NAME:
+            return ((1 - fn_sqrt) + 0.5 * Lo_normed + 0.05 * (
+                        1.5 + (1 / (2 * fo_normed) - 1) * Lo_normed - math.sqrt((fp_normed + fo_normed) * Lo_normed))
+                    * ((fp_normed / (1 - Lo_normed)) ** 2))
+
+        if tee_type_name == self.TEE_EXHAUST_BRANCH_ROUND_NAME:
+            return ((-0.7 - 6.05 * (1 - fp_normed) ** 3) * (fo_normed / Lo_normed) ** 2
+                    + (1.32 + 3.23 * (1 - fp_normed) ** 2) * (fo_normed / Lo_normed)
+                    + (0.5 + 0.42 * fp_normed) - 0.167 * (Lo_normed / fo_normed))
+
+        if tee_type_name == self.TEE_EXHAUST_BRANCH_RECT_NAME:
+            term_a = (fc / Lo_normed) ** 2
+            term_b = 4.1 * (fp_normed / fo_normed) ** 1.25 * Lo_normed ** 1.5
+            term_c = (fp_normed + fo_normed) ** (0.3 / Lo_normed)
+            term_d = (fo_normed / fp_normed) ** 0.5
+            term_e = -0.5 * (fp_normed / fo_normed)
+            return term_a * (term_b * term_c * term_d ** (-2) + term_e)
+
+        if tee_type_name == self.TEE_EXHAUST_MERGER_NAME:
+            if fo <= 0.35:
+                return 1
+            else:
+                if Lo/ Lc <= 0.4:
+                    0.9 * (1 - Lo / Lc) *  (1+(1/fo)^2+3*(1/fo)^2*((Lo/Lc)^2-(Lo/Lc)))
                 else:
-                    Lo = Vset[0]
+                    0.55 * (1+(1/fo)^2+3*(1/fo)^2*((Lo/Lc)^2-(Lo/Lc)))
 
-                Fc = max([S1, S2, S3])
-                Fo = min([S1, S2, S3])
+        return None  # Если тип тройника не найден
 
-                Fp = Fo
+    def get_tee_type_name(self, system_type, tee_orientation):
+        if system_type == DuctSystemType.SupplyAir:
+            if tee_orientation.input_branch_angle <= 100 and tee_orientation.input_output_angle:
+                return
 
-                f0 = Fo / Fc
-                l0 = Lo / Lc
+    def get_coef_tee(self, element, system):
+        tee_orientation = self.get_tee_orientation(element, system)
+        system_type = tee_orientation.input_connector_data.connector_element.DuctSystemType
 
-                fp = Fp / Fc
 
-                if f0 < 0.351:
-                    koef_1 = 0.8 * l0
-                elif l0 < 0.61:
-                    koef_1 = 0.5
-                else:
-                    koef_1 = 0.8 * l0
+        print(element.Id)
+        Lo = 200 # Расход воздуха в ответвлении, в формулах значит Lо
+        Lp = 200 # Расход воздуха в проходе, в формулах значит Lп
+        Lc = 200 # Расход воздуха в стволе, в формулах значит Lс
 
-                if f0 < 0.351:
-                    koef_2 = 1
-                elif l0 < 0.41:
-                    koef_2 = 0.9 * (1 - l0)
-                else:
-                    koef_2 = 0.55
+        fp = 0.5 # Площадь сечения прохода, в формулах fп
+        fo = 0.5 # площадь сечения ответвления, в формулах fo
+        fc = 0.5 # Площадь сечения ствола, в формулах fc
 
-                if f0 < 0.41:
-                    koef_3 = 0.4
-                elif l0 < 0.51:
-                    koef_3 = 0.5
-                else:
-                    koef_3 = 2 * l0 - 1
+        fp_normed = fp / fc # Нормированная площадь прохода
+        fo_normed = fo / fc # Нормированная площадь ответвления
+        Lo_normed = Lo / Lc # Нормировнный расход в ответвлении
+        Lp_normed = Lp / Lc # Нормированный расход в проходе
 
-                if f0 < 0.36:
-                    if l0 < 0.41:
-                        koef_4 = 1.1 - 0.7 * l0
-                    else:
-                        koef_4 = 0.85
-                else:
-                    if l0 < 0.61:
-                        koef_4 = 1 - 0.6 * l0
-                    else:
-                        koef_4 = 0.6
+        vo_normed = Lo_normed / fo_normed
+        vp_normed = Lp_normed / fp_normed
 
-            if type == 1:
-                coefficient = (1 - (1 - l0) ** 2 - (1.4 - l0) * l0 ** 2) / ((1 - l0) ** 2 / fp ** 2)
 
-            if type == 2:
-                coefficient = koef_2 * (1 + (l0 / f0) ** 2 - 2 * (1 - l0) ** 2) / (l0 / f0) ** 2
 
-            if type == 3:
-                coefficient = koef_3 * l0 ** 2 / ((1 - l0) ** 2 / Fp ** 2)
+        if tee_orientation.input_connector_data.connector_element.DuctSystemType == DuctSystemType.SupplyAir:
+            print(1)
+        else:
+            print(2)
 
-            if type == 4:
-                coefficient = (koef_4 * (1 + (l0 / f0) ** 2)) / (l0 / f0) ** 2
-
-            if type == 'Ошибка':
-                coefficient = 0
-        except Exception:
-            return 0.25
-
-        if coefficient <= 0.1:
-            return 0.25
-
+        coefficient = 1
         return coefficient
 
     def get_coef_tap_adjustable(self, element):

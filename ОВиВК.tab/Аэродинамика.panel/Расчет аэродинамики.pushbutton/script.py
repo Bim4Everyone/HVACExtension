@@ -209,8 +209,7 @@ def get_local_coefficient(fitting, system):
     elif part_type == fitting.MEPModel.PartType.Transition:
         local_section_coefficient = calculator.get_coef_transition(fitting)
     elif part_type == fitting.MEPModel.PartType.Tee:
-        test = calculator.get_tee_orientation(fitting, system)
-        local_section_coefficient = calculator.get_coef_tee(fitting)
+        local_section_coefficient = calculator.get_coef_tee(fitting, system)
     elif part_type == fitting.MEPModel.PartType.TapAdjustable:
         local_section_coefficient = calculator.get_coef_tap_adjustable(fitting)
     else:
