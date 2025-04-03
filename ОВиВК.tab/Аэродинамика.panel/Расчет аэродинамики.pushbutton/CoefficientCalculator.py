@@ -59,7 +59,7 @@ class ConnectorData:
         elif connector.Shape == ConnectorProfileType.Rectangular:
             self.height = UnitUtils.ConvertFromInternalUnits(connector.Height, UnitTypeId.Millimeters)
             self.width = UnitUtils.ConvertFromInternalUnits(connector.Width, UnitTypeId.Millimeters)
-            self.area = self.height * self.width
+            self.area = self.height/1000 * self.width/1000
         else:
             forms.alert(
                 "Не предусмотрена обработка овальных коннекторов.",
@@ -396,7 +396,7 @@ class Aerodinamiccoefficientcalculator:
                 if flow_90_degree and not branch_90_degree:
                     return self.TEE_EXHAUST_MERGER_NAME
 
-        def get_tee_xi(tee_type_name, Lo, Lp, Lc, fp, fo, fc):
+        def calculate_tee_coefficient(tee_type_name, Lo, Lp, Lc, fp, fo, fc):
             '''
 
             Расчетные формулы:
@@ -555,7 +555,7 @@ class Aerodinamiccoefficientcalculator:
 
         Lo, Lp, Lc, fo, fc, fp = get_tee_variables(tee_orientation, tee_type_name)
 
-        coefficient = get_tee_xi(tee_type_name, Lo, Lp, Lc, fp, fo, fc)
+        coefficient = calculate_tee_coefficient(tee_type_name, Lo, Lp, Lc, fp, fo, fc)
 
         return coefficient
 
