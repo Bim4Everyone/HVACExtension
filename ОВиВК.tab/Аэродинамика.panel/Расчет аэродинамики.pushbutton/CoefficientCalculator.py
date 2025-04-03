@@ -223,75 +223,189 @@ class Aerodinamiccoefficientcalculator:
 
         return coefficient
 
-    def get_coef_transition(self, element):
-        a = self.get_connectors(element)
-        try:
-            S1 = a[0].Height * 304.8 * a[0].Width * 304.8
-        except:
-            S1 = 3.14 * 304.8 * 304.8 * a[0].Radius ** 2
-        try:
-            S2 = a[1].Height * 304.8 * a[1].Width * 304.8
-        except:
-            S2 = 3.14 * 304.8 * 304.8 * a[1].Radius ** 2
+    def get_coef_transition(self, element, system):
+        '''
+        Здесь используются формулы из
+        Краснов Ю.С. Системы вентиляции и кондиционирования Прил. 25.1
+        '''
 
-        # проверяем в какую сторону дует воздух чтоб выяснить расширение это или заужение
-        if str(a[0].Direction) == "In":
-            if S1 > S2:
-                transition = 'Заужение'
-                F0 = S2
-                F1 = S1
-            else:
-                transition = 'Расширение'
-                F0 = S1
-                F1 = S2
-        if str(a[0].Direction) == "Out":
-            if S1 < S2:
-                transition = 'Заужение'
-                F0 = S1
-                F1 = S2
-            else:
-                transition = 'Расширение'
-                F0 = S2
-                F1 = S1
+        def get_transition_variables(element, system):
+            connector_data_instances = self.get_connector_data_instances(element)
 
-        F = F0 / F1
+            path_numbers = system.GetCriticalPathSectionNumbers()
+            critical_path_numbers = list(path_numbers)
 
-        if transition == 'Расширение':
-            if F < 0.11:
-                coefficient = 0.81
-            elif F < 0.21:
-                coefficient = 0.64
-            elif F < 0.31:
-                coefficient = 0.5
-            elif F < 0.41:
-                coefficient = 0.36
-            elif F < 0.51:
-                coefficient = 0.26
-            elif F < 0.61:
-                coefficient = 0.16
-            elif F < 0.71:
-                coefficient = 0.09
-            else:
-                coefficient = 0.04
-        if transition == 'Заужение':
-            if F < 0.11:
-                coefficient = 0.45
-            elif F < 0.21:
-                coefficient = 0.4
-            elif F < 0.31:
-                coefficient = 0.35
-            elif F < 0.41:
-                coefficient = 0.3
-            elif F < 0.51:
-                coefficient = 0.25
-            elif F < 0.61:
-                coefficient = 0.2
-            elif F < 0.71:
-                coefficient = 0.15
-            else:
-                coefficient = 0.1
+            if system.SystemType == DuctSystemType.SupplyAir:
+                critical_path_numbers.reverse()
 
-        return coefficient
+            input_connector = None  # Первый на пути следования воздуха коннектор
+            output_connector = None  # Второй на пути следования воздуха коннектор
+
+            passed_elements = []
+            for number in critical_path_numbers:
+                section = system.GetSectionByNumber(number)
+                elements_ids = section.GetElementIds()
+
+                for connector_data in connector_data_instances:
+                    if (connector_data.connected_element.Id in elements_ids and
+                            connector_data.connected_element.Id not in passed_elements):
+                        passed_elements.append(connector_data.connected_element.Id)
+
+                        if input_connector is None:
+                            input_connector = connector_data
+                        else:
+                            output_connector = connector_data
+
+                if input_connector is not None and output_connector is not None:
+                    break  # Нет смысла продолжать перебор сегментов, если нужный тройник уже обработан
+
+            input_origin = input_connector.connector_element.Origin
+            output_origin = output_connector.connector_element.Origin
+
+            if input_connector.radius:
+                input_width = input_connector.radius * 2
+                output_width = output_connector.radius * 2
+            else:
+                input_width = input_connector.width
+                output_width = output_connector.width
+
+            transition_len = input_origin.DistanceTo(output_origin)
+            transition_len= UnitUtils.ConvertFromInternalUnits(transition_len, UnitTypeId.Millimeters)
+
+            R_in = input_width / 2
+            R_out = output_width / 2
+
+            transition_angle = math.atan(abs(R_in - R_out) / transition_len)
+            transition_angle_degrees = math.degrees(transition_angle)
+            print(transition_angle_degrees)
+
+            return input_connector, output_connector, transition_len, transition_angle_degrees
+
+        (input_connector,
+         output_connector,
+         transition_len,
+         transition_angle) = get_transition_variables(element, system)
+
+        # Конфузор
+        if input_connector.area > output_connector.area:
+            if output_connector.radius:
+                diameter = output_connector.radius * 2
+            else:
+                width = output_connector.width
+                height = output_connector.height
+                diameter = (4 * (width * height)) / (2 * (width + height))  # Эквивалентный диаметр
+            len_per_diameter = transition_len / diameter
+
+            if len_per_diameter <= 1:
+                if transition_angle <= 10:
+                    return 0.41
+                elif transition_angle <=20:
+                    return 0.34
+                elif transition_angle <= 30:
+                    return 0.27
+                else:
+                    return 0.24
+            if len_per_diameter <=0.15:
+                if transition_angle <= 10:
+                    return 0.39
+                elif transition_angle <=20:
+                    return 0.29
+                elif transition_angle <= 30:
+                    return 0.22
+                else:
+                    return 0.18
+            else:
+                if transition_angle <= 10:
+                    return 0.29
+                elif transition_angle <=20:
+                    return 0.20
+                elif transition_angle <= 30:
+                    return 0.15
+                else:
+                    return 0.13
+        #F = F0 / F1
+        # диффузор
+        if input_connector.area < output_connector.area:
+            F = input_connector.area / output_connector.area
+
+            if input_connector.radius:
+                if F <= 0.2:
+                    if transition_angle <=16:
+                        return 0.19
+                    elif transition_angle <=24:
+                        return 0.32
+                    elif transition_angle <= 30:
+                        return 0.43
+                    else:
+                        return 0.61
+                elif F <= 0.25:
+                    if transition_angle <=16:
+                        return 0.17
+                    elif transition_angle <=24:
+                        return 0.28
+                    elif transition_angle <= 30:
+                        return 0.37
+                    else:
+                        return 0.49
+                elif F <= 0.4:
+                    if transition_angle <=16:
+                        return 0.12
+                    elif transition_angle <=24:
+                        return 0.19
+                    elif transition_angle <= 30:
+                        return 0.25
+                    else:
+                        return 0.35
+                else:
+                    if transition_angle <=16:
+                        return 0.07
+                    elif transition_angle <=24:
+                        return 0.1
+                    elif transition_angle <= 30:
+                        return 0.12
+                    else:
+                        return 0.17
+            else:
+                if F <= 0.2:
+                    if transition_angle <=20:
+                        return 0.31
+                    elif transition_angle <=24:
+                        return 0.4
+                    elif transition_angle <= 32:
+                        return 0.59
+                    else:
+                        return 0.69
+                elif F <= 0.25:
+                    if transition_angle <=20:
+                        return 0.27
+                    elif transition_angle <=24:
+                        return 0.35
+                    elif transition_angle <= 32:
+                        return 0.52
+                    else:
+                        return 0.61
+                elif F <= 0.4:
+                    if transition_angle <=20:
+                        return 0.18
+                    elif transition_angle <=24:
+                        return 0.23
+                    elif transition_angle <= 32:
+                        return 0.34
+                    else:
+                        return 0.4
+                else:
+                    print(transition_angle)
+                    print(F)
+                    if transition_angle <=20:
+                        return 0.09
+                    elif transition_angle <=24:
+                        return 0.11
+                    elif transition_angle <= 32:
+                        return 0.16
+                    else:
+                        return 0.19
+
+        return 0 # Для случаев когда переход оказался с равными коннекторами
 
     def get_coef_tee(self, element, system):
         def get_tee_orientation(element, system):

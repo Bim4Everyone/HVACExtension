@@ -207,7 +207,7 @@ def get_local_coefficient(fitting, system):
     if part_type == fitting.MEPModel.PartType.Elbow:
         local_section_coefficient = calculator.get_coef_elbow(fitting)
     elif part_type == fitting.MEPModel.PartType.Transition:
-        local_section_coefficient = calculator.get_coef_transition(fitting)
+        local_section_coefficient = calculator.get_coef_transition(fitting, system)
     elif part_type == fitting.MEPModel.PartType.Tee:
         local_section_coefficient = calculator.get_coef_tee(fitting, system)
     elif part_type == fitting.MEPModel.PartType.TapAdjustable:
@@ -528,7 +528,8 @@ def script_execute(plugin_logger):
             segment_elements = prepare_section_elements(section)
 
             for element in segment_elements:
-                if element.Category.IsId(BuiltInCategory.OST_DuctFitting) and element.MEPModel.PartType == element.MEPModel.PartType.Cap:
+                if element.Category.IsId(BuiltInCategory.OST_DuctFitting) and \
+                        element.MEPModel.PartType == element.MEPModel.PartType.Cap:
                     continue
                 if element.Category.IsId(BuiltInCategory.OST_DuctCurves) and get_flow(section, element) == 0:
                     continue
