@@ -629,7 +629,80 @@ class AerodinamicCoefficientCalculator:
 
         return coefficient
 
-    def get_tap_adjustable_coefficient(self, element):
+    def get_all_sections_in_system(self, mep_system):
+        """Возвращает список всех секций, к которым относятся элементы системы MEP"""
+
+        # Получаем все элементы системы
+        elements = mep_system.DuctNetwork
+
+        # Множество для хранения уникальных номеров секций
+        section_numbers = set()
+
+        # Получаем возможные номера секций
+        all_section_numbers = list(mep_system.GetCriticalPathSectionNumbers())  # Критический путь
+
+        # Перебираем элементы системы и проверяем, в каких секциях они есть
+        for elem in elements:
+            for section_number in all_section_numbers:
+                section = mep_system.GetSectionByNumber(section_number)
+                if not section:
+                    continue
+
+                # Если элемент есть в секции — добавляем ее номер в список
+                if elem.Id in section.GetElementIds():
+                    section_numbers.add(section_number)
+
+        return sorted(section_numbers)
+
+    def get_element_section_number(self, element, section_numbers, system, flow):
+        """ Находит номер секции в MEPSystem, к которой принадлежит элемент """
+
+
+        for section_number in section_numbers:
+            section = system.GetSectionByNumber(section_number)
+            if not section:
+                continue  # Пропускаем, если секция не найдена
+
+            # Получаем элементы в секции
+            section_elements = section.GetElementIds()
+
+            # Проверяем, есть ли наш элемент в этой секции
+            # print("section.Flow " + str(section.Flow))
+            # print("flow " + str(flow))
+            section_flow = UnitUtils.ConvertFromInternalUnits(section.Flow, UnitTypeId.CubicMetersPerHour)
+            if element.Id in section_elements and section_flow == flow:
+                return section_number  # Возвращаем найденный номер секции
+
+        return None  # Если элемент не найден ни в одной секции
+
+    def get_tap_adjustable_coefficient(self, element, system):
+        connector_data_instances = self.get_connector_data_instances(element)
+
+        def tap_is_elbow(system):
+            connector_flow = connector_data_instances[0].flow
+            numbers = self.get_all_sections_in_system(system)
+            element_1 = connector_data_instances[0].connected_element
+            element_2 = connector_data_instances[1].connected_element
+            elbow_section_1 = self.get_element_section_number(element_1, numbers, system, connector_flow)
+            elbow_section_2 = self.get_element_section_number(element_2, numbers, system, connector_flow)
+
+            if elbow_section_1 is None or elbow_section_2 is None:
+                return False
+
+            return True
+
+        # connector_flow = connector_data_instances[0].flow
+        # numbers = self.get_all_sections_in_system(system)
+        # element_1 = connector_data_instances[0].connected_element
+        # print(self.get_element_section_number(element_1, numbers, system, connector_flow))
+
+        print(tap_is_elbow(system))
+
+        # if tap_is_elbow(element):
+        #     print(1)
+        # else:
+        #     print(2)
+
         coefficient = 0
 
         return coefficient

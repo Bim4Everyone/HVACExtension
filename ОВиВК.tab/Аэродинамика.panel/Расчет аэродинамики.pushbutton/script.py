@@ -211,7 +211,7 @@ def get_local_coefficient(fitting, system):
     elif part_type == fitting.MEPModel.PartType.Tee:
         local_section_coefficient = calculator.get_tee_coefficient(fitting, system)
     elif part_type == fitting.MEPModel.PartType.TapAdjustable:
-        local_section_coefficient = calculator.get_tap_adjustable_coefficient(fitting)
+        local_section_coefficient = calculator.get_tap_adjustable_coefficient(fitting, system)
     else:
         local_section_coefficient = 0
 
