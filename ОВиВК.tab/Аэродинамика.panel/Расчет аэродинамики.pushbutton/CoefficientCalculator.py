@@ -52,6 +52,7 @@ class ConnectorData:
         self.shape = connector.Shape
         self.get_connected_element()
         self.flow = UnitUtils.ConvertFromInternalUnits(connector.Flow, UnitTypeId.CubicMetersPerHour)
+        self.direction = connector.Direction
 
         if connector.Shape == ConnectorProfileType.Round:
             self.radius = UnitUtils.ConvertFromInternalUnits(connector.Radius, UnitTypeId.Millimeters)
@@ -223,6 +224,73 @@ class Aerodinamiccoefficientcalculator:
 
         return coefficient
 
+    def find_input_output_connector(self, element, system):
+        connector_data_instances = self.get_connector_data_instances(element)
+
+        path_numbers = system.GetCriticalPathSectionNumbers()
+        critical_path_numbers = list(path_numbers)
+
+        if system.SystemType == DuctSystemType.SupplyAir:
+            critical_path_numbers.reverse()
+
+        input_connector = None  # Первый на пути следования воздуха коннектор
+        output_connector = None  # Второй на пути следования воздуха коннектор
+
+        # Поиск по критическому пути в системе
+        passed_elements = []
+        for number in critical_path_numbers:
+            section = system.GetSectionByNumber(number)
+            elements_ids = section.GetElementIds()
+
+            for connector_data in connector_data_instances:
+
+                if (connector_data.connected_element.Id in elements_ids and
+                        connector_data.connected_element.Id not in passed_elements):
+                    passed_elements.append(connector_data.connected_element.Id)
+
+                    if input_connector is None:
+                        input_connector = connector_data
+                    else:
+                        output_connector = connector_data
+
+            if input_connector is not None and output_connector is not None:
+                break  # Нет смысла продолжать перебор сегментов, если нужный тройник уже обработан
+
+        # Для элементов которые не найдены на критическом пути все равно нужно проверить КМС. Проверяем ориентировочно,
+        # по направлением коннекторов
+        flow_connectors = []  # Коннекторы, которые участвуют в поиске max flow
+        if input_connector is None and output_connector is None:
+            for connector_data in connector_data_instances:
+                if system.SystemType == DuctSystemType.SupplyAir:
+                    if connector_data.direction == FlowDirectionType.In:
+                        input_connector = connector_data
+                    else:
+                        # Добавляем все Out, чтоб потом выбрать с максимальным расходом
+                        flow_connectors.append(connector_data)
+
+                if system.SystemType == DuctSystemType.ExhaustAir or system.SystemType == DuctSystemType.ReturnAir:
+                    if connector_data.direction == FlowDirectionType.Out:
+                        output_connector = connector_data
+                    else:
+                        #Добавляем все In, чтоб потом выбрать с максимальным расходом
+                        flow_connectors.append(connector_data)
+
+
+            # Если мы ищем output для SupplyAir, выбираем коннектор с максимальным flow
+            if system.SystemType == DuctSystemType.SupplyAir:
+                output_connector = max(flow_connectors, key=lambda c: c.flow)
+            # Если мы ищем input для ExhaustAir/ReturnAir, выбираем коннектор с максимальным flow
+            elif system.SystemType in [DuctSystemType.ExhaustAir, DuctSystemType.ReturnAir]:
+                input_connector = max(flow_connectors, key=lambda c: c.flow)
+
+        if input_connector is None or output_connector is None:
+            forms.alert(
+                "Не найден вход-выход в элемент. " + str(element.Id),
+                "Ошибка",
+                exitscript=True)
+
+        return input_connector, output_connector
+
     def get_coef_transition(self, element, system):
         '''
         Здесь используются формулы из
@@ -230,34 +298,7 @@ class Aerodinamiccoefficientcalculator:
         '''
 
         def get_transition_variables(element, system):
-            connector_data_instances = self.get_connector_data_instances(element)
-
-            path_numbers = system.GetCriticalPathSectionNumbers()
-            critical_path_numbers = list(path_numbers)
-
-            if system.SystemType == DuctSystemType.SupplyAir:
-                critical_path_numbers.reverse()
-
-            input_connector = None  # Первый на пути следования воздуха коннектор
-            output_connector = None  # Второй на пути следования воздуха коннектор
-
-            passed_elements = []
-            for number in critical_path_numbers:
-                section = system.GetSectionByNumber(number)
-                elements_ids = section.GetElementIds()
-
-                for connector_data in connector_data_instances:
-                    if (connector_data.connected_element.Id in elements_ids and
-                            connector_data.connected_element.Id not in passed_elements):
-                        passed_elements.append(connector_data.connected_element.Id)
-
-                        if input_connector is None:
-                            input_connector = connector_data
-                        else:
-                            output_connector = connector_data
-
-                if input_connector is not None and output_connector is not None:
-                    break  # Нет смысла продолжать перебор сегментов, если нужный тройник уже обработан
+            input_connector, output_connector = self.find_input_output_connector(element, system)
 
             input_origin = input_connector.connector_element.Origin
             output_origin = output_connector.connector_element.Origin
@@ -277,9 +318,9 @@ class Aerodinamiccoefficientcalculator:
 
             transition_angle = math.atan(abs(R_in - R_out) / transition_len)
             transition_angle_degrees = math.degrees(transition_angle)
-            print(transition_angle_degrees)
 
             return input_connector, output_connector, transition_len, transition_angle_degrees
+
 
         (input_connector,
          output_connector,
@@ -394,8 +435,6 @@ class Aerodinamiccoefficientcalculator:
                     else:
                         return 0.4
                 else:
-                    print(transition_angle)
-                    print(F)
                     if transition_angle <=20:
                         return 0.09
                     elif transition_angle <=24:
@@ -417,27 +456,8 @@ class Aerodinamiccoefficientcalculator:
             if system.SystemType == DuctSystemType.SupplyAir:
                 critical_path_numbers.reverse()
 
-            input_connector = None  # Первый на пути следования воздуха коннектор
-            output_connector = None  # Второй на пути следования воздуха коннектор
+            input_connector, output_connector = self.find_input_output_connector(element, system)
             branch_connector = None  # Коннектор-ответвление
-
-            passed_elements = []
-            for number in critical_path_numbers:
-                section = system.GetSectionByNumber(number)
-                elements_ids = section.GetElementIds()
-
-                for connector_data in connector_data_instances:
-                    if (connector_data.connected_element.Id in elements_ids and
-                            connector_data.connected_element.Id not in passed_elements):
-                        passed_elements.append(connector_data.connected_element.Id)
-
-                        if input_connector is None:
-                            input_connector = connector_data
-                        else:
-                            output_connector = connector_data
-
-                if input_connector is not None and output_connector is not None:
-                    break  # Нет смысла продолжать перебор сегментов, если нужный тройник уже обработан
 
             # Определяем branch_connector как оставшийся коннектор
             for connector_data in connector_data_instances:
