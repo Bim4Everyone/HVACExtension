@@ -32,11 +32,8 @@ from collections import namedtuple
 from Autodesk.Revit.DB.ExternalService import *
 from Autodesk.Revit.DB.ExtensibleStorage import *
 from Autodesk.Revit.DB.Mechanical import *
-
-
 from dosymep.Bim4Everyone.Templates import ProjectParameters
 from dosymep.Bim4Everyone.SharedParams import SharedParamsConfig
-
 
 class ConnectorData:
     radius = None
@@ -79,7 +76,7 @@ class ConnectorData:
                     reference.Owner.Category.IsId(BuiltInCategory.OST_MechanicalEquipment)):
                 self.connected_element = reference.Owner
 
-class TeeOrientationResult:
+class TeeCharacteristic:
     def __init__(self,
                  input_output_angle,
                  input_branch_angle,
@@ -92,9 +89,11 @@ class TeeOrientationResult:
         self.output_connector_data = output_connector_data
         self.branch_connector_data = branch_connector_data
 
-class Aerodinamiccoefficientcalculator:
-    LOSS_GUID_CONST = "46245996-eebb-4536-ac17-9c1cd917d8cf" # Гуид для удельных потерь
-    COEFF_GUID_CONST = "5a598293-1504-46cc-a9c0-de55c82848b9" # Это - Гуид "Определенный коэффициент". Вроде бы одинаков всегда
+class AerodinamicCoefficientCalculator:
+    LOSS_GUID_CONST = "46245996-eebb-4536-ac17-9c1cd917d8cf"
+    # Гуид для удельных потерь
+    COEFF_GUID_CONST = "5a598293-1504-46cc-a9c0-de55c82848b9"
+    # Это - Гуид "Определенный коэффициент". Вроде бы одинаков всегда
     TEE_SUPPLY_PASS_NAME = 'Тройник на проход нагнетание круглый/прямоуг'
     TEE_SUPPLY_BRANCH_ROUND_NAME = 'Тройник нагнетание ответвление круглый'
     TEE_SUPPLY_BRANCH_RECT_NAME = 'Тройник нагнетание ответвление прямоугольный'
@@ -114,32 +113,6 @@ class Aerodinamiccoefficientcalculator:
         self.uidoc = uidoc
         self.view = view
 
-    def is_supply_air(self, connector):
-        return connector.DuctSystemType == DuctSystemType.SupplyAir
-
-    def is_exhaust_air(self, connector):
-        return (connector.DuctSystemType == DuctSystemType.ExhaustAir
-                or connector.DuctSystemType == DuctSystemType.ReturnAir)
-
-    def is_direction_inside(self, connector):
-        return connector.Direction == FlowDirectionType.In
-
-    def is_direction_bidirectonal(self, connector):
-        return connector.Direction == FlowDirectionType.Bidirectional
-
-    def is_direction_outside(self, connector):
-        return connector.Direction == FlowDirectionType.Out
-
-    def convert_to_milimeters(self, value):
-        return  UnitUtils.ConvertFromInternalUnits(
-            value,
-            UnitTypeId.Millimeters)
-
-    def convert_to_square_meters(self, value):
-        return  UnitUtils.ConvertFromInternalUnits(
-            value,
-            UnitTypeId.SquareMeters)
-
     def get_connectors(self, element):
         connectors = []
 
@@ -158,71 +131,6 @@ class Aerodinamiccoefficientcalculator:
         for connector in connectors:
             connector_data_instances.append(ConnectorData(connector))
         return connector_data_instances
-
-    def get_con_coords(self, connector):
-        a0 = connector.Origin.ToString()
-        a0 = a0.replace("(", "")
-        a0 = a0.replace(")", "")
-        a0 = a0.split(",")
-        for x in a0:
-            x = float(x)
-        return a0
-
-    def get_connector_area(self, connector):
-        if connector.Shape == ConnectorProfileType.Round:
-            radius = self.convert_to_milimeters(connector.Radius)
-            area = math.pi * radius ** 2
-        else:
-            height = self.convert_to_milimeters(connector.Height)
-            width = self.convert_to_milimeters(connector.Width)
-            area = height * width
-        return area
-
-    def get_duct_coords(self, in_tee_con, connector):
-        main_con = []
-        connector_set = connector.AllRefs.ForwardIterator()
-        while connector_set.MoveNext():
-            main_con.append(connector_set.Current)
-        duct = main_con[0].Owner
-        duct_cons = self.get_connectors(duct)
-        for duct_con in duct_cons:
-            if self.get_con_coords(duct_con) != in_tee_con:
-                in_duct_con = self.get_con_coords(duct_con)
-                return in_duct_con
-
-    def get_connector_angle(self, connector):
-        radians = connector.Angle
-        angle = radians * (180 / math.pi)
-        return angle
-
-    def get_coef_elbow(self, element):
-        '''
-        90 гр=0,25 * (b/h)^0,25 * ( 1,07 * e^(2/(2(R+b/2)/b+1)) -1 )^2
-        45 гр=0,708*КМС90гр
-
-        Непонятно откуда формула, но ее результаты сходятся с прил. 3 в ВСН и прил. 25.11 в учебнике Краснова.
-        Формулы из ВСН и Посохина похожие, но они явно с опечатками, кривой результат
-
-        '''
-
-        connector_data_element = self.get_connector_data_instances(element)[0]
-
-        if connector_data_element.shape == ConnectorProfileType.Rectangular:
-            h = connector_data_element.height
-            b = connector_data_element.width
-
-            coefficient = (0.25 * (b / h) ** 0.25) * (1.07 * math.e ** (2 / (2 * (100 + b / 2) / b + 1)) - 1) ** 2
-
-            if connector_data_element.angle <= 60:
-                coefficient = coefficient * 0.708
-
-        if connector_data_element.shape == ConnectorProfileType.Round:
-            if connector_data_element.angle > 85:
-                coefficient = 0.33
-            else:
-                coefficient = 0.18
-
-        return coefficient
 
     def find_input_output_connector(self, element, system):
         connector_data_instances = self.get_connector_data_instances(element)
@@ -291,7 +199,36 @@ class Aerodinamiccoefficientcalculator:
 
         return input_connector, output_connector
 
-    def get_coef_transition(self, element, system):
+    def get_elbow_coefficient(self, element):
+        '''
+        90 гр=0,25 * (b/h)^0,25 * ( 1,07 * e^(2/(2(R+b/2)/b+1)) -1 )^2
+        45 гр=0,708*КМС90гр
+
+        Непонятно откуда формула, но ее результаты сходятся с прил. 3 в ВСН и прил. 25.11 в учебнике Краснова.
+        Формулы из ВСН и Посохина похожие, но они явно с опечатками, кривой результат
+
+        '''
+
+        connector_data_element = self.get_connector_data_instances(element)[0]
+
+        if connector_data_element.shape == ConnectorProfileType.Rectangular:
+            h = connector_data_element.height
+            b = connector_data_element.width
+
+            coefficient = (0.25 * (b / h) ** 0.25) * (1.07 * math.e ** (2 / (2 * (100 + b / 2) / b + 1)) - 1) ** 2
+
+            if connector_data_element.angle <= 60:
+                coefficient = coefficient * 0.708
+
+        if connector_data_element.shape == ConnectorProfileType.Round:
+            if connector_data_element.angle > 85:
+                coefficient = 0.33
+            else:
+                coefficient = 0.18
+
+        return coefficient
+
+    def get_transition_coefficient(self, element, system):
         '''
         Здесь используются формулы из
         Краснов Ю.С. Системы вентиляции и кондиционирования Прил. 25.1
@@ -446,7 +383,7 @@ class Aerodinamiccoefficientcalculator:
 
         return 0 # Для случаев когда переход оказался с равными коннекторами
 
-    def get_coef_tee(self, element, system):
+    def get_tee_coefficient(self, element, system):
         def get_tee_orientation(element, system):
             connector_data_instances = self.get_connector_data_instances(element)
 
@@ -489,11 +426,11 @@ class Aerodinamiccoefficientcalculator:
             input_output_angle = calculate_angle(vec_input_location, vec_output_location)
             input_branch_angle = calculate_angle(vec_input_location, vec_branch_location)
 
-            result = TeeOrientationResult(input_output_angle,
-                                          input_branch_angle,
-                                          input_connector,
-                                          output_connector,
-                                          branch_connector)
+            result = TeeCharacteristic(input_output_angle,
+                                       input_branch_angle,
+                                       input_connector,
+                                       output_connector,
+                                       branch_connector)
 
             return result
 
@@ -529,6 +466,46 @@ class Aerodinamiccoefficientcalculator:
 
                 if flow_90_degree and not branch_90_degree:
                     return self.TEE_EXHAUST_MERGER_NAME
+
+        def get_tee_variables(tee_orientation, tee_type_name):
+            if tee_type_name == self.TEE_SUPPLY_PASS_NAME or tee_type_name == self.TEE_SUPPLY_SEPARATION_NAME:
+                Lc = tee_orientation.input_connector_data.flow
+                Lp = tee_orientation.output_connector_data.flow
+                Lo = tee_orientation.branch_connector_data.flow
+
+                fc = tee_orientation.input_connector_data.area
+                fp = tee_orientation.output_connector_data.area
+                fo = tee_orientation.branch_connector_data.area
+
+            if tee_type_name == self.TEE_SUPPLY_BRANCH_ROUND_NAME or tee_type_name == self.TEE_SUPPLY_BRANCH_RECT_NAME:
+                Lc = tee_orientation.input_connector_data.flow
+                Lp = tee_orientation.branch_connector_data.flow
+                Lo = tee_orientation.output_connector_data.flow
+
+                fc = tee_orientation.input_connector_data.area
+                fp = tee_orientation.branch_connector_data.area
+                fo = tee_orientation.output_connector_data.area
+
+            if (tee_type_name == self.TEE_EXHAUST_PASS_RECT_NAME or tee_type_name == self.TEE_EXHAUST_PASS_ROUND_NAME
+                    or tee_type_name == self.TEE_EXHAUST_MERGER_NAME):
+                Lc = tee_orientation.output_connector_data.flow
+                Lp = tee_orientation.input_connector_data.flow
+                Lo = tee_orientation.branch_connector_data.flow
+                fc = tee_orientation.output_connector_data.area
+                fp = tee_orientation.input_connector_data.area
+                fo = tee_orientation.branch_connector_data.area
+
+
+            if tee_type_name == self.TEE_EXHAUST_BRANCH_RECT_NAME or tee_type_name == self.TEE_EXHAUST_BRANCH_RECT_NAME:
+                Lc = tee_orientation.output_connector_data.flow
+                Lp = tee_orientation.branch_connector_data.flow
+                Lo = tee_orientation.input_connector_data.flow
+                fc = tee_orientation.output_connector_data.area
+                fp = tee_orientation.branch_connector_data.area
+                fo = tee_orientation.input_connector_data.area
+
+
+            return Lo, Lp, Lc, fo, fc, fp
 
         def calculate_tee_coefficient(tee_type_name, Lo, Lp, Lc, fp, fo, fc):
             '''
@@ -633,46 +610,6 @@ class Aerodinamiccoefficientcalculator:
 
             return None  # Если тип тройника не найден
 
-        def get_tee_variables(tee_orientation, tee_type_name):
-            if tee_type_name == self.TEE_SUPPLY_PASS_NAME or tee_type_name == self.TEE_SUPPLY_SEPARATION_NAME:
-                Lc = tee_orientation.input_connector_data.flow
-                Lp = tee_orientation.output_connector_data.flow
-                Lo = tee_orientation.branch_connector_data.flow
-
-                fc = tee_orientation.input_connector_data.area
-                fp = tee_orientation.output_connector_data.area
-                fo = tee_orientation.branch_connector_data.area
-
-            if tee_type_name == self.TEE_SUPPLY_BRANCH_ROUND_NAME or tee_type_name == self.TEE_SUPPLY_BRANCH_RECT_NAME:
-                Lc = tee_orientation.input_connector_data.flow
-                Lp = tee_orientation.branch_connector_data.flow
-                Lo = tee_orientation.output_connector_data.flow
-
-                fc = tee_orientation.input_connector_data.area
-                fp = tee_orientation.branch_connector_data.area
-                fo = tee_orientation.output_connector_data.area
-
-            if (tee_type_name == self.TEE_EXHAUST_PASS_RECT_NAME or tee_type_name == self.TEE_EXHAUST_PASS_ROUND_NAME
-                    or tee_type_name == self.TEE_EXHAUST_MERGER_NAME):
-                Lc = tee_orientation.output_connector_data.flow
-                Lp = tee_orientation.input_connector_data.flow
-                Lo = tee_orientation.branch_connector_data.flow
-                fc = tee_orientation.output_connector_data.area
-                fp = tee_orientation.input_connector_data.area
-                fo = tee_orientation.branch_connector_data.area
-
-
-            if tee_type_name == self.TEE_EXHAUST_BRANCH_RECT_NAME or tee_type_name == self.TEE_EXHAUST_BRANCH_RECT_NAME:
-                Lc = tee_orientation.output_connector_data.flow
-                Lp = tee_orientation.branch_connector_data.flow
-                Lo = tee_orientation.input_connector_data.flow
-                fc = tee_orientation.output_connector_data.area
-                fp = tee_orientation.branch_connector_data.area
-                fo = tee_orientation.input_connector_data.area
-
-
-            return Lo, Lp, Lc, fo, fc, fp
-
         tee_orientation = get_tee_orientation(element, system)
         system_type = tee_orientation.input_connector_data.connector_element.DuctSystemType
         shape = tee_orientation.input_connector_data.shape
@@ -682,7 +619,6 @@ class Aerodinamiccoefficientcalculator:
         # Lo  Расход воздуха в ответвлении, в формулах значит Lо
         # Lp  Расход воздуха в проходе, в формулах значит Lп
         # Lc  Расход воздуха в стволе, в формулах значит Lс
-        #
         # fp  Площадь сечения прохода, в формулах fп
         # fo  площадь сечения ответвления, в формулах fo
         # fc  Площадь сечения ствола, в формулах fc
@@ -693,92 +629,7 @@ class Aerodinamiccoefficientcalculator:
 
         return coefficient
 
-    def get_coef_tap_adjustable(self, element):
-        conSet = self.get_connectors(element)
-
-        try:
-            Fo = conSet[0].Height * 0.3048 * conSet[0].Width * 0.3048
-            form = "Прямоугольный отвод"
-        except:
-            Fo = 3.14 * 0.3048 * 0.3048 * conSet[0].Radius ** 2
-            form = "Круглый отвод"
-
-        mainCon = []
-
-        connectorSet_0 = conSet[0].AllRefs.ForwardIterator()
-
-        connectorSet_1 = conSet[1].AllRefs.ForwardIterator()
-
-        old_flow = 0
-        for con in conSet:
-            connectorSet = con.AllRefs.ForwardIterator()
-            while connectorSet.MoveNext():
-                try:
-                    flow = connectorSet.Current.Owner.GetParamValue(BuiltInParameter.RBS_DUCT_FLOW_PARAM)
-                except Exception:
-                    flow = 0
-                if flow > old_flow:
-                    mainCon = []
-                    mainCon.append(connectorSet.Current)
-                    old_flow = flow
-
-        duct = mainCon[0].Owner
-
-        ductCons = self.get_connectors(duct)
-        Flow = []
-
-        for ductCon in ductCons:
-            Flow.append(ductCon.Flow * 101.94)
-            # try:
-            #     Fc = conSet[0].Height * 0.3048 * ductCon.Width * 0.3048
-            #     Fp = Fc
-            # except:
-            #     Fc = 3.14 * 0.3048 * 0.3048 * ductCon.Radius ** 2
-            #     Fp = Fc
-
-            if ductCon.Shape == ConnectorProfileType.Round:
-                Fc = 3.14 * 0.3048 * 0.3048 * ductCon.Radius ** 2
-                Fp = Fc
-
-            elif ductCon.Shape == ConnectorProfileType.Rectangular:
-                Fc = ductCon.Height * 0.3048 * ductCon.Width * 0.3048
-                Fp = Fc
-
-        Lc = max(Flow)
-        Lo = conSet[0].Flow * 101.94
-
-        f0 = Fo / Fc
-        l0 = Lo / Lc
-        fp = Fp / Fc
-
-        if str(conSet[0].DuctSystemType) == "ExhaustAir" or str(conSet[0].DuctSystemType) == "ReturnAir":
-            if form == "Круглый отвод":
-                if Lc > Lo * 2:
-                    coefficient = ((1 - fp ** 0.5) + 0.5 * l0 + 0.05) * (
-                                1.7 + (1 / (2 * f0) - 1) * l0 - ((fp + f0) * l0) ** 0.5) * (fp / (1 - l0)) ** 2
-                else:
-                    coefficient = (-0.7 - 6.05 * (1 - fp) ** 3) * (f0 / l0) ** 2 + (1.32 + 3.23 * (1 - fp) ** 2) * f0 / l0 + (
-                                0.5 + 0.42 * fp) - 0.167 * l0 / f0
-            else:
-                if Lc > Lo * 2:
-                    coefficient = (fp / (1 - l0)) ** 2 * ((1 - fp) + 0.5 * l0 + 0.05) * (
-                                1.5 + (1 / (2 * f0) - 1) * l0 - ((fp + f0) * l0) ** 0.5)
-                else:
-                    coefficient = (f0 / l0) ** 2 * (4.1 * (fp / f0) ** 1.25 * l0 ** 1.5 * (fp + f0) ** (
-                                0.3 * (f0 / fp) ** 0.5 / l0 - 2) - 0.5 * fp / f0)
-
-        if str(conSet[0].DuctSystemType) == "SupplyAir":
-            if form == "Круглый отвод":
-                if Lc > Lo * 2:
-                    coefficient = 0.45 * (fp / (1 - l0)) ** 2 + (0.6 - 1.7 * fp) * fp / (1 - l0) - (
-                                0.25 - 0.9 * fp ** 2) + 0.19 * (1 - l0) / fp
-                else:
-                    coefficient = (f0 / l0) ** 2 - 0.58 * f0 / l0 + 0.54 + 0.025 * l0 / f0
-            else:
-                if Lc > Lo * 2:
-                    coefficient = 0.45 * (fp / (1 - l0)) ** 2 + (0.6 - 1.7 * fp) * fp / (1 - l0) - (
-                                0.25 - 0.9 * fp ** 2) + 0.19 * (1 - l0) / fp
-                else:
-                    coefficient = (f0 / l0) ** 2 - 0.42 * f0 / l0 + 0.81 - 0.06 * l0 / f0
+    def get_tap_adjustable_coefficient(self, element):
+        coefficient = 0
 
         return coefficient
