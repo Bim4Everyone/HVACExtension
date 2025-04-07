@@ -57,23 +57,6 @@ class CylinderZ:
         self.z_max = z_max
         self.len = z_max - z_min
 
-class AuditorTValve:
-    processed = False
-    level_cylinder = None
-
-    def __init__(self,
-                     connection_type,
-                     x,
-                     y,
-                     z,
-                     setting):
-        self.connection_type = connection_type
-        self.x = x
-        self.y = y
-        self.z = z
-        self.setting = setting
-
-
 class AuditorEquipment:
     processed = False
     level_cylinder = None
@@ -152,13 +135,6 @@ class ReadingRules:
     maker_index = 30
     full_name_index = 31
 
-class ValveReadingRules:
-    valve_type_index = 1
-    x_index = 3
-    y_index = 4
-    z_index = 5
-    setting_index = 17
-
 class RevitXYZmms:
     def __init__(self, x, y, z):
         self.x = x
@@ -172,44 +148,10 @@ def convert_to_mms(value):
     return result
 
 def get_setting_float_value(value):
-    if value == 'N' or value == '':
+    if value == 'N' or value == '' or value == 'Kvs':
         return 0
     else:
         return float(value)
-
-def extract_thermostatic_valve_description(file_path):
-    reading_rules = ValveReadingRules()
-
-    with codecs.open(file_path, 'r', encoding='utf-8') as file:
-        lines = file.readlines()
-
-    tvalve = []
-    i = 0
-
-    while i < len(lines):
-        if "Арматура СО на плане" in lines[i]:
-            description_start_index = i + 3
-            i = description_start_index
-
-            while i < len(lines) and lines[i].strip() != "":
-                data = lines[i].strip().split(';')
-                if data[reading_rules.valve_type_index] == "ZAWTERM":
-                    print(data[reading_rules.valve_type_index])
-                tvalve.append(AuditorEquipment(
-                    data[reading_rules.valve_type_index],
-                    float(data[reading_rules.x_index].replace(',', '.')) * 1000,
-                    float(data[reading_rules.y_index].replace(',', '.')) * 1000,
-                    float(data[reading_rules.z_index].replace(',', '.')) * 1000,
-                    get_setting_float_value(data[reading_rules.setting_index].replace(',', '.'))
-                ))
-                i += 1
-
-        i += 1
-
-    if not tvalve:
-        forms.alert("Строка 'Арматура СО на плане' не найдена в файле.", "Ошибка", exitscript=True)
-
-    return tvalve
 
 
 def extract_heating_device_description(file_path):
@@ -228,6 +170,12 @@ def extract_heating_device_description(file_path):
 
             while i < len(lines) and lines[i].strip() != "":
                 data = lines[i].strip().split(';')
+                # print(data[reading_rules.x_index].replace(',', '.'))
+                # print(data[reading_rules.y_index].replace(',', '.'))
+                # print(data[reading_rules.z_index].replace(',', '.'))
+                # print(data[reading_rules.real_power_index]),
+                # print(data[reading_rules.nominal_power_index]),
+                # print(data[reading_rules.setting_index]),
                 equipment.append(AuditorEquipment(
                     data[reading_rules.connection_type_index],
                     float(data[reading_rules.x_index].replace(',', '.')) * 1000,
@@ -237,7 +185,7 @@ def extract_heating_device_description(file_path):
                     data[reading_rules.code_index],
                     float(data[reading_rules.real_power_index]),
                     float(data[reading_rules.nominal_power_index]),
-                    float(data[reading_rules.setting_index]),
+                    get_setting_float_value(data[reading_rules.setting_index].replace(',', '.')),
                     data[reading_rules.maker_index],
                     data[reading_rules.full_name_index]
                 ))
@@ -287,11 +235,11 @@ def get_level_cylinders(ayditror_equipment_elements):
 
     cylinder_list = []
     for i in range(len(unique_z_values)):
-        z_min = unique_z_values[i]-500
+        z_min = unique_z_values[i]-250
         if i < len(unique_z_values) - 1:
             z_max = unique_z_values[i + 1]
         else:
-            z_max = z_min + 6000
+            z_max = z_min + 500
         cylinder = CylinderZ(z_min, z_max)
         cylinder_list.append(cylinder)
     return  cylinder_list
@@ -338,7 +286,6 @@ def script_execute(plugin_logger):
         sys.exit()
 
     ayditror_equipment_elements = extract_heating_device_description(filepath)
-    ayditror_tvalve_elements = extract_thermostatic_valve_description(filepath) ###
 
     # собираем высоты цилиндров в которых будем искать данные
     level_cylinders = get_level_cylinders(ayditror_equipment_elements)
