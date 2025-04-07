@@ -107,11 +107,24 @@ class AerodinamicCoefficientCalculator:
     doc = None
     uidoc = None
     view = None
+    system = None
+    all_sections_in_system = None
 
-    def __init__(self, doc, uidoc, view):
+    def __init__(self, doc, uidoc, view, system):
         self.doc = doc
         self.uidoc = uidoc
         self.view = view
+        self.system = system
+
+        path_numbers = system.GetCriticalPathSectionNumbers()
+        self.critical_path_numbers = list(path_numbers)
+
+        if system.SystemType == DuctSystemType.SupplyAir:
+            self.critical_path_numbers.reverse()
+
+        self.all_sections_in_system = self.get_all_sections_in_system(system)
+
+
 
     def get_connectors(self, element):
         connectors = []
@@ -657,7 +670,6 @@ class AerodinamicCoefficientCalculator:
     def get_element_section_number(self, element, section_numbers, system, flow):
         """ Находит номер секции в MEPSystem, к которой принадлежит элемент """
 
-
         for section_number in section_numbers:
             section = system.GetSectionByNumber(section_number)
             if not section:
@@ -666,9 +678,6 @@ class AerodinamicCoefficientCalculator:
             # Получаем элементы в секции
             section_elements = section.GetElementIds()
 
-            # Проверяем, есть ли наш элемент в этой секции
-            # print("section.Flow " + str(section.Flow))
-            # print("flow " + str(flow))
             section_flow = UnitUtils.ConvertFromInternalUnits(section.Flow, UnitTypeId.CubicMetersPerHour)
             if element.Id in section_elements and section_flow == flow:
                 return section_number  # Возвращаем найденный номер секции
@@ -691,17 +700,7 @@ class AerodinamicCoefficientCalculator:
 
             return True
 
-        # connector_flow = connector_data_instances[0].flow
-        # numbers = self.get_all_sections_in_system(system)
-        # element_1 = connector_data_instances[0].connected_element
-        # print(self.get_element_section_number(element_1, numbers, system, connector_flow))
-
         print(tap_is_elbow(system))
-
-        # if tap_is_elbow(element):
-        #     print(1)
-        # else:
-        #     print(2)
 
         coefficient = 0
 
