@@ -121,6 +121,32 @@ class AuditorEquipment:
             if level_cylinder.z_min <= self.z <= level_cylinder.z_max:
                 self.level_cylinder = level_cylinder
 
+    def print_debug_info(self, revit_equipment,
+                         integer_id,
+                         distance,
+                         distance_to_bb_center,
+                         distance_to_location_center,
+                         radius,
+                         revit_coords
+                         ):
+        '''
+        self.print_debug_info(revit_equipment, 2335627, distance,
+        distance_to_bb_center, distance_to_location_center, radius, revit_coords) - шпаргалка для вызова дебага
+        в расчете, вставлять перед return distance <= radius
+        '''
+        if revit_equipment.Id.IntegerValue == integer_id:
+            if distance <= radius:
+                print('__Характеристика элемента__:')
+                print('element_id: ' + str(revit_equipment.Id))
+                print('distance: ' + str(distance))
+                print('distance_to_bb_center: ' + str(distance_to_bb_center))
+                print('distance_to_location_center: ' + str(distance_to_location_center))
+                print('__Данные для расчета по z__:')
+                print('level_cilinder_z_min ' + str(self.level_cylinder.z_min))
+                print('level_cilinder_z_max ' + str(self.level_cylinder.z_max))
+                print('revit_equipment_z ' + str(revit_coords.z))
+                print('_________________________')
+
 
 class ReadingRules:
     connection_type_index = 2
@@ -170,12 +196,6 @@ def extract_heating_device_description(file_path):
 
             while i < len(lines) and lines[i].strip() != "":
                 data = lines[i].strip().split(';')
-                # print(data[reading_rules.x_index].replace(',', '.'))
-                # print(data[reading_rules.y_index].replace(',', '.'))
-                # print(data[reading_rules.z_index].replace(',', '.'))
-                # print(data[reading_rules.real_power_index]),
-                # print(data[reading_rules.nominal_power_index]),
-                # print(data[reading_rules.setting_index]),
                 equipment.append(AuditorEquipment(
                     data[reading_rules.connection_type_index],
                     float(data[reading_rules.x_index].replace(',', '.')) * 1000,
@@ -227,6 +247,10 @@ def get_bb_center(bb):
     return centroid
 
 def get_level_cylinders(ayditror_equipment_elements):
+    '''
+    Формирование цилиндров идет по низу аудитор-оборудования, которое выше отметок уровней в ревите. Соответственно,
+    для попадания отметок элементов ревита в эти цилиндры мы понижаем низ и верх цилиндров на небольшую величину
+    '''
     unique_z_values = set()
     for ayditor_equipment in ayditror_equipment_elements:
         unique_z_values.add(ayditor_equipment.z)
@@ -235,11 +259,16 @@ def get_level_cylinders(ayditror_equipment_elements):
 
     cylinder_list = []
     for i in range(len(unique_z_values)):
-        z_min = unique_z_values[i]-250
+        print('исходная z_min: ' + str(unique_z_values[i]))
+        z_min = unique_z_values[i] - 250
         if i < len(unique_z_values) - 1:
-            z_max = unique_z_values[i + 1]
+            z_max = unique_z_values[i + 1] - 250
         else:
-            z_max = z_min + 500
+            z_max = z_min + 2500
+
+        print('z_min: '+ str(z_min))
+        print('z_max: '+ str(z_max))
+        print('___________________________')
         cylinder = CylinderZ(z_min, z_max)
         cylinder_list.append(cylinder)
     return  cylinder_list
