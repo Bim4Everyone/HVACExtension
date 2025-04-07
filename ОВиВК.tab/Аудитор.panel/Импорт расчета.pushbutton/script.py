@@ -259,16 +259,12 @@ def get_level_cylinders(ayditror_equipment_elements):
 
     cylinder_list = []
     for i in range(len(unique_z_values)):
-        print('исходная z_min: ' + str(unique_z_values[i]))
         z_min = unique_z_values[i] - 250
         if i < len(unique_z_values) - 1:
             z_max = unique_z_values[i + 1] - 250
         else:
             z_max = z_min + 2500
 
-        print('z_min: '+ str(z_min))
-        print('z_max: '+ str(z_max))
-        print('___________________________')
         cylinder = CylinderZ(z_min, z_max)
         cylinder_list.append(cylinder)
     return  cylinder_list
