@@ -122,7 +122,7 @@ class AerodinamicCoefficientCalculator:
         if system.SystemType == DuctSystemType.SupplyAir:
             self.critical_path_numbers.reverse()
 
-        self.all_sections_in_system = self.get_all_sections_in_system(system)
+        self.all_sections_in_system = self.get_all_sections_in_system()
 
 
 
@@ -145,22 +145,16 @@ class AerodinamicCoefficientCalculator:
             connector_data_instances.append(ConnectorData(connector))
         return connector_data_instances
 
-    def find_input_output_connector(self, element, system):
+    def find_input_output_connector(self, element):
         connector_data_instances = self.get_connector_data_instances(element)
-
-        path_numbers = system.GetCriticalPathSectionNumbers()
-        critical_path_numbers = list(path_numbers)
-
-        if system.SystemType == DuctSystemType.SupplyAir:
-            critical_path_numbers.reverse()
 
         input_connector = None  # Первый на пути следования воздуха коннектор
         output_connector = None  # Второй на пути следования воздуха коннектор
 
         # Поиск по критическому пути в системе
         passed_elements = []
-        for number in critical_path_numbers:
-            section = system.GetSectionByNumber(number)
+        for number in self.critical_path_numbers:
+            section = self.system.GetSectionByNumber(number)
             elements_ids = section.GetElementIds()
 
             for connector_data in connector_data_instances:
@@ -241,14 +235,14 @@ class AerodinamicCoefficientCalculator:
 
         return coefficient
 
-    def get_transition_coefficient(self, element, system):
+    def get_transition_coefficient(self, element):
         '''
         Здесь используются формулы из
         Краснов Ю.С. Системы вентиляции и кондиционирования Прил. 25.1
         '''
 
-        def get_transition_variables(element, system):
-            input_connector, output_connector = self.find_input_output_connector(element, system)
+        def get_transition_variables(element):
+            input_connector, output_connector = self.find_input_output_connector(element)
 
             input_origin = input_connector.connector_element.Origin
             output_origin = output_connector.connector_element.Origin
@@ -275,7 +269,7 @@ class AerodinamicCoefficientCalculator:
         (input_connector,
          output_connector,
          transition_len,
-         transition_angle) = get_transition_variables(element, system)
+         transition_angle) = get_transition_variables(element)
 
         # Конфузор
         if input_connector.area > output_connector.area:
@@ -400,13 +394,7 @@ class AerodinamicCoefficientCalculator:
         def get_tee_orientation(element, system):
             connector_data_instances = self.get_connector_data_instances(element)
 
-            path_numbers = system.GetCriticalPathSectionNumbers()
-            critical_path_numbers = list(path_numbers)
-
-            if system.SystemType == DuctSystemType.SupplyAir:
-                critical_path_numbers.reverse()
-
-            input_connector, output_connector = self.find_input_output_connector(element, system)
+            input_connector, output_connector = self.find_input_output_connector(element)
             branch_connector = None  # Коннектор-ответвление
 
             # Определяем branch_connector как оставшийся коннектор
@@ -642,22 +630,22 @@ class AerodinamicCoefficientCalculator:
 
         return coefficient
 
-    def get_all_sections_in_system(self, mep_system):
+    def get_all_sections_in_system(self):
         """Возвращает список всех секций, к которым относятся элементы системы MEP"""
 
         # Получаем все элементы системы
-        elements = mep_system.DuctNetwork
+        elements = self.system.DuctNetwork
 
         # Множество для хранения уникальных номеров секций
         section_numbers = set()
 
         # Получаем возможные номера секций
-        all_section_numbers = list(mep_system.GetCriticalPathSectionNumbers())  # Критический путь
+        all_section_numbers = list(self.system.GetCriticalPathSectionNumbers())  # Критический путь
 
         # Перебираем элементы системы и проверяем, в каких секциях они есть
         for elem in elements:
             for section_number in all_section_numbers:
-                section = mep_system.GetSectionByNumber(section_number)
+                section = self.system.GetSectionByNumber(section_number)
                 if not section:
                     continue
 
@@ -667,11 +655,11 @@ class AerodinamicCoefficientCalculator:
 
         return sorted(section_numbers)
 
-    def get_element_section_number(self, element, section_numbers, system, flow):
+    def get_element_section_number(self, element, section_numbers, flow):
         """ Находит номер секции в MEPSystem, к которой принадлежит элемент """
 
         for section_number in section_numbers:
-            section = system.GetSectionByNumber(section_number)
+            section = self.system.GetSectionByNumber(section_number)
             if not section:
                 continue  # Пропускаем, если секция не найдена
 
@@ -684,23 +672,23 @@ class AerodinamicCoefficientCalculator:
 
         return None  # Если элемент не найден ни в одной секции
 
-    def get_tap_adjustable_coefficient(self, element, system):
+    def get_tap_adjustable_coefficient(self, element):
         connector_data_instances = self.get_connector_data_instances(element)
 
-        def tap_is_elbow(system):
+        def tap_is_elbow():
             connector_flow = connector_data_instances[0].flow
-            numbers = self.get_all_sections_in_system(system)
+            numbers = self.get_all_sections_in_system()
             element_1 = connector_data_instances[0].connected_element
             element_2 = connector_data_instances[1].connected_element
-            elbow_section_1 = self.get_element_section_number(element_1, numbers, system, connector_flow)
-            elbow_section_2 = self.get_element_section_number(element_2, numbers, system, connector_flow)
+            elbow_section_1 = self.get_element_section_number(element_1, numbers, connector_flow)
+            elbow_section_2 = self.get_element_section_number(element_2, numbers, connector_flow)
 
             if elbow_section_1 is None or elbow_section_2 is None:
                 return False
 
             return True
 
-        print(tap_is_elbow(system))
+        print(tap_is_elbow())
 
         coefficient = 0
 

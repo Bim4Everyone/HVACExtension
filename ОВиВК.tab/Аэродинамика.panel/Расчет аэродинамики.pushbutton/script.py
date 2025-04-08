@@ -207,11 +207,11 @@ def get_local_coefficient(fitting, system):
     if part_type == fitting.MEPModel.PartType.Elbow:
         local_section_coefficient = calculator.get_elbow_coefficient(fitting)
     elif part_type == fitting.MEPModel.PartType.Transition:
-        local_section_coefficient = calculator.get_transition_coefficient(fitting, system)
+        local_section_coefficient = calculator.get_transition_coefficient(fitting)
     elif part_type == fitting.MEPModel.PartType.Tee:
-        local_section_coefficient = calculator.get_tee_coefficient(fitting, system)
+        local_section_coefficient = calculator.get_tee_coefficient(fitting)
     elif part_type == fitting.MEPModel.PartType.TapAdjustable:
-        local_section_coefficient = calculator.get_tap_adjustable_coefficient(fitting, system)
+        local_section_coefficient = calculator.get_tap_adjustable_coefficient(fitting)
     else:
         local_section_coefficient = 0
 
@@ -464,7 +464,7 @@ view = doc.ActiveView
 coefficient_param = SharedParamsConfig.Instance.VISLocalResistanceCoef # ФОП_ВИС_КМС
 cross_section_param = SharedParamsConfig.Instance.VISCrossSection # ФОП_ВИС_Живое сечение, м2
 
-calculator = CoefficientCalculator.AerodinamicCoefficientCalculator(doc, uidoc, view)
+calculator = None
 editor_report = EditorReport()
 fitting_coefficient_cash = {}
 passed_elements = []
@@ -481,6 +481,11 @@ def script_execute(plugin_logger):
             "Не найдены элементы в системе.",
             "Ошибка",
             exitscript=True)
+
+    system = doc.GetElement(selected_system.system.Id)
+
+    global calculator
+    calculator = CoefficientCalculator.AerodinamicCoefficientCalculator(doc, uidoc, view, system)
 
     network_elements = split_elements(selected_system.elements)
 
