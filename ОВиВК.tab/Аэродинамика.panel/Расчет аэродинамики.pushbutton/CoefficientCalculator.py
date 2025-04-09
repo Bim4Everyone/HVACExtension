@@ -94,6 +94,7 @@ class AerodinamicCoefficientCalculator:
     # Гуид для удельных потерь
     COEFF_GUID_CONST = "5a598293-1504-46cc-a9c0-de55c82848b9"
     # Это - Гуид "Определенный коэффициент". Вроде бы одинаков всегда
+
     TEE_SUPPLY_PASS_NAME = 'Тройник на проход нагнетание круглый/прямоуг'
     TEE_SUPPLY_BRANCH_ROUND_NAME = 'Тройник нагнетание ответвление круглый'
     TEE_SUPPLY_BRANCH_RECT_NAME = 'Тройник нагнетание ответвление прямоугольный'
@@ -124,15 +125,15 @@ class AerodinamicCoefficientCalculator:
 
         self.all_sections_in_system = self.get_all_sections_in_system()
 
-
-
     def get_connectors(self, element):
         connectors = []
 
         if isinstance(element, FamilyInstance) and element.MEPModel.ConnectorManager is not None:
             connectors.extend(element.MEPModel.ConnectorManager.Connectors)
 
-        if element.InAnyCategory([BuiltInCategory.OST_DuctCurves, BuiltInCategory.OST_PipeCurves]) and \
+        if element.InAnyCategory([BuiltInCategory.OST_DuctCurves,
+                                  BuiltInCategory.OST_PipeCurves,
+                                  BuiltInCategory.OST_FlexDuctCurves]) and \
                 isinstance(element, MEPCurve) and element.ConnectorManager is not None:
             connectors.extend(element.ConnectorManager.Connectors)
 
@@ -158,7 +159,6 @@ class AerodinamicCoefficientCalculator:
             elements_ids = section.GetElementIds()
 
             for connector_data in connector_data_instances:
-
                 if (connector_data.connected_element.Id in elements_ids and
                         connector_data.connected_element.Id not in passed_elements):
                     passed_elements.append(connector_data.connected_element.Id)
@@ -174,28 +174,29 @@ class AerodinamicCoefficientCalculator:
         # Для элементов которые не найдены на критическом пути все равно нужно проверить КМС. Проверяем ориентировочно,
         # по направлением коннекторов
         flow_connectors = []  # Коннекторы, которые участвуют в поиске max flow
-        if input_connector is None and output_connector is None:
+        if input_connector is None or output_connector is None:
             for connector_data in connector_data_instances:
-                if system.SystemType == DuctSystemType.SupplyAir:
+                if self.system.SystemType == DuctSystemType.SupplyAir:
                     if connector_data.direction == FlowDirectionType.In:
                         input_connector = connector_data
                     else:
                         # Добавляем все Out, чтоб потом выбрать с максимальным расходом
                         flow_connectors.append(connector_data)
 
-                if system.SystemType == DuctSystemType.ExhaustAir or system.SystemType == DuctSystemType.ReturnAir:
+                if self.system.SystemType == DuctSystemType.ExhaustAir or system.SystemType == DuctSystemType.ReturnAir:
                     if connector_data.direction == FlowDirectionType.Out:
                         output_connector = connector_data
                     else:
                         #Добавляем все In, чтоб потом выбрать с максимальным расходом
                         flow_connectors.append(connector_data)
 
-
             # Если мы ищем output для SupplyAir, выбираем коннектор с максимальным flow
-            if system.SystemType == DuctSystemType.SupplyAir:
+
+            if self.system.SystemType == DuctSystemType.SupplyAir:
                 output_connector = max(flow_connectors, key=lambda c: c.flow)
             # Если мы ищем input для ExhaustAir/ReturnAir, выбираем коннектор с максимальным flow
-            elif system.SystemType in [DuctSystemType.ExhaustAir, DuctSystemType.ReturnAir]:
+
+            elif self.system.SystemType in [DuctSystemType.ExhaustAir, DuctSystemType.ReturnAir]:
                 input_connector = max(flow_connectors, key=lambda c: c.flow)
 
         if input_connector is None or output_connector is None:
@@ -249,10 +250,14 @@ class AerodinamicCoefficientCalculator:
 
             if input_connector.radius:
                 input_width = input_connector.radius * 2
-                output_width = output_connector.radius * 2
             else:
                 input_width = input_connector.width
+
+            if output_connector.radius:
+                output_width = output_connector.radius * 2
+            else:
                 output_width = output_connector.width
+
 
             transition_len = input_origin.DistanceTo(output_origin)
             transition_len= UnitUtils.ConvertFromInternalUnits(transition_len, UnitTypeId.Millimeters)
@@ -274,10 +279,13 @@ class AerodinamicCoefficientCalculator:
         # Конфузор
         if input_connector.area > output_connector.area:
             if output_connector.radius:
+
                 diameter = output_connector.radius * 2
             else:
+
                 width = output_connector.width
                 height = output_connector.height
+
                 diameter = (4 * (width * height)) / (2 * (width + height))  # Эквивалентный диаметр
             len_per_diameter = transition_len / diameter
 
@@ -390,18 +398,20 @@ class AerodinamicCoefficientCalculator:
 
         return 0 # Для случаев когда переход оказался с равными коннекторами
 
-    def get_tee_coefficient(self, element, system):
-        def get_tee_orientation(element, system):
+    def get_tee_coefficient(self, element):
+        def get_tee_orientation(element):
             connector_data_instances = self.get_connector_data_instances(element)
 
             input_connector, output_connector = self.find_input_output_connector(element)
             branch_connector = None  # Коннектор-ответвление
 
             # Определяем branch_connector как оставшийся коннектор
-            for connector_data in connector_data_instances:
-                if connector_data != input_connector and connector_data != output_connector:
-                    branch_connector = connector_data
-                    break
+            excluded_ids = {input_connector.connector_element.Id, output_connector.connector_element.Id}
+
+            branch_connector = next(
+                (cd for cd in connector_data_instances if cd.connector_element.Id not in excluded_ids),
+                None
+            )
 
             # Получаем координаты центров соединений
             input_origin = input_connector.connector_element.Origin
@@ -504,8 +514,8 @@ class AerodinamicCoefficientCalculator:
                 fc = tee_orientation.output_connector_data.area
                 fp = tee_orientation.branch_connector_data.area
                 fo = tee_orientation.input_connector_data.area
-
-
+            print('______________')
+            print(tee_type_name)
             return Lo, Lp, Lc, fo, fc, fp
 
         def calculate_tee_coefficient(tee_type_name, Lo, Lp, Lc, fp, fo, fc):
@@ -611,11 +621,20 @@ class AerodinamicCoefficientCalculator:
 
             return None  # Если тип тройника не найден
 
-        tee_orientation = get_tee_orientation(element, system)
+        tee_orientation = get_tee_orientation(element)
         system_type = tee_orientation.input_connector_data.connector_element.DuctSystemType
         shape = tee_orientation.input_connector_data.shape
 
         tee_type_name = get_tee_type_name(system_type, tee_orientation, shape)
+
+        if tee_type_name is None:
+            forms.alert(
+                "Не получилось обработать тройник. " + str(element.Id),
+                "Ошибка",
+                exitscript=True)
+
+
+
 
         # Lo  Расход воздуха в ответвлении, в формулах значит Lо
         # Lp  Расход воздуха в проходе, в формулах значит Lп
@@ -688,7 +707,6 @@ class AerodinamicCoefficientCalculator:
 
             return True
 
-        print(tap_is_elbow())
 
         coefficient = 0
 

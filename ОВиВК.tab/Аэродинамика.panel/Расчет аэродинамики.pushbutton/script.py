@@ -205,13 +205,21 @@ def get_local_coefficient(fitting, system):
     part_type = fitting.MEPModel.PartType
 
     if part_type == fitting.MEPModel.PartType.Elbow:
+
         local_section_coefficient = calculator.get_elbow_coefficient(fitting)
+
     elif part_type == fitting.MEPModel.PartType.Transition:
+
         local_section_coefficient = calculator.get_transition_coefficient(fitting)
+
     elif part_type == fitting.MEPModel.PartType.Tee:
+
         local_section_coefficient = calculator.get_tee_coefficient(fitting)
+
     elif part_type == fitting.MEPModel.PartType.TapAdjustable:
+
         local_section_coefficient = calculator.get_tap_adjustable_coefficient(fitting)
+
     else:
         local_section_coefficient = 0
 
@@ -221,6 +229,8 @@ def get_local_coefficient(fitting, system):
 def get_network_element_name(element, changing_flow):
     if element.Category.IsId(BuiltInCategory.OST_DuctCurves):
         name = 'Воздуховод'
+    elif element.Category.IsId(BuiltInCategory.OST_FlexDuctCurves):
+        name = 'Гибкий воздуховод'
     elif element.Category.IsId(BuiltInCategory.OST_DuctTerminal):
         name = 'Воздухораспределитель'
     elif element.Category.IsId(BuiltInCategory.OST_MechanicalEquipment):
@@ -299,16 +309,11 @@ def get_network_element_pressure_drop(section, element, density, velocity, coeff
         pressure_drop = (density * velocity * velocity) / 2  # Динамическое давление
     else:
         pressure_drop = section.GetPressureDrop(element.Id)
-    # if element.Id.IntegerValue == 2648443:
-    #     print('До конвертации ' + str(pressure_drop))
+
 
     if element.Category.IsId(BuiltInCategory.OST_DuctFitting) or element.Category.IsId(
             BuiltInCategory.OST_DuctAccessory):
-        # if element.Id.IntegerValue == 2648443:
-        #     print('Плотность: '+ str(density))
-        #     print('Скорость: ' + str(velocity))
-        #     print('Потери напора без КМС: ' +str(pressure_drop))
-        #     print('КМС: '+ str(coefficient))
+
         pressure_drop = pressure_drop * float(coefficient)
 
     return pressure_drop
@@ -357,11 +362,13 @@ def round_floats(value):
 def sort_key(element):
     if element.Category.IsId(BuiltInCategory.OST_DuctTerminal):
         return 0
-    elif element.Category.IsId(BuiltInCategory.OST_DuctCurves):
+    elif element.Category.IsId(BuiltInCategory.OST_FlexDuctCurves):
         return 1
-    elif element.Category.IsId(BuiltInCategory.OST_DuctFitting):
+    elif element.Category.IsId(BuiltInCategory.OST_DuctCurves):
         return 2
-    return 3  # Все остальные
+    elif element.Category.IsId(BuiltInCategory.OST_DuctFitting):
+        return 3
+    return 4  # Все остальные
 
 def optimise_data(data):
     # Подсчет количества вхождений каждого count и замена одиночных count
