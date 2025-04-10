@@ -123,7 +123,7 @@ class AerodinamicCoefficientCalculator:
         if system.SystemType == DuctSystemType.SupplyAir:
             self.critical_path_numbers.reverse()
 
-        self.all_sections_in_system = self.get_all_sections_in_system()
+        #self.all_sections_in_system = self.get_all_sections_in_system()
 
     def get_connectors(self, element):
         connectors = []
@@ -218,6 +218,10 @@ class AerodinamicCoefficientCalculator:
         '''
 
         connector_data_element = self.get_connector_data_instances(element)[0]
+
+        # Врезки работающие как отводы не дадут нам нормально свой угол забрать, но он все равно всегда 90
+        if element.MEPModel.PartType == PartType.TapAdjustable:
+            connector_data_element.angle = 90
 
         if connector_data_element.shape == ConnectorProfileType.Rectangular:
             h = connector_data_element.height
@@ -479,7 +483,8 @@ class AerodinamicCoefficientCalculator:
                     return self.TEE_EXHAUST_MERGER_NAME
 
         def get_tee_variables(tee_orientation, tee_type_name):
-            if tee_type_name == self.TEE_SUPPLY_PASS_NAME or tee_type_name == self.TEE_SUPPLY_SEPARATION_NAME:
+            if (tee_type_name == self.TEE_SUPPLY_PASS_NAME
+                    or tee_type_name == self.TEE_SUPPLY_SEPARATION_NAME):
                 Lc = tee_orientation.input_connector_data.flow
                 Lp = tee_orientation.output_connector_data.flow
                 Lo = tee_orientation.branch_connector_data.flow
@@ -488,7 +493,8 @@ class AerodinamicCoefficientCalculator:
                 fp = tee_orientation.output_connector_data.area
                 fo = tee_orientation.branch_connector_data.area
 
-            if tee_type_name == self.TEE_SUPPLY_BRANCH_ROUND_NAME or tee_type_name == self.TEE_SUPPLY_BRANCH_RECT_NAME:
+            if (tee_type_name == self.TEE_SUPPLY_BRANCH_ROUND_NAME
+                    or tee_type_name == self.TEE_SUPPLY_BRANCH_RECT_NAME):
                 Lc = tee_orientation.input_connector_data.flow
                 Lp = tee_orientation.branch_connector_data.flow
                 Lo = tee_orientation.output_connector_data.flow
@@ -497,7 +503,8 @@ class AerodinamicCoefficientCalculator:
                 fp = tee_orientation.branch_connector_data.area
                 fo = tee_orientation.output_connector_data.area
 
-            if (tee_type_name == self.TEE_EXHAUST_PASS_RECT_NAME or tee_type_name == self.TEE_EXHAUST_PASS_ROUND_NAME
+            if (tee_type_name == self.TEE_EXHAUST_PASS_RECT_NAME
+                    or tee_type_name == self.TEE_EXHAUST_PASS_ROUND_NAME
                     or tee_type_name == self.TEE_EXHAUST_MERGER_NAME):
                 Lc = tee_orientation.output_connector_data.flow
                 Lp = tee_orientation.input_connector_data.flow
@@ -507,15 +514,16 @@ class AerodinamicCoefficientCalculator:
                 fo = tee_orientation.branch_connector_data.area
 
 
-            if tee_type_name == self.TEE_EXHAUST_BRANCH_RECT_NAME or tee_type_name == self.TEE_EXHAUST_BRANCH_RECT_NAME:
+            if (tee_type_name == self.TEE_EXHAUST_BRANCH_RECT_NAME
+                    or tee_type_name == self.TEE_EXHAUST_BRANCH_ROUND_NAME):
                 Lc = tee_orientation.output_connector_data.flow
                 Lp = tee_orientation.branch_connector_data.flow
                 Lo = tee_orientation.input_connector_data.flow
+
                 fc = tee_orientation.output_connector_data.area
                 fp = tee_orientation.branch_connector_data.area
                 fo = tee_orientation.input_connector_data.area
-            print('______________')
-            print(tee_type_name)
+
             return Lo, Lp, Lc, fo, fc, fp
 
         def calculate_tee_coefficient(tee_type_name, Lo, Lp, Lc, fp, fo, fc):
@@ -621,6 +629,9 @@ class AerodinamicCoefficientCalculator:
 
             return None  # Если тип тройника не найден
 
+        if element.MEPModel.PartType == PartType.TapAdjustable:
+            return 1
+
         tee_orientation = get_tee_orientation(element)
         system_type = tee_orientation.input_connector_data.connector_element.DuctSystemType
         shape = tee_orientation.input_connector_data.shape
@@ -632,9 +643,6 @@ class AerodinamicCoefficientCalculator:
                 "Не получилось обработать тройник. " + str(element.Id),
                 "Ошибка",
                 exitscript=True)
-
-
-
 
         # Lo  Расход воздуха в ответвлении, в формулах значит Lо
         # Lp  Расход воздуха в проходе, в формулах значит Lп
@@ -656,58 +664,48 @@ class AerodinamicCoefficientCalculator:
         elements = self.system.DuctNetwork
 
         # Множество для хранения уникальных номеров секций
-        section_numbers = set()
+        found_section_indexes = set()
 
-        # Получаем возможные номера секций
-        all_section_numbers = list(self.system.GetCriticalPathSectionNumbers())  # Критический путь
+        # Пробуем пройтись по диапазону номеров секций
+        max_possible_sections = 20  # можно увеличить при необходимости
+        for number in range(0, max_possible_sections):
+            try:
+                section = self.system.GetSectionByIndex(number)
+            except:
+                section = None # Это делается для
+            if section is None:
+                continue
+            found_section_indexes.add(number)
 
-        # Перебираем элементы системы и проверяем, в каких секциях они есть
-        for elem in elements:
-            for section_number in all_section_numbers:
-                section = self.system.GetSectionByNumber(section_number)
-                if not section:
-                    continue
+        return sorted(found_section_indexes)
 
-                # Если элемент есть в секции — добавляем ее номер в список
-                if elem.Id in section.GetElementIds():
-                    section_numbers.add(section_number)
+    def is_tap_elbow(self, element):
+        def get_zero_flow_section(element, section_indexes):
+            for section_index in section_indexes:
+                section = self.system.GetSectionByIndex(section_index)
 
-        return sorted(section_numbers)
+                if section.Flow == 0:
+                    section_elements = section.GetElementIds()
 
-    def get_element_section_number(self, element, section_numbers, flow):
-        """ Находит номер секции в MEPSystem, к которой принадлежит элемент """
+                    if element.Id in section_elements:
+                        return section_index  # Возвращаем найденный номер секции
+            return None
 
-        for section_number in section_numbers:
-            section = self.system.GetSectionByNumber(section_number)
-            if not section:
-                continue  # Пропускаем, если секция не найдена
+        indexes = self.get_all_sections_in_system()
 
-            # Получаем элементы в секции
-            section_elements = section.GetElementIds()
+        elbow_section_zero_flow = get_zero_flow_section(element, indexes)
 
-            section_flow = UnitUtils.ConvertFromInternalUnits(section.Flow, UnitTypeId.CubicMetersPerHour)
-            if element.Id in section_elements and section_flow == flow:
-                return section_number  # Возвращаем найденный номер секции
+        if elbow_section_zero_flow is None:
+            return False
 
-        return None  # Если элемент не найден ни в одной секции
+        return True
 
     def get_tap_adjustable_coefficient(self, element):
-        connector_data_instances = self.get_connector_data_instances(element)
 
-        def tap_is_elbow():
-            connector_flow = connector_data_instances[0].flow
-            numbers = self.get_all_sections_in_system()
-            element_1 = connector_data_instances[0].connected_element
-            element_2 = connector_data_instances[1].connected_element
-            elbow_section_1 = self.get_element_section_number(element_1, numbers, connector_flow)
-            elbow_section_2 = self.get_element_section_number(element_2, numbers, connector_flow)
+        if self.is_tap_elbow(element):
+            coefficient = self.get_elbow_coefficient(element)
+        else:
+            coefficient = self.get_tee_coefficient(element)
 
-            if elbow_section_1 is None or elbow_section_2 is None:
-                return False
-
-            return True
-
-
-        coefficient = 0
 
         return coefficient

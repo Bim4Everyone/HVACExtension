@@ -237,17 +237,18 @@ def get_network_element_name(element, changing_flow):
         name = 'Оборудование'
     elif element.Category.IsId(BuiltInCategory.OST_DuctFitting):
         name = 'Фасонный элемент воздуховода'
-        if str(element.MEPModel.PartType) == 'Elbow':
+        if element.MEPModel.PartType == PartType.Elbow:
             name = 'Отвод воздуховода'
-        if str(element.MEPModel.PartType) == 'Transition':
+        if element.MEPModel.PartType == PartType.Transition:
             name = 'Переход между сечениями'
-        if str(element.MEPModel.PartType) == 'Tee':
+        if element.MEPModel.PartType == PartType.Tee:
             name = 'Тройник'
-        if str(element.MEPModel.PartType) == 'TapAdjustable':
-            if changing_flow:
-                name = "Боковое ответвление"
+        if element.MEPModel.PartType == PartType.TapAdjustable:
+            if calculator.is_tap_elbow(element):
+                name = 'Отвод'
             else:
-                name = 'Врезка'
+                name = "Боковое ответвление"
+
     else:
         name = 'Арматура'
 
