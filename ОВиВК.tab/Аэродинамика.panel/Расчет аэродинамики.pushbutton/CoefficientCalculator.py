@@ -449,8 +449,7 @@ class AerodinamicCoefficientCalculator:
 
             return result
 
-        def get_tap_tee_type_name(element):
-            input_connector, output_connector = self.find_input_output_connector(element)
+        def get_tap_tee_type_name(input_connector, output_connector):
             input_element = input_connector.connected_element
             output_element = output_connector.connected_element
 
@@ -530,6 +529,59 @@ class AerodinamicCoefficientCalculator:
 
                 if flow_90_degree and not branch_90_degree:
                     return self.TEE_EXHAUST_MERGER_NAME
+
+        def get_tap_tee_variables(input_connector, output_connector, tee_type_name):
+            input_element = input_connector.connected_element
+            output_element = output_connector.connected_element
+
+            flows_1 = self.get_flows_by_two_elements(input_element, element)
+            flows_2 = self.get_flows_by_two_elements(output_element, element)
+
+            if len(flows_1) == 2 and len(flows_2) == 1:
+                main_flows = flows_1
+            elif len(flows_1) == 1 and len(flows_2) == 2:
+                main_flows = flows_2
+            else:
+                forms.alert(
+                    "Невозможно обработать расходы на секциях. " + str(element.Id),
+                    "Ошибка",
+                    exitscript=True)
+
+            if self.system.SystemType == DuctSystemType.SupplyAir:
+                Lc = max(main_flows)
+                Lp = min(main_flows)
+                Lo = output_connector.flow
+
+                try:
+                    diameter = UnitUtils.ConvertFromInternalUnits(input_element.Diameter, UnitTypeId.Millimeters)
+                    area = math.pi * (diameter/2) ** 2
+                except Exception:
+                    height = UnitUtils.ConvertFromInternalUnits(input_element.Height, UnitTypeId.Millimeters)
+                    width = UnitUtils.ConvertFromInternalUnits(input_element.Width, UnitTypeId.Millimeters)
+                    area = height / 1000 * width / 1000
+
+                fc = area
+                fp = area
+                fo = output_connector.area
+
+            else:
+                Lc = max(main_flows)
+                Lp = min(main_flows)
+                Lo = input_connector.flow
+
+                try:
+                    diameter = UnitUtils.ConvertFromInternalUnits(input_element.Diameter, UnitTypeId.Millimeters)
+                    area = math.pi * (diameter / 2) ** 2
+                except Exception:
+                    height = UnitUtils.ConvertFromInternalUnits(input_element.Height, UnitTypeId.Millimeters)
+                    width = UnitUtils.ConvertFromInternalUnits(input_element.Width, UnitTypeId.Millimeters)
+                    area = height / 1000 * width / 1000
+
+                fc = area
+                fp = area
+                fo = input_connector.area
+
+            return Lo, Lp, Lc, fo, fc, fp
 
         def get_tee_variables(tee_orientation, tee_type_name):
             if (tee_type_name == self.TEE_SUPPLY_PASS_NAME
@@ -679,33 +731,57 @@ class AerodinamicCoefficientCalculator:
             return None  # Если тип тройника не найден
 
         if element.MEPModel.PartType == PartType.TapAdjustable:
-            get_tap_tee_type_name(element)
+            input_connector, output_connector = self.find_input_output_connector(element)
+            tee_type_name = get_tap_tee_type_name(input_connector, output_connector)
+
+            if tee_type_name is None:
+                forms.alert(
+                    "Не получилось обработать тройник. " + str(element.Id),
+                    "Ошибка",
+                    exitscript=True)
             print('___________')
-            return 1
 
-        tee_orientation = get_tee_orientation(element)
-        shape = tee_orientation.input_connector_data.shape
+            Lo, Lp, Lc, fo, fc, fp =  get_tap_tee_variables(input_connector, output_connector, tee_type_name)
 
-        tee_type_name = get_tee_type_name(tee_orientation, shape)
+        else:
+            tee_orientation = get_tee_orientation(element)
+            shape = tee_orientation.input_connector_data.shape
 
-        if tee_type_name is None:
-            forms.alert(
-                "Не получилось обработать тройник. " + str(element.Id),
-                "Ошибка",
-                exitscript=True)
+            tee_type_name = get_tee_type_name(tee_orientation, shape)
 
-        # Lo  Расход воздуха в ответвлении, в формулах значит Lо
-        # Lp  Расход воздуха в проходе, в формулах значит Lп
-        # Lc  Расход воздуха в стволе, в формулах значит Lс
-        # fp  Площадь сечения прохода, в формулах fп
-        # fo  площадь сечения ответвления, в формулах fo
-        # fc  Площадь сечения ствола, в формулах fc
+            if tee_type_name is None:
+                forms.alert(
+                    "Не получилось обработать тройник. " + str(element.Id),
+                    "Ошибка",
+                    exitscript=True)
+            # Lo  Расход воздуха в ответвлении, в формулах значит Lо
+            # Lp  Расход воздуха в проходе, в формулах значит Lп
+            # Lc  Расход воздуха в стволе, в формулах значит Lс
+            # fp  Площадь сечения прохода, в формулах fп
+            # fo  площадь сечения ответвления, в формулах fo
+            # fc  Площадь сечения ствола, в формулах fc
 
-        Lo, Lp, Lc, fo, fc, fp = get_tee_variables(tee_orientation, tee_type_name)
+            Lo, Lp, Lc, fo, fc, fp = get_tee_variables(tee_orientation, tee_type_name)
+
 
         coefficient = calculate_tee_coefficient(tee_type_name, Lo, Lp, Lc, fp, fo, fc)
 
         return coefficient
+
+    def get_flows_by_two_elements(self, element_1, element_2):
+        section_indexes = self.get_all_sections_in_system()
+
+        flows = []
+
+        for section_index in section_indexes:
+            section = self.system.GetSectionByIndex(section_index)
+            section_elements = section.GetElementIds()
+
+            if element_1.Id in section_elements and element_2.Id in section_elements:
+                flow = UnitUtils.ConvertFromInternalUnits(section.Flow, UnitTypeId.CubicMetersPerHour)
+                flows.append(flow)
+
+        return flows
 
     def get_all_sections_in_system(self):
         """Возвращает список всех секций, к которым относятся элементы системы MEP"""
