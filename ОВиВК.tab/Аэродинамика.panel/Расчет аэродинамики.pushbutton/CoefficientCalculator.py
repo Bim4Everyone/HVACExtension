@@ -183,7 +183,7 @@ class AerodinamicCoefficientCalculator:
                         # Добавляем все Out, чтоб потом выбрать с максимальным расходом
                         flow_connectors.append(connector_data)
 
-                if self.system.SystemType == DuctSystemType.ExhaustAir or system.SystemType == DuctSystemType.ReturnAir:
+                if self.system.SystemType == DuctSystemType.ExhaustAir or self.system.SystemType == DuctSystemType.ReturnAir:
                     if connector_data.direction == FlowDirectionType.Out:
                         output_connector = connector_data
                     else:
@@ -449,11 +449,60 @@ class AerodinamicCoefficientCalculator:
 
             return result
 
-        def get_tee_type_name(system_type, tee_orientation, shape):
+        def get_tap_tee_type_name(element):
+            input_connector, output_connector = self.find_input_output_connector(element)
+            input_element = input_connector.connected_element
+            output_element = output_connector.connected_element
+
+            print(element.Id)
+
+            main_critical = False
+            if self.system.SystemType == DuctSystemType.SupplyAir:
+                main_element = output_element
+            else:
+                main_element = input_element
+
+            for number in self.critical_path_numbers:
+                section = self.system.GetSectionByNumber(number)
+                elements_ids = section.GetElementIds()
+                if main_element.Id in elements_ids:
+                    main_critical = True
+                    break
+
+            if self.system.SystemType == DuctSystemType.SupplyAir and main_critical:
+                if input_connector.shape == ConnectorProfileType.Rectangular:
+                    print(self.TEE_SUPPLY_BRANCH_RECT_NAME)
+                    return self.TEE_SUPPLY_BRANCH_RECT_NAME
+                else:
+                    print(self.TEE_SUPPLY_BRANCH_ROUND_NAME)
+                    return self.TEE_SUPPLY_BRANCH_ROUND_NAME
+
+            elif self.system.SystemType == DuctSystemType.SupplyAir and not main_critical:
+                print(self.TEE_SUPPLY_PASS_NAME)
+                return self.TEE_SUPPLY_PASS_NAME
+
+            elif self.system.SystemType != DuctSystemType.SupplyAir and main_critical:
+                if input_connector.shape == ConnectorProfileType.Rectangular:
+                    print(self.TEE_EXHAUST_BRANCH_RECT_NAME)
+                    return self.TEE_EXHAUST_BRANCH_RECT_NAME
+                else:
+                    print(self.TEE_EXHAUST_BRANCH_ROUND_NAME)
+                    return self.TEE_EXHAUST_BRANCH_ROUND_NAME
+
+
+            elif self.system.SystemType != DuctSystemType.SupplyAir and not main_critical:
+                if input_connector.shape == ConnectorProfileType.Rectangular:
+                    print(self.TEE_EXHAUST_PASS_RECT_NAME)
+                    return self.TEE_EXHAUST_PASS_RECT_NAME
+                else:
+                    print(self.TEE_EXHAUST_PASS_ROUND_NAME)
+                    return self.TEE_EXHAUST_PASS_ROUND_NAME
+
+        def get_tee_type_name(tee_orientation, shape):
             flow_90_degree = tee_orientation.input_output_angle < 100
             branch_90_degree = tee_orientation.input_branch_angle < 100
 
-            if system_type == DuctSystemType.SupplyAir:
+            if self.system.SystemType == DuctSystemType.SupplyAir:
                 if not flow_90_degree and branch_90_degree:
                     return self.TEE_SUPPLY_PASS_NAME
 
@@ -630,13 +679,14 @@ class AerodinamicCoefficientCalculator:
             return None  # Если тип тройника не найден
 
         if element.MEPModel.PartType == PartType.TapAdjustable:
+            get_tap_tee_type_name(element)
+            print('___________')
             return 1
 
         tee_orientation = get_tee_orientation(element)
-        system_type = tee_orientation.input_connector_data.connector_element.DuctSystemType
         shape = tee_orientation.input_connector_data.shape
 
-        tee_type_name = get_tee_type_name(system_type, tee_orientation, shape)
+        tee_type_name = get_tee_type_name(tee_orientation, shape)
 
         if tee_type_name is None:
             forms.alert(
