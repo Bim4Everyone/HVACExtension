@@ -68,7 +68,7 @@ class ElementStocks:
                 individual_stock = self.types_cash[element_type.Id]
             else:
                 individual_stock = self.get_stock_value(element_type.GetParamValueOrDefault(
-                    SharedParamsConfig.Instance.VISIndividualStock, 0))
+                    SharedParamsConfig.Instance.VISIndividualStock, 0.0))
                 self.types_cash[element_type.Id] = individual_stock
 
             if individual_stock is None:
