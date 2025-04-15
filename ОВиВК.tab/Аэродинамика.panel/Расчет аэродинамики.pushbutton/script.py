@@ -310,12 +310,17 @@ def get_network_element_pressure_drop(section, element, density, velocity, coeff
         pressure_drop = (density * velocity * velocity) / 2  # Динамическое давление
     else:
         pressure_drop = section.GetPressureDrop(element.Id)
-
+        pressure_drop = UnitUtils.ConvertFromInternalUnits(pressure_drop, UnitTypeId.Pascals)
 
     if element.Category.IsId(BuiltInCategory.OST_DuctFitting) or element.Category.IsId(
             BuiltInCategory.OST_DuctAccessory):
 
         pressure_drop = pressure_drop * float(coefficient)
+
+
+
+    if element.Id.IntegerValue == 4094569:
+        print(pressure_drop)
 
     return pressure_drop
 
