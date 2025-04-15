@@ -408,6 +408,35 @@ def optimise_data(data):
         old_count = data[i][0]
         i += 1  # Переход к следующему элементу
 
+    # Агрегация данных: Воздуховоды с одинаковым count и size
+    grouped = defaultdict(list)
+    for row in data:
+        if isinstance(row, list) and len(row) > 1:
+            count, name, length, size, flow, velocity, coefficient, element_loss, summ_loss, id = row
+            if "Воздуховод" in name:
+                grouped[(count, size)].append(row)
+
+    for (count, size), group_rows in grouped.items():
+        if len(group_rows) > 1:
+            # Агрегируем значения
+            total_length = sum(float(row[2]) for row in group_rows)
+            total_coefficient = sum(float(row[6]) for row in group_rows)
+            total_element_loss = sum(float(row[7]) for row in group_rows)
+            max_summ_loss = max(float(row[8]) for row in group_rows)
+            combined_ids = ",".join(str(row[9]) for row in group_rows)
+
+            # Обновляем первую строку
+            base_row = group_rows[0]
+            base_row[2] = str(total_length)
+            base_row[6] = str(total_coefficient)
+            base_row[7] = str(total_element_loss)
+            base_row[8] = str(max_summ_loss)
+            base_row[9] = combined_ids
+
+            # Удаляем остальные строки из data
+            for row in group_rows[1:]:
+                data.remove(row)
+
     data.insert(0, ['Участок №1'])
 
     return data
@@ -534,6 +563,7 @@ def script_execute(plugin_logger):
 
         pressure_total = 0
         old_flow = 0
+
         for number in critical_path_numbers:
             section = system.GetSectionByNumber(number)
             count += 1
@@ -549,6 +579,8 @@ def script_execute(plugin_logger):
                 if element.Category.IsId(BuiltInCategory.OST_DuctCurves) and get_flow(section, element) == 0:
                     continue
 
+
+
                 value, pressure_total, old_flow = get_table_data_per_element(density,
                                                                              section,
                                                                              element,
@@ -556,6 +588,8 @@ def script_execute(plugin_logger):
                                                                              pressure_total,
                                                                              output,
                                                                              old_flow)
+
+
                 data.append(value)
 
     data = optimise_data(data)

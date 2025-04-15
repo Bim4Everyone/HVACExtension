@@ -53,7 +53,7 @@ class ConnectorData:
 
         if connector.Shape == ConnectorProfileType.Round:
             self.radius = UnitUtils.ConvertFromInternalUnits(connector.Radius, UnitTypeId.Millimeters)
-            self.area = math.pi * self.radius ** 2
+            self.area = math.pi * ((self.radius/1000) ** 2)
         elif connector.Shape == ConnectorProfileType.Rectangular:
             self.height = UnitUtils.ConvertFromInternalUnits(connector.Height, UnitTypeId.Millimeters)
             self.width = UnitUtils.ConvertFromInternalUnits(connector.Width, UnitTypeId.Millimeters)
@@ -554,13 +554,6 @@ class AerodinamicCoefficientCalculator:
                 Lp = max(main_flows)
                 Lc = Lp + Lo
 
-            # print(input_element.Id)
-            # print(output_element.Id)
-            # print('Lp ' +  str(Lp))
-            # print('Lc ' + str(Lc))
-            # print('Lo ' + str(Lo))
-            # print('__________________')
-
             try:
                 diameter = UnitUtils.ConvertFromInternalUnits(input_element.Diameter, UnitTypeId.Millimeters)
                 area = math.pi * (diameter / 2) ** 2
@@ -572,6 +565,7 @@ class AerodinamicCoefficientCalculator:
             fc = area
             fp = area
             fo = input_connector.area
+
 
             return Lo, Lp, Lc, fo, fc, fp
 
@@ -616,6 +610,8 @@ class AerodinamicCoefficientCalculator:
                 fc = tee_orientation.output_connector_data.area
                 fp = tee_orientation.branch_connector_data.area
                 fo = tee_orientation.input_connector_data.area
+
+
 
             return Lo, Lp, Lc, fo, fc, fp
 
@@ -663,6 +659,7 @@ class AerodinamicCoefficientCalculator:
             Посохин прил.2
 
             '''
+
 
             fp_normed = fp / fc  # Нормированная площадь прохода
             fo_normed = fo / fc  # Нормированная площадь ответвления
@@ -757,6 +754,7 @@ class AerodinamicCoefficientCalculator:
 
 
         coefficient = calculate_tee_coefficient(tee_type_name, Lo, Lp, Lc, fp, fo, fc)
+
 
         return coefficient
 
