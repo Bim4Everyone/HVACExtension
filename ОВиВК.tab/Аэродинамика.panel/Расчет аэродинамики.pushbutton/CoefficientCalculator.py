@@ -453,7 +453,6 @@ class AerodinamicCoefficientCalculator:
             input_element = input_connector.connected_element
             output_element = output_connector.connected_element
 
-            print(element.Id)
 
             main_critical = False
             if self.system.SystemType == DuctSystemType.SupplyAir:
@@ -470,31 +469,23 @@ class AerodinamicCoefficientCalculator:
 
             if self.system.SystemType == DuctSystemType.SupplyAir and main_critical:
                 if input_connector.shape == ConnectorProfileType.Rectangular:
-                    print(self.TEE_SUPPLY_BRANCH_RECT_NAME)
                     return self.TEE_SUPPLY_BRANCH_RECT_NAME
                 else:
-                    print(self.TEE_SUPPLY_BRANCH_ROUND_NAME)
                     return self.TEE_SUPPLY_BRANCH_ROUND_NAME
 
             elif self.system.SystemType == DuctSystemType.SupplyAir and not main_critical:
-                print(self.TEE_SUPPLY_PASS_NAME)
                 return self.TEE_SUPPLY_PASS_NAME
 
             elif self.system.SystemType != DuctSystemType.SupplyAir and main_critical:
                 if input_connector.shape == ConnectorProfileType.Rectangular:
-                    print(self.TEE_EXHAUST_BRANCH_RECT_NAME)
                     return self.TEE_EXHAUST_BRANCH_RECT_NAME
                 else:
-                    print(self.TEE_EXHAUST_BRANCH_ROUND_NAME)
                     return self.TEE_EXHAUST_BRANCH_ROUND_NAME
-
 
             elif self.system.SystemType != DuctSystemType.SupplyAir and not main_critical:
                 if input_connector.shape == ConnectorProfileType.Rectangular:
-                    print(self.TEE_EXHAUST_PASS_RECT_NAME)
                     return self.TEE_EXHAUST_PASS_RECT_NAME
                 else:
-                    print(self.TEE_EXHAUST_PASS_ROUND_NAME)
                     return self.TEE_EXHAUST_PASS_ROUND_NAME
 
         def get_tee_type_name(tee_orientation, shape):
@@ -534,52 +525,53 @@ class AerodinamicCoefficientCalculator:
             input_element = input_connector.connected_element
             output_element = output_connector.connected_element
 
-            flows_1 = self.get_flows_by_two_elements(input_element, element)
-            flows_2 = self.get_flows_by_two_elements(output_element, element)
-
-            if len(flows_1) == 2 and len(flows_2) == 1:
-                main_flows = flows_1
-            elif len(flows_1) == 1 and len(flows_2) == 2:
-                main_flows = flows_2
+            if self.system.SystemType == DuctSystemType.SupplyAir:
+                main_flows = self.get_flows_by_two_elements(input_element, element)
             else:
+                main_flows = self.get_flows_by_two_elements(output_element, element)
+
+            if len(main_flows) == 0:
                 forms.alert(
                     "Невозможно обработать расходы на секциях. " + str(element.Id),
                     "Ошибка",
                     exitscript=True)
 
             if self.system.SystemType == DuctSystemType.SupplyAir:
-                Lc = max(main_flows)
-                Lp = min(main_flows)
-                Lo = output_connector.flow
-
-                try:
-                    diameter = UnitUtils.ConvertFromInternalUnits(input_element.Diameter, UnitTypeId.Millimeters)
-                    area = math.pi * (diameter/2) ** 2
-                except Exception:
-                    height = UnitUtils.ConvertFromInternalUnits(input_element.Height, UnitTypeId.Millimeters)
-                    width = UnitUtils.ConvertFromInternalUnits(input_element.Width, UnitTypeId.Millimeters)
-                    area = height / 1000 * width / 1000
-
-                fc = area
-                fp = area
-                fo = output_connector.area
-
+                main_flows = self.get_flows_by_two_elements(input_element, element)
             else:
-                Lc = max(main_flows)
-                Lp = min(main_flows)
+                main_flows = self.get_flows_by_two_elements(output_element, element)
+
+
+            if self.system.SystemType == DuctSystemType.SupplyAir:
+                Lo = output_connector.flow
+            else:
                 Lo = input_connector.flow
 
-                try:
-                    diameter = UnitUtils.ConvertFromInternalUnits(input_element.Diameter, UnitTypeId.Millimeters)
-                    area = math.pi * (diameter / 2) ** 2
-                except Exception:
-                    height = UnitUtils.ConvertFromInternalUnits(input_element.Height, UnitTypeId.Millimeters)
-                    width = UnitUtils.ConvertFromInternalUnits(input_element.Width, UnitTypeId.Millimeters)
-                    area = height / 1000 * width / 1000
+            if len(main_flows) == 2:
+                Lc = max(main_flows)
+                Lp = min(main_flows)
+            if len(main_flows) == 1:
+                Lp = max(main_flows)
+                Lc = Lp + Lo
 
-                fc = area
-                fp = area
-                fo = input_connector.area
+            # print(input_element.Id)
+            # print(output_element.Id)
+            # print('Lp ' +  str(Lp))
+            # print('Lc ' + str(Lc))
+            # print('Lo ' + str(Lo))
+            # print('__________________')
+
+            try:
+                diameter = UnitUtils.ConvertFromInternalUnits(input_element.Diameter, UnitTypeId.Millimeters)
+                area = math.pi * (diameter / 2) ** 2
+            except Exception:
+                height = UnitUtils.ConvertFromInternalUnits(input_element.Height, UnitTypeId.Millimeters)
+                width = UnitUtils.ConvertFromInternalUnits(input_element.Width, UnitTypeId.Millimeters)
+                area = height / 1000 * width / 1000
+
+            fc = area
+            fp = area
+            fo = input_connector.area
 
             return Lo, Lp, Lc, fo, fc, fp
 
@@ -739,7 +731,7 @@ class AerodinamicCoefficientCalculator:
                     "Не получилось обработать тройник. " + str(element.Id),
                     "Ошибка",
                     exitscript=True)
-            print('___________')
+
 
             Lo, Lp, Lc, fo, fc, fp =  get_tap_tee_variables(input_connector, output_connector, tee_type_name)
 
@@ -793,7 +785,7 @@ class AerodinamicCoefficientCalculator:
         found_section_indexes = set()
 
         # Пробуем пройтись по диапазону номеров секций
-        max_possible_sections = 20  # можно увеличить при необходимости
+        max_possible_sections = 500  # можно увеличить при необходимости
         for number in range(0, max_possible_sections):
             try:
                 section = self.system.GetSectionByIndex(number)

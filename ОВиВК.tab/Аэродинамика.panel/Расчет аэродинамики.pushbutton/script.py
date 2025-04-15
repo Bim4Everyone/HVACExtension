@@ -542,7 +542,9 @@ def script_execute(plugin_logger):
 
             for element in segment_elements:
                 if element.Category.IsId(BuiltInCategory.OST_DuctFitting) and \
-                        element.MEPModel.PartType == element.MEPModel.PartType.Cap:
+                        (element.MEPModel.PartType == element.MEPModel.PartType.Cap or
+                         element.MEPModel.PartType == element.MEPModel.PartType.Union):
+
                     continue
                 if element.Category.IsId(BuiltInCategory.OST_DuctCurves) and get_flow(section, element) == 0:
                     continue
