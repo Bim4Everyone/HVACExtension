@@ -253,9 +253,9 @@ class AerodinamicCoefficientCalculator:
             angle_name = 90
 
         if connector_data_element.shape == ConnectorProfileType.Rectangular:
-            base_name = 'Отвод прямоугольный ' + str(angle_name) + str('°')
+            base_name = 'Отвод прямоугольный ' + str(angle_name) + str('°') + ' ' + str(int(b)) + 'x' + str(int(h))
         else:
-            base_name = 'Отвод круглый ' + str(angle_name) + str('°')
+            base_name = 'Отвод круглый ' + str(angle_name) +  str('°') + ' ' + str(int(connector_data_element.radius))
 
         self.element_names[element.Id] = base_name
 
@@ -296,14 +296,22 @@ class AerodinamicCoefficientCalculator:
             return input_connector, output_connector, transition_len, transition_angle_degrees
 
 
+
         (input_connector,
          output_connector,
          transition_len,
          transition_angle) = get_transition_variables(element)
 
+        name = ', L=' + str(int(transition_len)) + ' '
+        if input_connector.radius:
+            name = name +str(int(input_connector.radius * 2)) + '-' + str(int(output_connector.radius *2))
+        else:
+            name = (name + str(int(input_connector.width))+ 'x' + str(int(input_connector.height)) + '-'
+                    + str(int(output_connector.width))+ 'x' + str(int(output_connector.height)))
+
         # Конфузор
         if input_connector.area > output_connector.area:
-            self.element_names[element.Id] = 'Конфузор'
+            self.element_names[element.Id] = 'Заужение' + name
             if output_connector.radius:
 
                 diameter = output_connector.radius * 2
@@ -345,7 +353,7 @@ class AerodinamicCoefficientCalculator:
         #F = F0 / F1
         # диффузор
         if input_connector.area < output_connector.area:
-            self.element_names[element.Id] = 'Диффузор'
+            self.element_names[element.Id] = 'Расширение' + name
             F = input_connector.area / output_connector.area
 
             if input_connector.radius:
@@ -745,7 +753,18 @@ class AerodinamicCoefficientCalculator:
         if element.MEPModel.PartType == PartType.TapAdjustable:
             input_connector, output_connector = self.find_input_output_connector(element)
             tee_type_name = get_tap_tee_type_name(input_connector, output_connector)
-            self.element_names[element.Id] = tee_type_name
+
+            name_addon = ''
+            input_size = input_connector.connected_element.GetParamValueOrDefault(
+                BuiltInParameter.RBS_CALCULATED_SIZE)
+            output_size = output_connector.connected_element.GetParamValueOrDefault(
+                BuiltInParameter.RBS_CALCULATED_SIZE)
+            if self.system.SystemType == DuctSystemType.SupplyAir:
+                name_addon = input_size + '-' + input_size + '-' + output_size
+            else:
+                name_addon = output_size + '-' + output_size + '-' + input_size
+
+            self.element_names[element.Id] = tee_type_name + ' ' + name_addon
 
             if tee_type_name is None:
                 forms.alert(
@@ -760,9 +779,29 @@ class AerodinamicCoefficientCalculator:
             tee_orientation = get_tee_orientation(element)
             shape = tee_orientation.input_connector_data.shape
 
+            name_addon = ''
+            if tee_orientation.input_connector_data.radius:
+                name_addon = name_addon + tee_orientation.input_connector_data.radius * 2
+            else:
+                name_addon = (name_addon + str(int(tee_orientation.input_connector_data.width)) + 'x' +
+                              str(int(tee_orientation.input_connector_data.height)))
+
+            if tee_orientation.output_connector_data.radius:
+                name_addon = name_addon + '-' + tee_orientation.output_connector_data.radius * 2
+            else:
+                name_addon = (name_addon + '-' + str(int(tee_orientation.output_connector_data.width)) + 'x' +
+                              str(int(tee_orientation.output_connector_data.height)))
+
+            if tee_orientation.branch_connector_data.radius:
+                name_addon = name_addon + '-' + tee_orientation.branch_connector_data.radius * 2
+            else:
+                name_addon = (name_addon + '-' + str(int(tee_orientation.branch_connector_data.width)) + 'x' +
+                              str(int(tee_orientation.branch_connector_data.height)))
+
+
             tee_type_name = get_tee_type_name(tee_orientation, shape)
 
-            self.element_names[element.Id] = tee_type_name
+            self.element_names[element.Id] = tee_type_name + ' ' + name_addon
 
             if tee_type_name is None:
                 forms.alert(
