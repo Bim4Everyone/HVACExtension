@@ -303,24 +303,32 @@ def get_network_element_real_size(element, element_type):
     return size
 
 def get_network_element_pressure_drop(section, element, density, velocity, coefficient):
-    if element.Category.IsId(BuiltInCategory.OST_DuctTerminal):
-        return 10  # Фиксированное значение для воздухораспределителя
+    def calculate_pressure_drop():
+        return float(coefficient) * (density * math.pow(velocity, 2)) / 2  # Динамическое давление
 
-    if element.Category.IsId(BuiltInCategory.OST_DuctFitting) or element.Category.IsId(BuiltInCategory.OST_DuctAccessory):
-        pressure_drop = (density * velocity * velocity) / 2  # Динамическое давление
-    else:
+
+    if element.InAnyCategory([BuiltInCategory.OST_DuctCurves,
+                              BuiltInCategory.OST_FlexDuctCurves]):
         pressure_drop = section.GetPressureDrop(element.Id)
         pressure_drop = UnitUtils.ConvertFromInternalUnits(pressure_drop, UnitTypeId.Pascals)
+        return pressure_drop
 
-    if element.Category.IsId(BuiltInCategory.OST_DuctFitting) or element.Category.IsId(
-            BuiltInCategory.OST_DuctAccessory):
+    pressure_drop = element.GetParamValueOrDefault("ФОП_ВИС_Потери давления")
+    if pressure_drop is not None:
+        return pressure_drop
 
-        pressure_drop = pressure_drop * float(coefficient)
+    if element.Category.IsId(BuiltInCategory.OST_DuctTerminal):
+        if coefficient is not None and coefficient != 0:
+            pressure_drop = calculate_pressure_drop()
+        else:
+            pressure_drop = 10  # Фиксированное значение для воздухораспределителя
 
+        return pressure_drop
 
-
-    if element.Id.IntegerValue == 4094569:
-        print(pressure_drop)
+    if element.InAnyCategory([BuiltInCategory.OST_DuctFitting,
+                              BuiltInCategory.OST_DuctAccessory,
+                              BuiltInCategory.OST_MechanicalEquipment]):
+        pressure_drop = calculate_pressure_drop()
 
     return pressure_drop
 
@@ -377,43 +385,34 @@ def sort_key(element):
     return 4  # Все остальные
 
 def optimise_data(data):
-    # Подсчет количества вхождений каждого count и замена одиночных count
-    count_occurrences = defaultdict(int)
-    for data_massive in data:
-        count_occurrences[data_massive[0]] += 1
-
+    # Шаг 1: Группируем строки по значению flow (если flow одинаковый — это один count)
+    flow_to_count = {}
     count_mapping = {}
     new_count = 1
+
+    for row in data:
+        if isinstance(row, list) and len(row) > 1:
+            flow = row[4]
+            if flow not in flow_to_count:
+                flow_to_count[flow] = new_count
+                new_count += 1
+            count = flow_to_count[flow]
+            row[0] = count
+
+    # Шаг 2: Вставляем заголовки перед каждой новой группой count
+    i = 0
     old_count = None
-    i = 0  # Индекс для вставки элементов
-
     while i < len(data):
-        count = data[i][0]
+        row = data[i]
+        if isinstance(row, list) and len(row) > 1:
+            count = row[0]
+            if old_count is not None and count != old_count:
+                data.insert(i, ['Участок №' + str(count)])
+                i += 1
+            old_count = count
+        i += 1
 
-        # Если count встречается только один раз, ищем замену
-        if count_occurrences[count] == 1:
-            for j in range(i + 1, len(data)):
-                next_count = data[j][0]
-                if count_occurrences[next_count] > 1:
-                    count = next_count
-                    break
-
-        # Присваиваем новый count, если он еще не заменен
-        if count not in count_mapping:
-            count_mapping[count] = new_count
-            new_count += 1
-
-        data[i][0] = count_mapping[count]
-
-        # Вставка заголовка, если count изменился
-        if old_count is not None and old_count != data[i][0]:
-            data.insert(i, ['Участок №' + str(data[i][0])])
-            i += 1  # Увеличиваем индекс, чтобы не зациклиться
-
-        old_count = data[i][0]
-        i += 1  # Переход к следующему элементу
-
-    # Агрегация данных: Воздуховоды с одинаковым count и size
+    # Шаг 3: Агрегация данных для воздуховодов (по count и size)
     grouped = defaultdict(list)
     for row in data:
         if isinstance(row, list) and len(row) > 1:
@@ -423,14 +422,12 @@ def optimise_data(data):
 
     for (count, size), group_rows in grouped.items():
         if len(group_rows) > 1:
-            # Агрегируем значения
             total_length = sum(float(row[2]) for row in group_rows)
             total_coefficient = sum(float(row[6]) for row in group_rows)
             total_element_loss = sum(float(row[7]) for row in group_rows)
             max_summ_loss = max(float(row[8]) for row in group_rows)
             combined_ids = ",".join(str(row[9]) for row in group_rows)
 
-            # Обновляем первую строку
             base_row = group_rows[0]
             base_row[2] = str(total_length)
             base_row[6] = str(total_coefficient)
@@ -438,10 +435,10 @@ def optimise_data(data):
             base_row[8] = str(max_summ_loss)
             base_row[9] = combined_ids
 
-            # Удаляем остальные строки из data
             for row in group_rows[1:]:
                 data.remove(row)
 
+    # Шаг 4: Добавляем заголовок в начало
     data.insert(0, ['Участок №1'])
 
     return data
