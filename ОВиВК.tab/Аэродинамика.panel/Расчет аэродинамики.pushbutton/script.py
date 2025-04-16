@@ -139,7 +139,6 @@ def get_system_elements():
 
     return selected_system
 
-
 def setup_params():
     revit_params = [cross_section_param, coefficient_param]
 
@@ -227,6 +226,11 @@ def get_local_coefficient(fitting, system):
     return local_section_coefficient
 
 def get_network_element_name(element, changing_flow):
+    element_name = calculator.element_names.get(element.Id)
+    if element_name is not None:
+        # Ключ найден, переменная tee_type_name содержит имя
+        return element_name
+
     if element.Category.IsId(BuiltInCategory.OST_DuctCurves):
         name = 'Воздуховод'
     elif element.Category.IsId(BuiltInCategory.OST_FlexDuctCurves):
@@ -318,7 +322,7 @@ def get_network_element_pressure_drop(section, element, density, velocity, coeff
         return pressure_drop
 
     if element.Category.IsId(BuiltInCategory.OST_DuctTerminal):
-        if coefficient is not None and coefficient != 0:
+        if coefficient is not None and float(coefficient) != 0:
             pressure_drop = calculate_pressure_drop()
         else:
             pressure_drop = 10  # Фиксированное значение для воздухораспределителя

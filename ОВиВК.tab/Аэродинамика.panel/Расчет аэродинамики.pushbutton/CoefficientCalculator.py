@@ -44,12 +44,14 @@ class ConnectorData:
     connected_element = None
     flow = None
 
+
     def __init__(self, connector):
         self.connector_element = connector
         self.shape = connector.Shape
         self.get_connected_element()
         self.flow = UnitUtils.ConvertFromInternalUnits(connector.Flow, UnitTypeId.CubicMetersPerHour)
         self.direction = connector.Direction
+        self.angle = self.get_connector_angle()
 
         if connector.Shape == ConnectorProfileType.Round:
             self.radius = UnitUtils.ConvertFromInternalUnits(connector.Radius, UnitTypeId.Millimeters)
@@ -95,7 +97,7 @@ class AerodinamicCoefficientCalculator:
     COEFF_GUID_CONST = "5a598293-1504-46cc-a9c0-de55c82848b9"
     # Это - Гуид "Определенный коэффициент". Вроде бы одинаков всегда
 
-    TEE_SUPPLY_PASS_NAME = 'Тройник на проход нагнетание круглый/прямоуг'
+    TEE_SUPPLY_PASS_NAME = 'Тройник на проход нагнетание круглый/прямоугольный'
     TEE_SUPPLY_BRANCH_ROUND_NAME = 'Тройник нагнетание ответвление круглый'
     TEE_SUPPLY_BRANCH_RECT_NAME = 'Тройник нагнетание ответвление прямоугольный'
     TEE_SUPPLY_SEPARATION_NAME = 'Тройник симметричный разделение потока нагнетание'
@@ -110,6 +112,7 @@ class AerodinamicCoefficientCalculator:
     view = None
     system = None
     all_sections_in_system = None
+    element_names = {}
 
     def __init__(self, doc, uidoc, view, system):
         self.doc = doc
@@ -238,6 +241,24 @@ class AerodinamicCoefficientCalculator:
             else:
                 coefficient = 0.18
 
+        angle = connector_data_element.angle
+
+        if angle <= 30:
+            angle_name = 30
+        elif angle <= 45:
+            angle_name = 45
+        elif angle <= 60:
+            angle_name = 60
+        else:
+            angle_name = 90
+
+        if connector_data_element.shape == ConnectorProfileType.Rectangular:
+            base_name = 'Отвод прямоугольный ' + str(angle_name) + str('°')
+        else:
+            base_name = 'Отвод круглый ' + str(angle_name) + str('°')
+
+        self.element_names[element.Id] = base_name
+
         return coefficient
 
     def get_transition_coefficient(self, element):
@@ -282,6 +303,7 @@ class AerodinamicCoefficientCalculator:
 
         # Конфузор
         if input_connector.area > output_connector.area:
+            self.element_names[element.Id] = 'Конфузор'
             if output_connector.radius:
 
                 diameter = output_connector.radius * 2
@@ -323,6 +345,7 @@ class AerodinamicCoefficientCalculator:
         #F = F0 / F1
         # диффузор
         if input_connector.area < output_connector.area:
+            self.element_names[element.Id] = 'Диффузор'
             F = input_connector.area / output_connector.area
 
             if input_connector.radius:
@@ -722,6 +745,7 @@ class AerodinamicCoefficientCalculator:
         if element.MEPModel.PartType == PartType.TapAdjustable:
             input_connector, output_connector = self.find_input_output_connector(element)
             tee_type_name = get_tap_tee_type_name(input_connector, output_connector)
+            self.element_names[element.Id] = tee_type_name
 
             if tee_type_name is None:
                 forms.alert(
@@ -737,6 +761,8 @@ class AerodinamicCoefficientCalculator:
             shape = tee_orientation.input_connector_data.shape
 
             tee_type_name = get_tee_type_name(tee_orientation, shape)
+
+            self.element_names[element.Id] = tee_type_name
 
             if tee_type_name is None:
                 forms.alert(
