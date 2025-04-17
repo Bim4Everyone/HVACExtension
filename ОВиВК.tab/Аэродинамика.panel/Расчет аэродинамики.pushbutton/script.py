@@ -272,6 +272,12 @@ def get_network_element_length(section, element_id):
 def get_network_element_coefficient(section, element):
     coefficient = element.GetParamValueOrDefault(coefficient_param)
 
+    if coefficient is None and element.InAnyCategory([
+        BuiltInCategory.OST_DuctAccessory,
+        BuiltInCategory.OST_MechanicalEquipment,
+        BuiltInCategory.OST_DuctTerminal]):
+        return 0
+
     if coefficient is None:
         coefficient = section.GetCoefficient(element.Id)
     if element.Category.IsId(BuiltInCategory.OST_DuctFitting):
@@ -364,6 +370,14 @@ def show_network_report(data, selected_system, output):
                        )
 
 def get_flow(section, element):
+    if element.Category.IsId(BuiltInCategory.OST_DuctFitting):
+        if element.MEPModel.PartType == PartType.TapAdjustable:
+            tap_tees_params = calculator.tap_tees_params.get(element.Id)
+            if tap_tees_params is not None:
+                # Ключ найден, переменная tee_type_name содержит имя
+                flow = max(tap_tees_params.Lo, tap_tees_params.Lc, tap_tees_params.Lp)
+                return flow
+
     if element.Category.IsId(BuiltInCategory.OST_DuctTerminal):
         flow = element.GetParamValue(BuiltInParameter.RBS_DUCT_FLOW_PARAM)
     else:
