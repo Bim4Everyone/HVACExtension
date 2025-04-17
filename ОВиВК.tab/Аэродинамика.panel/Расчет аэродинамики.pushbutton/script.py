@@ -272,6 +272,9 @@ def get_network_element_length(section, element_id):
 def get_network_element_coefficient(section, element):
     coefficient = element.GetParamValueOrDefault(coefficient_param)
 
+    if element.Category.IsId(BuiltInCategory.OST_DuctCurves):
+        return '-'
+
     if coefficient is None and element.InAnyCategory([
         BuiltInCategory.OST_DuctAccessory,
         BuiltInCategory.OST_MechanicalEquipment,
@@ -471,14 +474,12 @@ def optimise_data(data):
     for (count, size), group_rows in grouped.items():
         if len(group_rows) > 1:
             total_length = sum(float(row[2]) for row in group_rows)
-            total_coefficient = sum(float(row[6]) for row in group_rows)
             total_element_loss = sum(float(row[7]) for row in group_rows)
             max_summ_loss = max(float(row[8]) for row in group_rows)
             combined_ids = ",".join(str(row[9]) for row in group_rows)
 
             base_row = group_rows[0]
             base_row[2] = str(total_length)
-            base_row[6] = str(total_coefficient)
             base_row[7] = str(total_element_loss)
             base_row[8] = str(max_summ_loss)
             base_row[9] = combined_ids
