@@ -299,7 +299,7 @@ def get_network_element_real_size(element, element_type):
             UnitTypeId.Meters)
 
     if element.Category.IsId(BuiltInCategory.OST_DuctFitting):
-        if element.MEPModel.PartType == PartType.TapAdjustable:
+        if element.MEPModel.PartType == PartType.TapAdjustable or element.MEPModel.PartType == PartType.Tee:
             tees_params = calculator.tees_params.get(element.Id)
             if tees_params is not None:
                 # Ключ найден, переменная tee_type_name содержит имя
