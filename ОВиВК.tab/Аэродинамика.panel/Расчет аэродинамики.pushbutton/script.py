@@ -439,6 +439,14 @@ def optimise_data(data):
         count += 1
 
     data[:] = new_data  # Обновляем основной список
+    grouped = defaultdict(list)
+
+    # Шаг 2.5: Обновляем max_summ_loss — накапливаемое значение element_loss
+    cumulative_loss = 0.0
+    for row in data:
+        element_loss = float(row[7])
+        cumulative_loss += element_loss
+        row[8] = str(cumulative_loss)
 
     # Шаг 3: Вставка заголовков перед каждой группой count
     i = 0
@@ -454,7 +462,6 @@ def optimise_data(data):
         i += 1
 
     # Шаг 4: Агрегация воздуховодов по count и size
-    grouped = defaultdict(list)
     for row in data:
         if isinstance(row, list) and len(row) > 1:
             count, name, length, size, flow, velocity, coefficient, element_loss, summ_loss, id = row
