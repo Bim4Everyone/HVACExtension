@@ -34,7 +34,7 @@ from System.Collections.Generic import List
 from System import Guid
 from pyrevit import revit
 from collections import namedtuple
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 
 from dosymep.Bim4Everyone.Templates import ProjectParameters
 from dosymep.Bim4Everyone.SharedParams import SharedParamsConfig
@@ -297,10 +297,10 @@ def get_network_element_real_size(element, element_type):
 
     if element.Category.IsId(BuiltInCategory.OST_DuctFitting):
         if element.MEPModel.PartType == PartType.TapAdjustable:
-            tap_tees_params = calculator.tap_tees_params.get(element.Id)
-            if tap_tees_params is not None:
+            tees_params = calculator.tees_params.get(element.Id)
+            if tees_params is not None:
                 # Ключ найден, переменная tee_type_name содержит имя
-                return tap_tees_params.fc
+                return tees_params.fc
 
     size = element.GetParamValueOrDefault(cross_section_param)
     if not size:
@@ -371,11 +371,11 @@ def show_network_report(data, selected_system, output):
 
 def get_flow(section, element):
     if element.Category.IsId(BuiltInCategory.OST_DuctFitting):
-        if element.MEPModel.PartType == PartType.TapAdjustable:
-            tap_tees_params = calculator.tap_tees_params.get(element.Id)
-            if tap_tees_params is not None:
+        if element.MEPModel.PartType == PartType.TapAdjustable or element.MEPModel.PartType == PartType.Tee:
+            tees_params = calculator.tees_params.get(element.Id)
+            if tees_params is not None:
                 # Ключ найден, переменная tee_type_name содержит имя
-                flow = max(tap_tees_params.Lo, tap_tees_params.Lc, tap_tees_params.Lp)
+                flow = max(tees_params.Lo, tees_params.Lc, tees_params.Lp)
                 return flow
 
     if element.Category.IsId(BuiltInCategory.OST_DuctTerminal):
@@ -411,21 +411,36 @@ def sort_key(element):
     return 4  # Все остальные
 
 def optimise_data(data):
-    # Шаг 1: Группируем строки по значению flow (если flow одинаковый — это один count)
-    flow_to_count = {}
-    count_mapping = {}
-    new_count = 1
+    # Шаг 1: Группировка по flow с допуском ±5 и сохранением порядка
+    flow_ordered = OrderedDict()
+
+    def find_similar_flow_key(flow):
+        for key in flow_ordered:
+            if abs(key - flow) <= 5:
+                return key
+        return None
 
     for row in data:
-        if isinstance(row, list) and len(row) > 1:
-            flow = row[4]
-            if flow not in flow_to_count:
-                flow_to_count[flow] = new_count
-                new_count += 1
-            count = flow_to_count[flow]
-            row[0] = count
+        if isinstance(row, list) and len(row) > 4:
+            flow = float(row[4])  # Явное приведение для уверенности
+            similar_key = find_similar_flow_key(flow)
+            if similar_key is not None:
+                flow_ordered[similar_key].append(row)
+            else:
+                flow_ordered[flow] = [row]
 
-    # Шаг 2: Вставляем заголовки перед каждой новой группой count
+    # Шаг 2: Назначаем count по порядку групп
+    count = 1
+    new_data = []
+    for rows in flow_ordered.values():
+        for row in rows:
+            row[0] = count
+            new_data.append(row)
+        count += 1
+
+    data[:] = new_data  # Обновляем основной список
+
+    # Шаг 3: Вставка заголовков перед каждой группой count
     i = 0
     old_count = None
     while i < len(data):
@@ -438,7 +453,7 @@ def optimise_data(data):
             old_count = count
         i += 1
 
-    # Шаг 3: Агрегация данных для воздуховодов (по count и size)
+    # Шаг 4: Агрегация воздуховодов по count и size
     grouped = defaultdict(list)
     for row in data:
         if isinstance(row, list) and len(row) > 1:
@@ -464,7 +479,7 @@ def optimise_data(data):
             for row in group_rows[1:]:
                 data.remove(row)
 
-    # Шаг 4: Добавляем заголовок в начало
+    # Шаг 5: Добавляем заголовок в самое начало
     data.insert(0, ['Участок №1'])
 
     return data

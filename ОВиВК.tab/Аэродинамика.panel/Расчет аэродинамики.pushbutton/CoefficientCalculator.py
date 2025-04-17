@@ -122,7 +122,7 @@ class AerodinamicCoefficientCalculator:
     system = None
     all_sections_in_system = None
     element_names = {}
-    tap_tees_params = {}
+    tees_params = {}
 
     def __init__(self, doc, uidoc, view, system):
         self.doc = doc
@@ -536,7 +536,7 @@ class AerodinamicCoefficientCalculator:
             fp = area
             fo = input_connector.area
 
-            self.tap_tees_params[element.Id] = TapTeeCharacteristic(Lo, Lc, Lp, fo, fc, fp)
+            self.tees_params[element.Id] = TapTeeCharacteristic(Lo, Lc, Lp, fo, fc, fp)
 
             return Lo, Lp, Lc, fo, fc, fp
 
@@ -581,6 +581,8 @@ class AerodinamicCoefficientCalculator:
                 fc = tee_orientation.output_connector_data.area
                 fp = tee_orientation.branch_connector_data.area
                 fo = tee_orientation.input_connector_data.area
+
+            self.tees_params[element.Id] = TapTeeCharacteristic(Lo, Lc, Lp, fo, fc, fp)
 
             return Lo, Lp, Lc, fo, fc, fp
 
