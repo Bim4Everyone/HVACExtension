@@ -91,6 +91,15 @@ class TeeCharacteristic:
         self.output_connector_data = output_connector_data
         self.branch_connector_data = branch_connector_data
 
+class TapTeeCharacteristic:
+    def __init__(self, Lo, Lc, Lp, fo, fc, fp):
+        self.Lo = Lo
+        self.Lc = Lc
+        self.Lp = Lp
+        self.fo = fo
+        self.fc = fc
+        self.fp = fp
+
 class AerodinamicCoefficientCalculator:
     LOSS_GUID_CONST = "46245996-eebb-4536-ac17-9c1cd917d8cf"
     # Гуид для удельных потерь
@@ -113,6 +122,7 @@ class AerodinamicCoefficientCalculator:
     system = None
     all_sections_in_system = None
     element_names = {}
+    tap_tees_params = {}
 
     def __init__(self, doc, uidoc, view, system):
         self.doc = doc
@@ -180,6 +190,7 @@ class AerodinamicCoefficientCalculator:
         return connector_data_instances
 
     def find_input_output_connector(self, element):
+
         connector_data_instances = self.get_connector_data_instances(element)
 
         input_connector = None  # Первый на пути следования воздуха коннектор
@@ -192,6 +203,9 @@ class AerodinamicCoefficientCalculator:
             elements_ids = section.GetElementIds()
 
             for connector_data in connector_data_instances:
+                if connector_data.connected_element is None:
+                    continue
+
                 if (connector_data.connected_element.Id in elements_ids and
                         connector_data.connected_element.Id not in passed_elements):
                     passed_elements.append(connector_data.connected_element.Id)
@@ -505,18 +519,24 @@ class AerodinamicCoefficientCalculator:
                 Lp = max(main_flows)
                 Lc = Lp + Lo
 
+            if self.system.SystemType == DuctSystemType.SupplyAir:
+                main_element = input_element
+            else:
+                main_element = output_element
             try:
-                diameter = UnitUtils.ConvertFromInternalUnits(input_element.Diameter, UnitTypeId.Millimeters)
+                diameter = UnitUtils.ConvertFromInternalUnits(main_element.Diameter, UnitTypeId.Millimeters)
                 area = math.pi * (diameter / 2) ** 2
             except Exception:
-                height = UnitUtils.ConvertFromInternalUnits(input_element.Height, UnitTypeId.Millimeters)
-                width = UnitUtils.ConvertFromInternalUnits(input_element.Width, UnitTypeId.Millimeters)
+                height = UnitUtils.ConvertFromInternalUnits(main_element.Height, UnitTypeId.Millimeters)
+                width = UnitUtils.ConvertFromInternalUnits(main_element.Width, UnitTypeId.Millimeters)
+
                 area = height / 1000 * width / 1000
 
             fc = area
             fp = area
             fo = input_connector.area
 
+            self.tap_tees_params[element.Id] = TapTeeCharacteristic(Lo, Lc, Lp, fo, fc, fp)
 
             return Lo, Lp, Lc, fo, fc, fp
 
@@ -620,28 +640,32 @@ class AerodinamicCoefficientCalculator:
             fn_sqrt = math.sqrt(fp_normed)
 
             if tee_type_name == self.TEE_SUPPLY_PASS_NAME:
-                return (0.45 * (vo_normed / (1 - Lo_normed)) ** 2
-                        + (0.6 - 1.7 * vo_normed) * (vo_normed / (1 - Lo_normed))
-                        - (0.25 - 0.9 * vo_normed ** 2)
-                        + 0.19 * (1 - Lo_normed) / vo_normed)
+                return (((0.45 * (fp_normed/ (1 - Lo_normed)) ** 2 +
+                 (0.6 - 1.7 *fp_normed)) * (fp_normed/ (1 - Lo_normed)) -
+                 (0.25 - 0.9 * (fp_normed**2))) +
+                 0.19 * ((1 - Lo_normed)/ fp_normed))
 
             if tee_type_name == self.TEE_SUPPLY_BRANCH_ROUND_NAME:
-                return (fo_normed ** 2 - 0.58 * fo_normed + 0.54 + 0.025 * (Lo_normed / fo_normed))
+                return ((fo_normed / Lo_normed) ** 2
+                        - 0.58 * (fo_normed/Lo_normed) + 0.54
+                        + 0.025 * (Lo_normed / fo_normed))
 
             if tee_type_name == self.TEE_SUPPLY_BRANCH_RECT_NAME:
-                return (fo_normed ** 2 - 0.42 * fo_normed + 0.81 - 0.06 * (Lo_normed / fo_normed) ** 2)
+                return ((fo_normed / Lo_normed) ** 2
+                        - 0.42 * (fo_normed/Lo_normed) + 0.81
+                        - 0.06 * (Lo_normed / fo_normed))
 
             if tee_type_name == self.TEE_SUPPLY_SEPARATION_NAME:
-                return 1 + 0.3 * (Lo_normed / fo_normed) ** 2
+                return 1 + 0.3 * ((Lo_normed / fo_normed) ** 2)
 
             if tee_type_name == self.TEE_EXHAUST_PASS_ROUND_NAME:
-                return ((1 - fn_sqrt) + 0.5 * Lo_normed + 0.05 * (
-                        1.7 + (1 / (2 * fo_normed) - 1) * Lo_normed - math.sqrt((fp_normed + fo_normed) * Lo_normed))
-                        * ((fp_normed / (1 - Lo_normed)) ** 2))
+                return (((1 - fn_sqrt) + 0.5 * Lo_normed + 0.05) *
+                        ((1.7 + (1 / (2 * fo_normed) - 1) * Lo_normed - math.sqrt((fp_normed + fo_normed) * Lo_normed))
+                        * ((fp_normed / (1 - Lo_normed)) ** 2)))
 
             if tee_type_name == self.TEE_EXHAUST_PASS_RECT_NAME:
-                return ((1 - fn_sqrt) + 0.5 * Lo_normed + 0.05 * (
-                        1.5 + (1 / (2 * fo_normed) - 1) * Lo_normed - math.sqrt((fp_normed + fo_normed) * Lo_normed))
+                return (((1 - fn_sqrt) + 0.5 * Lo_normed + 0.05) *
+                        (1.5 + (1 / (2 * fo_normed) - 1) * Lo_normed - math.sqrt((fp_normed + fo_normed) * Lo_normed))
                         * ((fp_normed / (1 - Lo_normed)) ** 2))
 
             if tee_type_name == self.TEE_EXHAUST_BRANCH_ROUND_NAME:
@@ -650,12 +674,14 @@ class AerodinamicCoefficientCalculator:
                         + (0.5 + 0.42 * fp_normed) - 0.167 * (Lo_normed / fo_normed))
 
             if tee_type_name == self.TEE_EXHAUST_BRANCH_RECT_NAME:
-                term_a = (fc / Lo_normed) ** 2
-                term_b = 4.1 * (fp_normed / fo_normed) ** 1.25 * Lo_normed ** 1.5
-                term_c = (fp_normed + fo_normed) ** (0.3 / Lo_normed)
-                term_d = (fo_normed / fp_normed) ** 0.5
-                term_e = -0.5 * (fp_normed / fo_normed)
-                return term_a * (term_b * term_c * term_d ** (-2) + term_e)
+                return (
+                        (fo_normed / Lo_normed) ** 2) * (4.1 * ((fp_normed / fo_normed) ** 1.25) *
+                                                  (Lo_normed**1.5) *
+                                                  ( (fp_normed + fo_normed) **(
+                                                          (0.3/ Lo_normed) * math.sqrt(fo_normed/fp_normed) - 2 ))
+                                                         - 0.5 * (fp_normed/fo_normed)
+                )
+
 
             if tee_type_name == self.TEE_EXHAUST_MERGER_NAME:
                 if fo <= 0.35:

@@ -93,7 +93,7 @@ class EditorReport:
             self.status_report = "Вы владеете элементами, но ваш файл устарел. Выполните синхронизацию. "
 
         name = self.__get_element_editor_name(element)
-        if name is not None and name not in edited_reports:
+        if name is not None and name not in self.edited_reports:
             self.edited_reports.append(name)
             return True
 
@@ -102,7 +102,9 @@ class EditorReport:
             self.edited_report = ("Часть элементов спецификации занята пользователями: {}"
                                   .format(", ".join(self.edited_reports)))
         if self.edited_report != '' or self.status_report != '':
-            report_message = status_report + ('\n' if (edited_report and status_report) else '') + self.edited_report
+            report_message = (
+                    self.status_report + ('\n' if (self.edited_report and self.status_report) else '')
+                    + self.edited_report)
             forms.alert(report_message, "Ошибка", exitscript=True)
 
 class SelectedSystem:
@@ -287,6 +289,13 @@ def get_network_element_real_size(element, element_type):
             value,
             UnitTypeId.Meters)
 
+    if element.Category.IsId(BuiltInCategory.OST_DuctFitting):
+        if element.MEPModel.PartType == PartType.TapAdjustable:
+            tap_tees_params = calculator.tap_tees_params.get(element.Id)
+            if tap_tees_params is not None:
+                # Ключ найден, переменная tee_type_name содержит имя
+                return tap_tees_params.fc
+
     size = element.GetParamValueOrDefault(cross_section_param)
     if not size:
         size = element_type.GetParamValueOrDefault(cross_section_param)
@@ -365,8 +374,7 @@ def get_flow(section, element):
 
     return int(flow)
 
-def get_velocity(flow, real_size):
-
+def get_velocity(element, flow, real_size):
     velocity = (float(flow) * 1000000)/(3600 * real_size *1000000) #скорость в живом сечении
 
     return velocity
@@ -476,7 +484,7 @@ def get_table_data_per_element(density, section, element, count, pressure_total,
 
     flow = get_flow(section, element)
 
-    velocity = get_velocity(flow, real_size)
+    velocity = get_velocity(element, flow, real_size)
 
     name = get_network_element_name(element, old_flow < flow)
 
