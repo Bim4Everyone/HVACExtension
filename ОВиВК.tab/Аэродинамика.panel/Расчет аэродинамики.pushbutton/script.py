@@ -574,6 +574,12 @@ def script_execute(plugin_logger):
     global calculator
     calculator = CoefficientCalculator.AerodinamicCoefficientCalculator(doc, uidoc, view, system)
 
+    if len(calculator.critical_path_numbers) == 0:
+        forms.alert(
+            "Не найден диктующий путь, проверьте расчетность системы.",
+            "Ошибка",
+            exitscript=True)
+
     network_elements = split_elements(selected_system.elements)
 
     editor_report.show_report()

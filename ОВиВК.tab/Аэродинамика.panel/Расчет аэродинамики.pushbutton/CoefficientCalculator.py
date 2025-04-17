@@ -210,7 +210,7 @@ class AerodinamicCoefficientCalculator:
                         connector_data.connected_element.Id not in passed_elements):
                     passed_elements.append(connector_data.connected_element.Id)
 
-                    if input_connector is None:
+                    if input_connector is None and connector_data.direction == FlowDirectionType.In:
                         input_connector = connector_data
                     else:
                         output_connector = connector_data
@@ -400,7 +400,12 @@ class AerodinamicCoefficientCalculator:
                 dot_product = vec1.DotProduct(vec2)
                 norm1 = vec1.GetLength()
                 norm2 = vec2.GetLength()
-                return math.degrees(math.acos(dot_product / (norm1 * norm2)))
+
+                cosine = dot_product / (norm1 * norm2)
+                # Защита от выхода за границы из-за округления
+                cosine = max(-1.0, min(1.0, cosine))
+
+                return math.degrees(math.acos(cosine))
 
             # Вычисляем углы
             input_output_angle = calculate_angle(vec_input_location, vec_output_location)
@@ -584,6 +589,7 @@ class AerodinamicCoefficientCalculator:
 
             self.tees_params[element.Id] = TapTeeCharacteristic(Lo, Lc, Lp, fo, fc, fp)
 
+
             return Lo, Lp, Lc, fo, fc, fp
 
         def calculate_tee_coefficient(tee_type_name, Lo, Lp, Lc, fp, fo, fc):
@@ -641,7 +647,17 @@ class AerodinamicCoefficientCalculator:
             vp_normed = Lp_normed / fp_normed
             fn_sqrt = math.sqrt(fp_normed)
 
+            # print('Определение coef')
+            # print(fp_normed)
+            # print(fo_normed)
+            # print(Lp_normed)
+            # print(Lo_normed)
+            # print(element.Id)
+
             if tee_type_name == self.TEE_SUPPLY_PASS_NAME:
+                if element.Id.IntegerValue == 1914008:
+                    print(Lo, Lp, Lc, fp, fo, fc)
+
                 return (((0.45 * (fp_normed/ (1 - Lo_normed)) ** 2 +
                  (0.6 - 1.7 *fp_normed)) * (fp_normed/ (1 - Lo_normed)) -
                  (0.25 - 0.9 * (fp_normed**2))) +
