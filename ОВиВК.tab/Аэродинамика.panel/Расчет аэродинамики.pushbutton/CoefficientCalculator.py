@@ -647,17 +647,8 @@ class AerodinamicCoefficientCalculator:
             vp_normed = Lp_normed / fp_normed
             fn_sqrt = math.sqrt(fp_normed)
 
-            # print('Определение coef')
-            # print(fp_normed)
-            # print(fo_normed)
-            # print(Lp_normed)
-            # print(Lo_normed)
-            # print(element.Id)
 
             if tee_type_name == self.TEE_SUPPLY_PASS_NAME:
-                if element.Id.IntegerValue == 1914008:
-                    print(Lo, Lp, Lc, fp, fo, fc)
-
                 return (((0.45 * (fp_normed/ (1 - Lo_normed)) ** 2 +
                  (0.6 - 1.7 *fp_normed)) * (fp_normed/ (1 - Lo_normed)) -
                  (0.25 - 0.9 * (fp_normed**2))) +
