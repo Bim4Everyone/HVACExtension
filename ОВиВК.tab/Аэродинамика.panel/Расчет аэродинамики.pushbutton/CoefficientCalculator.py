@@ -142,6 +142,36 @@ class AerodinamicCoefficientCalculator:
 
         return connectors
 
+    def remember_element_name(self, element, base_name, connector_data_elements, length=None, angle=None):
+        # Собираем размеры
+        size_parts = []
+        for c in connector_data_elements:
+            if c.radius:
+                size_parts.append(str(int(c.radius * 2)))
+            else:
+                size_parts.append('{0}x{1}'.format(int(c.width), int(c.height)))
+
+        size = '-'.join(size_parts)
+
+        # Добавляем длину, если она указана
+        if length:
+            base_name += ', ' + str(length)
+
+        # Добавляем угол, если он указан
+        if angle is not None:
+            if angle <= 30:
+                angle_value = 30
+            elif angle <= 45:
+                angle_value = 45
+            elif angle <= 60:
+                angle_value = 60
+            else:
+                angle_value = 90
+
+            base_name += ' {0}°'.format(angle_value)
+
+        self.element_names[element.Id] = base_name + ' ' + size
+
     def get_connector_data_instances(self, element):
         connectors = self.get_connectors(element)
         connector_data_instances = []
@@ -241,197 +271,87 @@ class AerodinamicCoefficientCalculator:
             else:
                 coefficient = 0.18
 
-        angle = connector_data_element.angle
-
-        if angle <= 30:
-            angle_name = 30
-        elif angle <= 45:
-            angle_name = 45
-        elif angle <= 60:
-            angle_name = 60
-        else:
-            angle_name = 90
-
         if connector_data_element.shape == ConnectorProfileType.Rectangular:
-            base_name = 'Отвод прямоугольный ' + str(angle_name) + str('°') + ' ' + str(int(b)) + 'x' + str(int(h))
+            base_name = 'Отвод прямоугольный'
         else:
-            base_name = 'Отвод круглый ' + str(angle_name) +  str('°') + ' ' + str(int(connector_data_element.radius))
+            base_name = 'Отвод круглый'
 
-        self.element_names[element.Id] = base_name
+        self.remember_element_name(element, base_name,
+                                   [connector_data_element, connector_data_element],
+                                   angle=connector_data_element.angle)
 
         return coefficient
 
     def get_transition_coefficient(self, element):
         '''
-        Здесь используются формулы из
         Краснов Ю.С. Системы вентиляции и кондиционирования Прил. 25.1
         '''
 
         def get_transition_variables(element):
-            input_connector, output_connector = self.find_input_output_connector(element)
+            input_conn, output_conn = self.find_input_output_connector(element)
+            input_origin = input_conn.connector_element.Origin
+            output_origin = output_conn.connector_element.Origin
 
-            input_origin = input_connector.connector_element.Origin
-            output_origin = output_connector.connector_element.Origin
+            in_width = input_conn.radius * 2 if input_conn.radius else input_conn.width
+            out_width = output_conn.radius * 2 if output_conn.radius else output_conn.width
 
-            if input_connector.radius:
-                input_width = input_connector.radius * 2
-            else:
-                input_width = input_connector.width
+            length = input_origin.DistanceTo(output_origin)
+            length = UnitUtils.ConvertFromInternalUnits(length, UnitTypeId.Millimeters)
 
-            if output_connector.radius:
-                output_width = output_connector.radius * 2
-            else:
-                output_width = output_connector.width
+            angle_rad = math.atan(abs(in_width - out_width) / float(length))
+            angle_deg = math.degrees(angle_rad)
 
+            return input_conn, output_conn, length, angle_deg
 
-            transition_len = input_origin.DistanceTo(output_origin)
-            transition_len= UnitUtils.ConvertFromInternalUnits(transition_len, UnitTypeId.Millimeters)
+        input_conn, output_conn, length, angle = get_transition_variables(element)
 
-            R_in = input_width / 2
-            R_out = output_width / 2
+        base_name = 'Заужение' if input_conn.area > output_conn.area else 'Расширение'
+        self.remember_element_name(element, base_name, [input_conn, output_conn])
 
-            transition_angle = math.atan(abs(R_in - R_out) / transition_len)
-            transition_angle_degrees = math.degrees(transition_angle)
+        is_confuser = input_conn.area > output_conn.area
+        is_circular = bool(output_conn.radius if is_confuser else input_conn.radius)
 
-            return input_connector, output_connector, transition_len, transition_angle_degrees
+        if is_confuser:
+            d = output_conn.radius * 2 if is_circular else (4.0 * output_conn.width * output_conn.height) / (
+                        2 * (output_conn.width + output_conn.height))
+            l_d = length / float(d)
 
+            thresholds = [(1, [(10, 0.41), (20, 0.34), (30, 0.27), (180, 0.24)]),
+                          (0.15, [(10, 0.39), (20, 0.29), (30, 0.22), (180, 0.18)]),
+                          (float('inf'), [(10, 0.29), (20, 0.20), (30, 0.15), (180, 0.13)])]
 
+            for limit, table in thresholds:
+                if l_d <= limit:
+                    for angle_limit, coeff in table:
+                        if angle <= angle_limit:
+                            return coeff
 
-        (input_connector,
-         output_connector,
-         transition_len,
-         transition_angle) = get_transition_variables(element)
-
-        name = ', L=' + str(int(transition_len)) + ' '
-        if input_connector.radius:
-            name = name +str(int(input_connector.radius * 2)) + '-' + str(int(output_connector.radius *2))
         else:
-            name = (name + str(int(input_connector.width))+ 'x' + str(int(input_connector.height)) + '-'
-                    + str(int(output_connector.width))+ 'x' + str(int(output_connector.height)))
+            F = input_conn.area / float(output_conn.area)
+            angle_limits = [(16, 0), (24, 0), (30 if is_circular else 32, 0), (180, 0)]
 
-        # Конфузор
-        if input_connector.area > output_connector.area:
-            self.element_names[element.Id] = 'Заужение' + name
-            if output_connector.radius:
+            values_by_F = {
+                True: [  # Circular
+                    (0.2, [0.19, 0.32, 0.43, 0.61]),
+                    (0.25, [0.17, 0.28, 0.37, 0.49]),
+                    (0.4, [0.12, 0.19, 0.25, 0.35]),
+                    (float('inf'), [0.07, 0.1, 0.12, 0.17])
+                ],
+                False: [  # Rectangular
+                    (0.2, [0.31, 0.4, 0.59, 0.69]),
+                    (0.25, [0.27, 0.35, 0.52, 0.61]),
+                    (0.4, [0.18, 0.23, 0.34, 0.4]),
+                    (float('inf'), [0.09, 0.11, 0.16, 0.19])
+                ]
+            }
 
-                diameter = output_connector.radius * 2
-            else:
+            for f_limit, coeffs in values_by_F[is_circular]:
+                if F <= f_limit:
+                    for (a_limit, coeff) in zip([l[0] for l in angle_limits], coeffs):
+                        if angle <= a_limit:
+                            return coeff
 
-                width = output_connector.width
-                height = output_connector.height
-
-                diameter = (4 * (width * height)) / (2 * (width + height))  # Эквивалентный диаметр
-            len_per_diameter = transition_len / diameter
-
-            if len_per_diameter <= 1:
-                if transition_angle <= 10:
-                    return 0.41
-                elif transition_angle <=20:
-                    return 0.34
-                elif transition_angle <= 30:
-                    return 0.27
-                else:
-                    return 0.24
-            if len_per_diameter <=0.15:
-                if transition_angle <= 10:
-                    return 0.39
-                elif transition_angle <=20:
-                    return 0.29
-                elif transition_angle <= 30:
-                    return 0.22
-                else:
-                    return 0.18
-            else:
-                if transition_angle <= 10:
-                    return 0.29
-                elif transition_angle <=20:
-                    return 0.20
-                elif transition_angle <= 30:
-                    return 0.15
-                else:
-                    return 0.13
-        #F = F0 / F1
-        # диффузор
-        if input_connector.area < output_connector.area:
-            self.element_names[element.Id] = 'Расширение' + name
-            F = input_connector.area / output_connector.area
-
-            if input_connector.radius:
-                if F <= 0.2:
-                    if transition_angle <=16:
-                        return 0.19
-                    elif transition_angle <=24:
-                        return 0.32
-                    elif transition_angle <= 30:
-                        return 0.43
-                    else:
-                        return 0.61
-                elif F <= 0.25:
-                    if transition_angle <=16:
-                        return 0.17
-                    elif transition_angle <=24:
-                        return 0.28
-                    elif transition_angle <= 30:
-                        return 0.37
-                    else:
-                        return 0.49
-                elif F <= 0.4:
-                    if transition_angle <=16:
-                        return 0.12
-                    elif transition_angle <=24:
-                        return 0.19
-                    elif transition_angle <= 30:
-                        return 0.25
-                    else:
-                        return 0.35
-                else:
-                    if transition_angle <=16:
-                        return 0.07
-                    elif transition_angle <=24:
-                        return 0.1
-                    elif transition_angle <= 30:
-                        return 0.12
-                    else:
-                        return 0.17
-            else:
-                if F <= 0.2:
-                    if transition_angle <=20:
-                        return 0.31
-                    elif transition_angle <=24:
-                        return 0.4
-                    elif transition_angle <= 32:
-                        return 0.59
-                    else:
-                        return 0.69
-                elif F <= 0.25:
-                    if transition_angle <=20:
-                        return 0.27
-                    elif transition_angle <=24:
-                        return 0.35
-                    elif transition_angle <= 32:
-                        return 0.52
-                    else:
-                        return 0.61
-                elif F <= 0.4:
-                    if transition_angle <=20:
-                        return 0.18
-                    elif transition_angle <=24:
-                        return 0.23
-                    elif transition_angle <= 32:
-                        return 0.34
-                    else:
-                        return 0.4
-                else:
-                    if transition_angle <=20:
-                        return 0.09
-                    elif transition_angle <=24:
-                        return 0.11
-                    elif transition_angle <= 32:
-                        return 0.16
-                    else:
-                        return 0.19
-
-        return 0 # Для случаев когда переход оказался с равными коннекторами
+        return 0  # В случае равных сечений
 
     def get_tee_coefficient(self, element):
         def get_tee_orientation(element):
@@ -642,8 +562,6 @@ class AerodinamicCoefficientCalculator:
                 fp = tee_orientation.branch_connector_data.area
                 fo = tee_orientation.input_connector_data.area
 
-
-
             return Lo, Lp, Lc, fo, fc, fp
 
         def calculate_tee_coefficient(tee_type_name, Lo, Lp, Lc, fp, fo, fc):
@@ -750,72 +668,42 @@ class AerodinamicCoefficientCalculator:
 
             return None  # Если тип тройника не найден
 
-        if element.MEPModel.PartType == PartType.TapAdjustable:
+        is_tap = element.MEPModel.PartType == PartType.TapAdjustable
+
+        if is_tap:
             input_connector, output_connector = self.find_input_output_connector(element)
             tee_type_name = get_tap_tee_type_name(input_connector, output_connector)
 
-            name_addon = ''
-            input_size = input_connector.connected_element.GetParamValueOrDefault(
-                BuiltInParameter.RBS_CALCULATED_SIZE)
-            output_size = output_connector.connected_element.GetParamValueOrDefault(
-                BuiltInParameter.RBS_CALCULATED_SIZE)
-            if self.system.SystemType == DuctSystemType.SupplyAir:
-                name_addon = input_size + '-' + input_size + '-' + output_size
-            else:
-                name_addon = output_size + '-' + output_size + '-' + input_size
+            connected_element = input_connector.connected_element if self.system.SystemType == DuctSystemType.SupplyAir else output_connector.connected_element
+            duct_input, duct_output = self.find_input_output_connector(connected_element)
 
-            self.element_names[element.Id] = tee_type_name + ' ' + name_addon
-
-            if tee_type_name is None:
-                forms.alert(
-                    "Не получилось обработать тройник. " + str(element.Id),
-                    "Ошибка",
-                    exitscript=True)
-
-
-            Lo, Lp, Lc, fo, fc, fp =  get_tap_tee_variables(input_connector, output_connector, tee_type_name)
+            connector_data_list = [duct_input, duct_output, input_connector]
+            get_variables = get_tap_tee_variables
+            get_args = (input_connector, output_connector, tee_type_name)
 
         else:
             tee_orientation = get_tee_orientation(element)
             shape = tee_orientation.input_connector_data.shape
-
-            name_addon = ''
-            if tee_orientation.input_connector_data.radius:
-                name_addon = name_addon + tee_orientation.input_connector_data.radius * 2
-            else:
-                name_addon = (name_addon + str(int(tee_orientation.input_connector_data.width)) + 'x' +
-                              str(int(tee_orientation.input_connector_data.height)))
-
-            if tee_orientation.output_connector_data.radius:
-                name_addon = name_addon + '-' + tee_orientation.output_connector_data.radius * 2
-            else:
-                name_addon = (name_addon + '-' + str(int(tee_orientation.output_connector_data.width)) + 'x' +
-                              str(int(tee_orientation.output_connector_data.height)))
-
-            if tee_orientation.branch_connector_data.radius:
-                name_addon = name_addon + '-' + tee_orientation.branch_connector_data.radius * 2
-            else:
-                name_addon = (name_addon + '-' + str(int(tee_orientation.branch_connector_data.width)) + 'x' +
-                              str(int(tee_orientation.branch_connector_data.height)))
-
-
             tee_type_name = get_tee_type_name(tee_orientation, shape)
 
-            self.element_names[element.Id] = tee_type_name + ' ' + name_addon
+            connector_data_list = [
+                tee_orientation.input_connector_data,
+                tee_orientation.output_connector_data,
+                tee_orientation.branch_connector_data
+            ]
+            get_variables = get_tee_variables
+            get_args = (tee_orientation, tee_type_name)
 
-            if tee_type_name is None:
-                forms.alert(
-                    "Не получилось обработать тройник. " + str(element.Id),
-                    "Ошибка",
-                    exitscript=True)
-            # Lo  Расход воздуха в ответвлении, в формулах значит Lо
-            # Lp  Расход воздуха в проходе, в формулах значит Lп
-            # Lc  Расход воздуха в стволе, в формулах значит Lс
-            # fp  Площадь сечения прохода, в формулах fп
-            # fo  площадь сечения ответвления, в формулах fo
-            # fc  Площадь сечения ствола, в формулах fc
+        self.remember_element_name(element, tee_type_name, connector_data_list)
 
-            Lo, Lp, Lc, fo, fc, fp = get_tee_variables(tee_orientation, tee_type_name)
+        if tee_type_name is None:
+            forms.alert(
+                "Не получилось обработать тройник. " + str(element.Id),
+                "Ошибка",
+                exitscript=True
+            )
+
+        Lo, Lp, Lc, fo, fc, fp = get_variables(*get_args)
 
 
         coefficient = calculate_tee_coefficient(tee_type_name, Lo, Lp, Lc, fp, fo, fc)
