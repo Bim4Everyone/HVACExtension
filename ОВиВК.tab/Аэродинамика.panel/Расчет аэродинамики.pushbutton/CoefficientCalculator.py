@@ -663,6 +663,7 @@ class AerodinamicCoefficientCalculator:
                         * ((fp_normed / (1 - Lo_normed)) ** 2)))
 
             if tee_type_name == self.TEE_EXHAUST_PASS_RECT_NAME:
+                print(Lo, Lp, Lc, fp, fo, fc)
                 return (((1 - fn_sqrt) + 0.5 * Lo_normed + 0.05) *
                         (1.5 + (1 / (2 * fo_normed) - 1) * Lo_normed - math.sqrt((fp_normed + fo_normed) * Lo_normed))
                         * ((fp_normed / (1 - Lo_normed)) ** 2))
