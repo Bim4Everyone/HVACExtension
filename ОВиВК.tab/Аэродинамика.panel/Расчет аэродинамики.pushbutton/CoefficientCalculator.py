@@ -663,7 +663,6 @@ class AerodinamicCoefficientCalculator:
                         * ((fp_normed / (1 - Lo_normed)) ** 2)))
 
             if tee_type_name == self.TEE_EXHAUST_PASS_RECT_NAME:
-                print(Lo, Lp, Lc, fp, fo, fc)
                 return (((1 - fn_sqrt) + 0.5 * Lo_normed + 0.05) *
                         (1.5 + (1 / (2 * fo_normed) - 1) * Lo_normed - math.sqrt((fp_normed + fo_normed) * Lo_normed))
                         * ((fp_normed / (1 - Lo_normed)) ** 2))
@@ -682,15 +681,27 @@ class AerodinamicCoefficientCalculator:
                                                          - 0.5 * (fp_normed/fo_normed)
                 )
 
-
             if tee_type_name == self.TEE_EXHAUST_MERGER_NAME:
-                if fo <= 0.35:
+                if fo_normed <= 0.35:
                     return 1
                 else:
-                    if Lo / Lc <= 0.4:
-                        0.9 * (1 - Lo / Lc) * (1 + (1 / fo) ^ 2 + 3 * (1 / fo) ^ 2 * ((Lo / Lc) ^ 2 - (Lo / Lc)))
+                    if Lo_normed <= 0.4:
+                        # Формула из Excel для случая Lo_normed <= 0.4
+                        result = (
+                                0.9 * (1 - Lo_normed) *
+                                (1 + (Lo_normed / fo_normed) ** 2 - 2 * (
+                                            1 - Lo_normed) ** 2 - 2 * Lo_normed ** 2 * 6.1257422745431E-17 / fo_normed) /
+                                (Lo_normed / fo_normed) ** 2
+                        )
                     else:
-                        0.55 * (1 + (1 / fo) ^ 2 + 3 * (1 / fo) ^ 2 * ((Lo / Lc) ^ 2 - (Lo / Lc)))
+                        # Формула из Excel для случая Lo_normed > 0.4
+                        result = (
+                                0.55 *
+                                (1 + (Lo_normed / fo_normed) ** 2 - 2 * (
+                                            1 - Lo_normed) ** 2 - 2 * Lo_normed ** 2 * 6.1257422745431E-17 / fo_normed) /
+                                (Lo_normed / fo_normed) ** 2
+                        )
+                    return result
 
             return None  # Если тип тройника не найден
 
