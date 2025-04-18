@@ -271,37 +271,35 @@ class AerodinamicCoefficientCalculator:
 
         connector_data = self.get_connector_data_instances(element)
 
-        connector_data_element_1 = connector_data[0]
-        connector_data_element_2 = connector_data[1]
-
+        connector_data_element = connector_data[0]
 
         # Врезки работающие как отводы не дадут нам нормально свой угол забрать, но он все равно всегда 90
         if element.MEPModel.PartType == PartType.TapAdjustable:
-            connector_data_element_1.angle = 90
+            connector_data_element.angle = 90
 
-        if connector_data_element_1.shape == ConnectorProfileType.Rectangular:
-            h = connector_data_element_1.height
-            b = connector_data_element_1.width
+        if connector_data_element.shape == ConnectorProfileType.Rectangular:
+            h = connector_data_element.height
+            b = connector_data_element.width
 
             coefficient = (0.25 * (b / h) ** 0.25) * (1.07 * math.e ** (2 / (2 * (rounding + b / 2) / b + 1)) - 1) ** 2
 
-            if connector_data_element_1.angle <= 60:
+            if connector_data_element.angle <= 60:
                 coefficient = coefficient * 0.708
 
-        if connector_data_element_1.shape == ConnectorProfileType.Round:
-            if connector_data_element_1.angle > 85:
+        if connector_data_element.shape == ConnectorProfileType.Round:
+            if connector_data_element.angle > 85:
                 coefficient = 0.33
             else:
                 coefficient = 0.18
 
-        if connector_data_element_1.shape == ConnectorProfileType.Rectangular:
+        if connector_data_element.shape == ConnectorProfileType.Rectangular:
             base_name = 'Отвод прямоугольный'
         else:
             base_name = 'Отвод круглый'
 
         self.remember_element_name(element, base_name,
-                                   [connector_data_element_1, connector_data_element_1],
-                                   angle=connector_data_element_1.angle)
+                                   [connector_data_element, connector_data_element],
+                                   angle=connector_data_element.angle)
 
         return coefficient
 
