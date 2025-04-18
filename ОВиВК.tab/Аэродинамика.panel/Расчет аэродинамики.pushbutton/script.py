@@ -227,7 +227,7 @@ def get_local_coefficient(fitting, system):
     fitting_coefficient_cash[fitting.Id.IntegerValue] = local_section_coefficient
     return local_section_coefficient
 
-def get_network_element_name(element, changing_flow):
+def get_network_element_name(element):
     element_name = calculator.element_names.get(element.Id)
     if element_name is not None:
         # Ключ найден, переменная tee_type_name содержит имя
@@ -354,7 +354,8 @@ def get_network_element_pressure_drop(section, element, density, velocity, coeff
 
     return pressure_drop
 
-def show_network_report(data, selected_system, output):
+def show_network_report(data, selected_system, output, density):
+    print ('Плотность воздушной среды: ' + str(density) + ' кг/м3')
 
     output.print_table(table_data=data,
                        title=("Отчет о расчете аэродинамики системы " + selected_system.name),
@@ -401,7 +402,6 @@ def round_floats(value):
         return round(value, 3)
     return value
 
-# Функция для сортировки по приоритету категорий
 def sort_key(element):
     if element.Category.IsId(BuiltInCategory.OST_DuctTerminal):
         return 0
@@ -413,7 +413,7 @@ def sort_key(element):
         return 3
     return 4  # Все остальные
 
-def optimise_data(data):
+def optimise_data_to_demonstration(data):
     # Шаг 1: Группировка по flow с допуском ±5 и сохранением порядка
     flow_ordered = OrderedDict()
 
@@ -510,40 +510,72 @@ def prepare_section_elements(section):
 
     return segment_elements
 
-def get_table_data_per_element(density, section, element, count, pressure_total, output, old_flow):
-    element_type = element.GetElementType()
+def form_data_list(system, density, output ):
+    def get_data_by_element():
+        element_type = element.GetElementType()
 
-    length = get_network_element_length(section, element.Id)
+        length = get_network_element_length(section, element.Id)
 
-    coefficient = get_network_element_coefficient(section, element)
+        coefficient = get_network_element_coefficient(section, element)
 
-    real_size = get_network_element_real_size(element, element_type)
+        real_size = get_network_element_real_size(element, element_type)
 
-    flow = get_flow(section, element)
+        flow = get_flow(section, element)
 
-    velocity = get_velocity(element, flow, real_size)
+        velocity = get_velocity(element, flow, real_size)
 
-    name = get_network_element_name(element, old_flow < flow)
+        name = get_network_element_name(element)
 
-    pressure_drop = get_network_element_pressure_drop(section, element, density, velocity, coefficient)
+        pressure_drop = get_network_element_pressure_drop(section, element, density, velocity, coefficient)
 
-    pressure_total += pressure_drop
+        value = [
+            0,  # Count
+            name,
+            length,
+            real_size,
+            flow,
+            velocity,
+            coefficient,
+            pressure_drop,
+            0,  # Суммарные потери
+            output.linkify(element.Id)]
 
-    value = [
-        count,
-        name,
-        length,
-        real_size,
-        flow,
-        velocity,
-        coefficient,
-        pressure_drop,
-        pressure_total,
-        output.linkify(element.Id)]
+        rounded_value = [round_floats(item) for item in value]
 
-    rounded_value = [round_floats(item) for item in value]
+        return rounded_value
 
-    return rounded_value, pressure_total, flow
+    path_numbers = system.GetCriticalPathSectionNumbers()
+
+    critical_path_numbers = []
+    for number in path_numbers:
+        critical_path_numbers.append(number)
+    if system.SystemType == DuctSystemType.SupplyAir:
+        critical_path_numbers.reverse()
+
+    data = []
+    for number in critical_path_numbers:
+        section = system.GetSectionByNumber(number)
+
+        segment_elements = prepare_section_elements(section)
+
+        for element in segment_elements:
+            if not pass_data_filter(element, section):
+                continue
+
+            value = get_data_by_element()
+
+            data.append(value)
+
+    return data
+
+def pass_data_filter(element, section):
+    if element.Category.IsId(BuiltInCategory.OST_DuctFitting) and \
+            (element.MEPModel.PartType == element.MEPModel.PartType.Cap or
+             element.MEPModel.PartType == element.MEPModel.PartType.Union):
+        return False
+    if element.Category.IsId(BuiltInCategory.OST_DuctCurves) and get_flow(section, element) == 0:
+        return False
+    return True
 
 doc = __revit__.ActiveUIDocument.Document  # type: Document
 uidoc = __revit__.ActiveUIDocument
@@ -601,56 +633,16 @@ def script_execute(plugin_logger):
         # заново забираем систему  через ID, мы в прошлой транзакции обновили потери напора на элементах, поэтому данные
         # на системе могли измениться
         system = doc.GetElement(selected_system.system.Id)
-        path_numbers = system.GetCriticalPathSectionNumbers()
-
-        critical_path_numbers = []
-        for number in path_numbers:
-            critical_path_numbers.append(number)
-        if system.SystemType == DuctSystemType.SupplyAir:
-            critical_path_numbers.reverse()
-
-        data = []
-        count = 0
-
         output = script.get_output()
 
         settings = DuctSettings.GetDuctSettings(doc)
-        density = settings.AirDensity * 35.3146667215
-        print 'Плотность воздушной среды: ' + str(density) + ' кг/м3'
 
-        pressure_total = 0
-        old_flow = 0
+        density = UnitUtils.ConvertFromInternalUnits(settings.AirDensity, UnitTypeId.KilogramsPerCubicMeter)
 
-        for number in critical_path_numbers:
-            section = system.GetSectionByNumber(number)
-            count += 1
+        data = form_data_list(system, density, output)
 
-            segment_elements = prepare_section_elements(section)
+    data = optimise_data_to_demonstration(data)
 
-            for element in segment_elements:
-                if element.Category.IsId(BuiltInCategory.OST_DuctFitting) and \
-                        (element.MEPModel.PartType == element.MEPModel.PartType.Cap or
-                         element.MEPModel.PartType == element.MEPModel.PartType.Union):
-
-                    continue
-                if element.Category.IsId(BuiltInCategory.OST_DuctCurves) and get_flow(section, element) == 0:
-                    continue
-
-
-
-                value, pressure_total, old_flow = get_table_data_per_element(density,
-                                                                             section,
-                                                                             element,
-                                                                             count,
-                                                                             pressure_total,
-                                                                             output,
-                                                                             old_flow)
-
-
-                data.append(value)
-
-    data = optimise_data(data)
-
-    show_network_report(data, selected_system, output)
+    show_network_report(data, selected_system, output, density)
 
 script_execute()
