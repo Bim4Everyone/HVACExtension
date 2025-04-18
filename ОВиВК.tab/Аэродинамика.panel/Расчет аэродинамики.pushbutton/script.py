@@ -380,7 +380,7 @@ def get_flow(section, element):
             if tees_params is not None:
                 # Ключ найден, переменная tee_type_name содержит имя
                 flow = max(tees_params.Lo, tees_params.Lc, tees_params.Lp)
-                return flow
+                return int(flow)
 
     if element.Category.IsId(BuiltInCategory.OST_DuctTerminal):
         flow = element.GetParamValue(BuiltInParameter.RBS_DUCT_FLOW_PARAM)
