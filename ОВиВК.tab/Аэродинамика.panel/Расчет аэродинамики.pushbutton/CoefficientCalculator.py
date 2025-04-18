@@ -261,6 +261,14 @@ class AerodinamicCoefficientCalculator:
         Формулы из ВСН и Посохина похожие, но они явно с опечатками, кривой результат
 
         '''
+
+        element_type = element.GetElementType()
+
+        rounding = element_type.GetParamValueOrDefault('Закругление', 150.0)
+        if rounding != 150:
+            rounding = UnitUtils.ConvertFromInternalUnits(rounding, UnitTypeId.Millimeters)
+        # В стандартных семействах шаблона этот параметр есть. Для других вычислить почти невозможно, принимаем по ГОСТ
+
         connector_data = self.get_connector_data_instances(element)
 
         connector_data_element_1 = connector_data[0]
@@ -275,7 +283,7 @@ class AerodinamicCoefficientCalculator:
             h = connector_data_element_1.height
             b = connector_data_element_1.width
 
-            coefficient = (0.25 * (b / h) ** 0.25) * (1.07 * math.e ** (2 / (2 * (100 + b / 2) / b + 1)) - 1) ** 2
+            coefficient = (0.25 * (b / h) ** 0.25) * (1.07 * math.e ** (2 / (2 * (rounding + b / 2) / b + 1)) - 1) ** 2
 
             if connector_data_element_1.angle <= 60:
                 coefficient = coefficient * 0.708
