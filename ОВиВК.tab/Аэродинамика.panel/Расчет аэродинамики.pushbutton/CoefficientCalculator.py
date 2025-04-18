@@ -650,10 +650,8 @@ class AerodinamicCoefficientCalculator:
 
 
             if tee_type_name == self.TEE_SUPPLY_PASS_NAME:
-                return (((0.45 * (fp_normed/ (1 - Lo_normed)) ** 2 +
-                 (0.6 - 1.7 *fp_normed)) * (fp_normed/ (1 - Lo_normed)) -
-                 (0.25 - 0.9 * (fp_normed**2))) +
-                 0.19 * ((1 - Lo_normed)/ fp_normed))
+                return (0.45*(fp_normed/(1-Lo_normed))**2+(0.6-1.7*fp_normed)*(fp_normed/(1-Lo_normed))
+                        -(0.25-0.9*fp_normed**2)+0.19*((1-Lo_normed)/fp_normed))
 
             if tee_type_name == self.TEE_SUPPLY_BRANCH_ROUND_NAME:
                 return ((fo_normed / Lo_normed) ** 2
