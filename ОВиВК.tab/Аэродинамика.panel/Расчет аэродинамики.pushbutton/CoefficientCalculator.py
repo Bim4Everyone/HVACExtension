@@ -92,7 +92,18 @@ class TeeCharacteristic:
         self.branch_connector_data = branch_connector_data
 
 class TapTeeCharacteristic:
-    def __init__(self, Lo, Lc, Lp, fo, fc, fp):
+    def __init__(self, Lo, Lc, Lp, fo, fc, fp, name):
+        self.name = name
+        self.Lo = Lo
+        self.Lc = Lc
+        self.Lp = Lp
+        self.fo = fo
+        self.fc = fc
+        self.fp = fp
+
+class ElementCharacteristic:
+    def __init__(self, name, Lo = None, Lc = None, Lp = None, fo = None, fc = None, fp = None):
+        self.name = name
         self.Lo = Lo
         self.Lc = Lc
         self.Lp = Lp
@@ -122,7 +133,7 @@ class AerodinamicCoefficientCalculator:
     system = None
     all_sections_in_system = None
     element_names = {}
-    tees_params = {}
+    tee_params = {}
 
     def __init__(self, doc, uidoc, view, system):
         self.doc = doc
@@ -146,7 +157,16 @@ class AerodinamicCoefficientCalculator:
                                   BuiltInCategory.OST_PipeCurves,
                                   BuiltInCategory.OST_FlexDuctCurves]) and \
                 isinstance(element, MEPCurve) and element.ConnectorManager is not None:
-            connectors.extend(element.ConnectorManager.Connectors)
+
+            # Если это воздуховод — фильтруем только не Curve-коннекторы. Это завязано на врезки которые тоже падают в список
+            # но с нулевым расходом и двунаправленным потоком
+            if element.Category.Id.IntegerValue == int(BuiltInCategory.OST_DuctCurves):
+                for conn in element.ConnectorManager.Connectors:
+                    if conn.ConnectorType != ConnectorType.Curve:
+                        connectors.append(conn)
+            else:
+                # Для других категорий (трубы и гибкие воздуховоды) — добавляем все
+                connectors.extend(element.ConnectorManager.Connectors)
 
         return connectors
 
@@ -193,6 +213,16 @@ class AerodinamicCoefficientCalculator:
 
         input_connector = None  # Первый на пути следования воздуха коннектор
         output_connector = None  # Второй на пути следования воздуха коннектор
+
+        if element.Category.IsId(BuiltInCategory.OST_DuctCurves):
+            if self.system.SystemType == DuctSystemType.SupplyAir:
+                input_connector = max(connector_data_instances, key=lambda c: c.flow)
+                output_connector = min(connector_data_instances, key=lambda c: c.flow)
+            else:
+                input_connector = min(connector_data_instances, key=lambda c: c.flow)
+                output_connector = max(connector_data_instances, key=lambda c: c.flow)
+
+            return input_connector, output_connector
 
         # Поиск по критическому пути в системе
         passed_elements = []
@@ -548,7 +578,7 @@ class AerodinamicCoefficientCalculator:
             fp = area
             fo = input_connector.area
 
-            self.tees_params[element.Id] = TapTeeCharacteristic(Lo, Lc, Lp, fo, fc, fp)
+            self.tee_params[element.Id] = TapTeeCharacteristic(Lo, Lc, Lp, fo, fc, fp, tee_type_name)
 
             return Lo, Lp, Lc, fo, fc, fp
 
@@ -594,8 +624,7 @@ class AerodinamicCoefficientCalculator:
                 fp = tee_orientation.branch_connector_data.area
                 fo = tee_orientation.input_connector_data.area
 
-            self.tees_params[element.Id] = TapTeeCharacteristic(Lo, Lc, Lp, fo, fc, fp)
-
+            self.tee_params[element.Id] = TapTeeCharacteristic(Lo, Lc, Lp, fo, fc, fp, tee_type_name)
 
             return Lo, Lp, Lc, fo, fc, fp
 

@@ -300,10 +300,14 @@ def get_network_element_real_size(element, element_type):
 
     if element.Category.IsId(BuiltInCategory.OST_DuctFitting):
         if element.MEPModel.PartType == PartType.TapAdjustable or element.MEPModel.PartType == PartType.Tee:
-            tees_params = calculator.tees_params.get(element.Id)
-            if tees_params is not None:
+            tee_params = calculator.tee_params.get(element.Id)
+            if tee_params is not None:
+                if tee_params.name in [calculator.TEE_SUPPLY_PASS_NAME,
+                                       calculator.TEE_EXHAUST_PASS_ROUND_NAME,
+                                       calculator.TEE_EXHAUST_PASS_RECT_NAME]:
+                    return tee_params.fp
                 # Ключ найден, переменная tee_type_name содержит имя
-                return tees_params.fc
+                return tee_params.fo
 
     size = element.GetParamValueOrDefault(cross_section_param)
     if not size:
@@ -326,6 +330,8 @@ def get_network_element_real_size(element, element_type):
 
 def get_network_element_pressure_drop(section, element, density, velocity, coefficient):
     def calculate_pressure_drop():
+        if element.Id.IntegerValue == 20684060:
+            print(float(coefficient) * (density * math.pow(velocity, 2)) / 2)
         return float(coefficient) * (density * math.pow(velocity, 2)) / 2  # Динамическое давление
 
 
@@ -376,10 +382,15 @@ def show_network_report(data, selected_system, output, density):
 def get_flow(section, element):
     if element.Category.IsId(BuiltInCategory.OST_DuctFitting):
         if element.MEPModel.PartType == PartType.TapAdjustable or element.MEPModel.PartType == PartType.Tee:
-            tees_params = calculator.tees_params.get(element.Id)
-            if tees_params is not None:
-                # Ключ найден, переменная tee_type_name содержит имя
-                flow = max(tees_params.Lo, tees_params.Lc, tees_params.Lp)
+            tee_params = calculator.tee_params.get(element.Id)
+            if tee_params is not None:
+
+                if tee_params.name in [calculator.TEE_SUPPLY_PASS_NAME,
+                                       calculator.TEE_EXHAUST_PASS_ROUND_NAME,
+                                       calculator.TEE_EXHAUST_PASS_RECT_NAME]:
+                    flow = tee_params.Lp
+                else:
+                    flow = tee_params.Lo
                 return int(flow)
 
     if element.Category.IsId(BuiltInCategory.OST_DuctTerminal):
