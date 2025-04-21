@@ -175,11 +175,11 @@ def set_method(element, method):
     if current_guid != calculator.LOSS_GUID_CONST:
         param.Set(method.server_id.ToString())
 
-def set_method_value(element, method, system):
+def set_method_value(element, method, element_coefficients):
     local_section_coefficient = 0
 
     if element.Category.IsId(BuiltInCategory.OST_DuctFitting):
-        local_section_coefficient = get_local_coefficient(element, system)
+        local_section_coefficient = element_coefficients[element.Id]
 
     param = element.get_Parameter(BuiltInParameter.RBS_DUCT_FITTING_LOSS_METHOD_SERVER_PARAM)
     current_guid = param.AsString()
@@ -330,35 +330,33 @@ def get_network_element_real_size(element, element_type):
 
 def get_network_element_pressure_drop(section, element, density, velocity, coefficient):
     def calculate_pressure_drop():
-        if element.Id.IntegerValue == 20684060:
-            print(float(coefficient) * (density * math.pow(velocity, 2)) / 2)
-        return float(coefficient) * (density * math.pow(velocity, 2)) / 2  # Динамическое давление
+        return float(coefficient) * (density * math.pow(velocity, 2)) / 2  # ΔP = ξ * ρ * v² / 2
 
-
+    # 1. Воздуховоды и гибкие воздуховоды
     if element.InAnyCategory([BuiltInCategory.OST_DuctCurves,
                               BuiltInCategory.OST_FlexDuctCurves]):
         pressure_drop = section.GetPressureDrop(element.Id)
-        pressure_drop = UnitUtils.ConvertFromInternalUnits(pressure_drop, UnitTypeId.Pascals)
-        return pressure_drop
+        return UnitUtils.ConvertFromInternalUnits(pressure_drop, UnitTypeId.Pascals)
 
+    # 2. Пробуем взять значение из параметра
     pressure_drop = element.GetParamValueOrDefault("ФОП_ВИС_Потери давления")
     if pressure_drop is not None:
         return pressure_drop
 
-    if element.Category.IsId(BuiltInCategory.OST_DuctTerminal):
-        if coefficient is not None and float(coefficient) != 0:
-            pressure_drop = calculate_pressure_drop()
-        else:
-            pressure_drop = 10  # Фиксированное значение для воздухораспределителя
+    # 3. Воздухораспределители
+    if element.Category.Id.IntegerValue == int(BuiltInCategory.OST_DuctTerminal):
+        if coefficient and float(coefficient) != 0:
+            return calculate_pressure_drop()
+        return 10  # фиксированное значение
 
-        return pressure_drop
+    # 4. Фитинги, аксессуары, оборудование
+    if element.InAnyCategory([
+        BuiltInCategory.OST_DuctFitting,
+        BuiltInCategory.OST_DuctAccessory,
+        BuiltInCategory.OST_MechanicalEquipment]):
+        return calculate_pressure_drop()
 
-    if element.InAnyCategory([BuiltInCategory.OST_DuctFitting,
-                              BuiltInCategory.OST_DuctAccessory,
-                              BuiltInCategory.OST_MechanicalEquipment]):
-        pressure_drop = calculate_pressure_drop()
-
-    return pressure_drop
+    return 0
 
 def show_network_report(data, selected_system, output, density):
     print ('Плотность воздушной среды: ' + str(density) + ' кг/м3')
@@ -595,7 +593,7 @@ view = doc.ActiveView
 coefficient_param = SharedParamsConfig.Instance.VISLocalResistanceCoef # ФОП_ВИС_КМС
 cross_section_param = SharedParamsConfig.Instance.VISCrossSection # ФОП_ВИС_Живое сечение, м2
 
-calculator = None
+calculator = CoefficientCalculator.AerodinamicCoefficientCalculator(doc, uidoc, view)
 editor_report = EditorReport()
 fitting_coefficient_cash = {}
 passed_elements = []
@@ -615,8 +613,7 @@ def script_execute(plugin_logger):
 
     system = doc.GetElement(selected_system.system.Id)
 
-    global calculator
-    calculator = CoefficientCalculator.AerodinamicCoefficientCalculator(doc, uidoc, view, system)
+    calculator.get_critical_path(system)
 
     if len(calculator.critical_path_numbers) == 0:
         forms.alert(
@@ -635,24 +632,28 @@ def script_execute(plugin_logger):
         for element in network_elements:
             set_method(element, method)
 
+    fittings_coefficients = {}
+    for element in network_elements:
+        if element.Category.IsId(BuiltInCategory.OST_DuctFitting):
+            fittings_coefficients[element.Id] = get_local_coefficient(element, system)
+
     with revit.Transaction("BIM: Пересчет потерь напора"):
         for element in network_elements:
             # устанавливаем 0 на арматуру, чтоб она не убивала расчеты и считаем на фитинги
-            set_method_value(element, method, doc.GetElement(selected_system.system.Id))
+            set_method_value(element, method, fittings_coefficients)
 
-    with revit.Transaction("BIM: Вывод отчета"):
-        # заново забираем систему  через ID, мы в прошлой транзакции обновили потери напора на элементах, поэтому данные
-        # на системе могли измениться
-        system = doc.GetElement(selected_system.system.Id)
-        output = script.get_output()
+    # заново забираем систему  через ID, мы в прошлой транзакции обновили потери напора на элементах, поэтому данные
+    # на системе могли измениться
+    system = doc.GetElement(selected_system.system.Id)
+    output = script.get_output()
 
-        settings = DuctSettings.GetDuctSettings(doc)
+    settings = DuctSettings.GetDuctSettings(doc)
 
-        density = UnitUtils.ConvertFromInternalUnits(settings.AirDensity, UnitTypeId.KilogramsPerCubicMeter)
+    density = UnitUtils.ConvertFromInternalUnits(settings.AirDensity, UnitTypeId.KilogramsPerCubicMeter)
 
-        data = form_data_list(system, density, output)
+    raw_data = form_data_list(system, density, output)
 
-    data = optimise_data_to_demonstration(data)
+    data = optimise_data_to_demonstration(raw_data)
 
     show_network_report(data, selected_system, output, density)
 

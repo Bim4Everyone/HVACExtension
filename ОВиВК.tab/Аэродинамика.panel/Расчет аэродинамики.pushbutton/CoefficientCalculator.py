@@ -135,10 +135,12 @@ class AerodinamicCoefficientCalculator:
     element_names = {}
     tee_params = {}
 
-    def __init__(self, doc, uidoc, view, system):
+    def __init__(self, doc, uidoc, view):
         self.doc = doc
         self.uidoc = uidoc
         self.view = view
+
+    def get_critical_path(self, system):
         self.system = system
 
         path_numbers = system.GetCriticalPathSectionNumbers()
@@ -146,6 +148,7 @@ class AerodinamicCoefficientCalculator:
 
         if system.SystemType == DuctSystemType.SupplyAir:
             self.critical_path_numbers.reverse()
+
 
     def get_connectors(self, element):
         connectors = []
@@ -292,6 +295,52 @@ class AerodinamicCoefficientCalculator:
 
         '''
 
+        connector_data = self.get_connector_data_instances(element)
+
+        # Врезки работающие как отводы не дадут нам нормально свой угол забрать, но он все равно всегда 90
+        if element.MEPModel.PartType == PartType.TapAdjustable:
+            input_connector, output_connector = self.find_input_output_connector(element)
+
+            input_element = input_connector.connected_element
+            output_element = output_connector.connected_element
+
+            f = input_connector.area
+            if self.system.SystemType == DuctSystemType.SupplyAir:
+                main_element = input_element
+            else:
+                main_element = output_element
+            try:
+                diameter = UnitUtils.ConvertFromInternalUnits(main_element.Diameter, UnitTypeId.Millimeters)/ 1000
+                F = math.pi * (diameter / 2) ** 2
+            except Exception:
+                height = UnitUtils.ConvertFromInternalUnits(main_element.Height, UnitTypeId.Millimeters)
+                width = UnitUtils.ConvertFromInternalUnits(main_element.Width, UnitTypeId.Millimeters)
+                F = height/1000 * width/1000
+
+            # Если площади равны - считаем как обычный отвод под 90 градусов
+            if f != F:
+                if output_element == main_element:
+                    coefficient = (f / F) ** 2 + 0.7 * (f / F) ** 2
+                else:
+                    coefficient = 0.4 + 0.7 * (f / F) ** 2
+
+                base_name = 'Колено прямоугольное с изменением сечения'
+
+                duct_input_connector, duct_output_connector = self.find_input_output_connector(main_element)
+
+
+                self.remember_element_name(element, base_name,
+                                           [input_connector, duct_input_connector],
+                                           )
+
+                return coefficient
+
+        connector_data_element = connector_data[0]
+
+        # Врезки работающие как отводы не дадут нам нормально свой угол забрать, но он все равно всегда 90
+        if element.MEPModel.PartType == PartType.TapAdjustable:
+            connector_data_element.angle = 90
+
         element_type = element.GetElementType()
 
         rounding = element_type.GetParamValueOrDefault('Закругление', 150.0)
@@ -299,13 +348,6 @@ class AerodinamicCoefficientCalculator:
             rounding = UnitUtils.ConvertFromInternalUnits(rounding, UnitTypeId.Millimeters)
         # В стандартных семействах шаблона этот параметр есть. Для других вычислить почти невозможно, принимаем по ГОСТ
 
-        connector_data = self.get_connector_data_instances(element)
-
-        connector_data_element = connector_data[0]
-
-        # Врезки работающие как отводы не дадут нам нормально свой угол забрать, но он все равно всегда 90
-        if element.MEPModel.PartType == PartType.TapAdjustable:
-            connector_data_element.angle = 90
 
         if connector_data_element.shape == ConnectorProfileType.Rectangular:
             h = connector_data_element.height
