@@ -5,7 +5,6 @@ import clr
 
 clr.AddReference("RevitAPI")
 clr.AddReference("RevitAPIUI")
-clr.AddReference('Microsoft.Office.Interop.Excel, Version=11.0.0.0, Culture=neutral, PublicKeyToken=71e9bce111e9429c')
 clr.AddReference("dosymep.Revit.dll")
 clr.AddReference("dosymep.Bim4Everyone.dll")
 import dosymep
@@ -41,24 +40,47 @@ from dosymep.Bim4Everyone.SharedParams import SharedParamsConfig
 from dosymep_libs.bim4everyone import *
 
 class CalculationMethod:
-    name = None
-    server_id = None
-    server = None
-    schema = None
-    coefficient_field = None
+    """
+    Класс для хранения информации о методе расчета.
+
+    Attributes:
+        name (str): Название метода расчета.
+        server_id (Guid): Идентификатор сервера.
+        server (ExternalService): Объект сервера.
+        schema (Schema): Схема данных сервера.
+        coefficient_field (Field): Поле коэффициента в схеме данных.
+    """
 
     def __init__(self, name, server, server_id):
+        """
+        Инициализация объекта CalculationMethod.
+
+        Args:
+            name (str): Название метода расчета.
+            server (ExternalService): Объект сервера.
+            server_id (Guid): Идентификатор сервера.
+        """
         self.name = name
         self.server = server
         self.server_id = server_id
-
         self.schema = server.GetDataSchema()
         self.coefficient_field = self.schema.GetField("Coefficient")
 
 class EditorReport:
-    edited_reports = []
-    status_report = ''
-    edited_report = ''
+    """
+    Класс для отчета о редактировании элементов.
+
+    Attributes:
+        edited_reports (list): Список имен пользователей, редактирующих элементы.
+        status_report (str): Сообщение о статусе редактирования.
+        edited_report (str): Отчет о редактировании элементов.
+    """
+
+    def __init__(self):
+        """Инициализация объекта EditorReport."""
+        self.edited_reports = []
+        self.status_report = ''
+        self.edited_report = ''
 
     def __get_element_editor_name(self, element):
         """
@@ -74,7 +96,6 @@ class EditorReport:
         edited_by = element.GetParamValueOrDefault(BuiltInParameter.EDITED_BY)
         if edited_by is None:
             return None
-
         if edited_by.lower() in user_name.lower():
             return None
         return edited_by
@@ -84,83 +105,115 @@ class EditorReport:
         Проверяет, заняты ли элементы другими пользователями.
 
         Args:
-            element: Элемент для проверки.
+            element (Element): Элемент для проверки.
         """
-
         self.update_status = WorksharingUtils.GetModelUpdatesStatus(doc, element.Id)
-
         if self.update_status == ModelUpdatesStatus.UpdatedInCentral:
-            self.status_report = "Вы владеете элементами, но ваш файл устарел. Выполните синхронизацию. "
-
+            self.status_report = "Вы владеете элементами, но ваш файл устарел. Выполните синхронизацию."
         name = self.__get_element_editor_name(element)
         if name is not None and name not in self.edited_reports:
             self.edited_reports.append(name)
             return True
+        return False
 
     def show_report(self):
+        """Отображает отчет о редактировании элементов."""
         if len(self.edited_reports) > 0:
-            self.edited_report = ("Часть элементов спецификации занята пользователями: {}"
-                                  .format(", ".join(self.edited_reports)))
+            self.edited_report = (
+                "Часть элементов спецификации занята пользователями: {}".format(", ".join(self.edited_reports))
+            )
         if self.edited_report != '' or self.status_report != '':
             report_message = (
-                    self.status_report + ('\n' if (self.edited_report and self.status_report) else '')
-                    + self.edited_report)
+                self.status_report +
+                ('\n' if (self.edited_report and self.status_report) else '') +
+                self.edited_report
+            )
             forms.alert(report_message, "Ошибка", exitscript=True)
 
 class SelectedSystem:
-    name = None
-    elements = None
-    system = None
+    """
+    Класс для хранения информации о выбранной системе.
+
+    Attributes:
+        name (str): Название системы.
+        elements (list): Список элементов системы.
+        system (Element): Объект системы.
+    """
 
     def __init__(self, name, elements, system):
+        """
+        Инициализация объекта SelectedSystem.
+
+        Args:
+            name (str): Название системы.
+            elements (list): Список элементов системы.
+            system (Element): Объект системы.
+        """
         self.name = name
         self.system = system
         self.elements = elements
 
 def get_system_elements():
-    selected_ids = uidoc.Selection.GetElementIds()
+    """
+    Получает элементы выбранной системы воздуховодов.
 
+    Returns:
+        SelectedSystem: Объект выбранной системы.
+    """
+    selected_ids = uidoc.Selection.GetElementIds()
     if selected_ids.Count != 1:
         forms.alert(
             "Должна быть выделена одна система воздуховодов.",
             "Ошибка",
-            exitscript=True)
-
+            exitscript=True
+        )
     system = doc.GetElement(selected_ids[0])
-
-    if system.Category.IsId(BuiltInCategory.OST_DuctSystem) == False:
+    if not system.Category.IsId(BuiltInCategory.OST_DuctSystem):
         forms.alert(
             "Должна быть выделена одна система воздуховодов.",
             "Ошибка",
-            exitscript=True)
-
+            exitscript=True
+        )
     duct_elements = system.DuctNetwork
     system_name = system.GetParamValue(BuiltInParameter.RBS_SYSTEM_NAME_PARAM)
-
     selected_system = SelectedSystem(system_name, duct_elements, system)
-
     return selected_system
 
 def setup_params():
+    """Настраивает параметры проекта."""
     revit_params = [cross_section_param, coefficient_param]
-
     project_parameters = ProjectParameters.Create(doc.Application)
     project_parameters.SetupRevitParams(doc, revit_params)
 
 def get_loss_methods():
-    service_id = ExternalServices.BuiltInExternalServices.DuctFittingAndAccessoryPressureDropService
+    """
+    Получает метод расчета потерь для фитингов и аксессуаров.
 
+    Returns:
+        CalculationMethod: Объект метода расчета.
+    """
+    service_id = ExternalServices.BuiltInExternalServices.DuctFittingAndAccessoryPressureDropService
     service = ExternalServiceRegistry.GetService(service_id)
     server_ids = service.GetRegisteredServerIds()
-
     for server_id in server_ids:
         server = get_server_by_id(server_id, service_id)
         name = server.GetName()
         if str(server_id) == calculator.COEFF_GUID_CONST:
             calculation_method = CalculationMethod(name, server, server_id)
             return calculation_method
+    return None
 
 def get_server_by_id(server_guid, service_id):
+    """
+    Получает сервер по его идентификатору.
+
+    Args:
+        server_guid (Guid): Идентификатор сервера.
+        service_id (Guid): Идентификатор сервиса.
+
+    Returns:
+        ExternalService: Объект сервера или None, если сервер не найден.
+    """
     service = ExternalServiceRegistry.GetService(service_id)
     if service is not None and server_guid is not None:
         server = service.GetServer(server_guid)
@@ -169,151 +222,185 @@ def get_server_by_id(server_guid, service_id):
     return None
 
 def set_calculation_method(element, method):
+    """
+    Устанавливает метод расчета для элемента.
+
+    Args:
+        element (Element): Элемент для установки метода расчета.
+        method (CalculationMethod): Объект метода расчета.
+    """
     param = element.get_Parameter(BuiltInParameter.RBS_DUCT_FITTING_LOSS_METHOD_SERVER_PARAM)
     current_guid = param.AsString()
-
     if current_guid != calculator.LOSS_GUID_CONST:
         param.Set(method.server_id.ToString())
 
 def set_coefficient_value(element, method, element_coefficients):
-    local_section_coefficient = 0
+    """
+    Устанавливает значение коэффициента для элемента.
 
+    Args:
+        element (Element): Элемент для установки коэффициента.
+        method (CalculationMethod): Объект метода расчета.
+        element_coefficients (dict): Словарь коэффициентов элементов.
+    """
+    local_section_coefficient = 0
     if element.Category.IsId(BuiltInCategory.OST_DuctFitting):
         local_section_coefficient = element_coefficients[element.Id]
-
     param = element.get_Parameter(BuiltInParameter.RBS_DUCT_FITTING_LOSS_METHOD_SERVER_PARAM)
     current_guid = param.AsString()
-
     if local_section_coefficient != 0 and current_guid != calculator.LOSS_GUID_CONST:
         element = doc.GetElement(element.Id)
-
         entity = element.GetEntity(method.schema)
-
         entity.Set(method.coefficient_field, str(local_section_coefficient))
         element.SetEntity(entity)
 
 def get_fittings_and_accessory(system_elements):
-    elements = []
+    """
+    Получает фитинги и аксессуары из элементов системы.
 
+    Args:
+        system_elements (list): Список элементов системы.
+
+    Returns:
+        list: Список фитингов и аксессуаров.
+    """
+    elements = []
     for element in system_elements:
         editor_report.is_element_edited(element)
         if element.Category.IsId(BuiltInCategory.OST_DuctFitting) or element.Category.IsId(BuiltInCategory.OST_DuctAccessory):
             elements.append(element)
-
     return elements
 
 def get_local_coefficient(fitting, system):
+    """
+    Получает локальный коэффициент для фитинга.
+
+    Args:
+        fitting (Element): Фитинг для получения коэффициента.
+        system (Element): Система, к которой принадлежит фитинг.
+
+    Returns:
+        float: Локальный коэффициент.
+    """
     part_type = fitting.MEPModel.PartType
-
     if part_type == fitting.MEPModel.PartType.Elbow:
-
         local_section_coefficient = calculator.get_elbow_coefficient(fitting)
-
     elif part_type == fitting.MEPModel.PartType.Transition:
-
         local_section_coefficient = calculator.get_transition_coefficient(fitting)
-
     elif part_type == fitting.MEPModel.PartType.Tee:
-
         local_section_coefficient = calculator.get_tee_coefficient(fitting)
-
     elif part_type == fitting.MEPModel.PartType.TapAdjustable:
-
         local_section_coefficient = calculator.get_tap_adjustable_coefficient(fitting)
-
     else:
         local_section_coefficient = 0
-
     fitting_coefficient_cash[fitting.Id.IntegerValue] = local_section_coefficient
     return local_section_coefficient
 
 def get_network_element_name(element):
+    """
+    Получает название элемента сети.
+
+    Args:
+        element (Element): Элемент сети.
+
+    Returns:
+        str: Название элемента.
+    """
     element_name = calculator.element_names.get(element.Id)
     if element_name is not None:
-        # Ключ найден, переменная tee_type_name содержит имя
         return element_name
-
     if element.Category.IsId(BuiltInCategory.OST_DuctCurves):
-        name = 'Воздуховод'
-    elif element.Category.IsId(BuiltInCategory.OST_FlexDuctCurves):
-        name = 'Гибкий воздуховод'
-    elif element.Category.IsId(BuiltInCategory.OST_DuctTerminal):
-        name = 'Воздухораспределитель'
-    elif element.Category.IsId(BuiltInCategory.OST_MechanicalEquipment):
-        name = 'Оборудование'
-    elif element.Category.IsId(BuiltInCategory.OST_DuctFitting):
-        name = 'Фасонный элемент воздуховода'
+        return 'Воздуховод'
+    if element.Category.IsId(BuiltInCategory.OST_FlexDuctCurves):
+        return 'Гибкий воздуховод'
+    if element.Category.IsId(BuiltInCategory.OST_DuctTerminal):
+        return 'Воздухораспределитель'
+    if element.Category.IsId(BuiltInCategory.OST_MechanicalEquipment):
+        return 'Оборудование'
+    if element.Category.IsId(BuiltInCategory.OST_DuctFitting):
         if element.MEPModel.PartType == PartType.Elbow:
-            name = 'Отвод воздуховода'
+            return 'Отвод воздуховода'
         if element.MEPModel.PartType == PartType.Transition:
-            name = 'Переход между сечениями'
+            return 'Переход между сечениями'
         if element.MEPModel.PartType == PartType.Tee:
-            name = 'Тройник'
+            return 'Тройник'
         if element.MEPModel.PartType == PartType.TapAdjustable:
             if calculator.is_tap_elbow(element):
-                name = 'Отвод'
-            else:
-                name = "Боковое ответвление"
-
-    else:
-        name = 'Арматура'
-
-    return name
+                return 'Отвод'
+            return "Боковое ответвление"
+    return 'Арматура'
 
 def get_network_element_length(section, element_id):
-    length = '-'
+    """
+    Получает длину элемента сети.
+
+    Args:
+        section (Section): Секция системы.
+        element_id (ElementId): Идентификатор элемента.
+
+    Returns:
+        float: Длина элемента в метрах.
+    """
     try:
         length = section.GetSegmentLength(element_id) * 304.8 / 1000
-        length = float('{:.2f}'.format(length))
+        return float('{:.2f}'.format(length))
     except Exception:
-        pass
-    return length
-
-def get_network_element_coefficient(section, element):
-    coefficient = element.GetParamValueOrDefault(coefficient_param)
-
-    if element.Category.IsId(BuiltInCategory.OST_DuctCurves):
         return '-'
 
+def get_network_element_coefficient(section, element):
+    """
+    Получает коэффициент элемента сети.
+
+    Args:
+        section (Section): Секция системы.
+        element (Element): Элемент сети.
+
+    Returns:
+        str: Коэффициент элемента.
+    """
+    coefficient = element.GetParamValueOrDefault(coefficient_param)
+    if element.Category.IsId(BuiltInCategory.OST_DuctCurves):
+        return '-'
     if coefficient is None and element.InAnyCategory([
         BuiltInCategory.OST_DuctAccessory,
         BuiltInCategory.OST_MechanicalEquipment,
         BuiltInCategory.OST_DuctTerminal]):
-        return 0
-
+        return '0'
     if coefficient is None:
         coefficient = section.GetCoefficient(element.Id)
     if element.Category.IsId(BuiltInCategory.OST_DuctFitting):
-        coefficient = fitting_coefficient_cash[element.Id.IntegerValue]  # КМС
-
-    # Округляем, если есть цифры после запятой
+        coefficient = fitting_coefficient_cash[element.Id.IntegerValue]
     if isinstance(coefficient, (int, float)):
-        coefficient = int(coefficient) if coefficient == int(coefficient) else round(coefficient, 2)
-
+        return str(int(coefficient)) if coefficient == int(coefficient) else str(round(coefficient, 2))
     return str(coefficient)
 
 def get_network_element_real_size(element, element_type):
+    """
+    Получает реальный размер элемента сети.
+
+    Args:
+        element (Element): Элемент сети.
+        element_type (ElementType): Тип элемента.
+
+    Returns:
+        float: Реальный размер элемента в квадратных метрах.
+    """
     def convert_to_meters(value):
-        return UnitUtils.ConvertFromInternalUnits(
-            value,
-            UnitTypeId.Meters)
+        return UnitUtils.ConvertFromInternalUnits(value, UnitTypeId.Meters)
 
     if element.Category.IsId(BuiltInCategory.OST_DuctFitting):
-        if element.MEPModel.PartType == PartType.TapAdjustable or element.MEPModel.PartType == PartType.Tee:
+        if element.MEPModel.PartType in [PartType.TapAdjustable, PartType.Tee]:
             tee_params = calculator.tee_params.get(element.Id)
             if tee_params is not None:
                 if tee_params.name in [calculator.TEE_SUPPLY_PASS_NAME,
                                        calculator.TEE_EXHAUST_PASS_ROUND_NAME,
                                        calculator.TEE_EXHAUST_PASS_RECT_NAME]:
                     return tee_params.fp
-                # Ключ найден, переменная tee_type_name содержит имя
                 return tee_params.fo
-
     size = element.GetParamValueOrDefault(cross_section_param)
     if not size:
         size = element_type.GetParamValueOrDefault(cross_section_param)
     if not size:
-
         connectors = calculator.get_connectors(element)
         size_variants = []
         for connector in connectors:
@@ -321,109 +408,155 @@ def get_network_element_real_size(element, element_type):
                 size_variants.append(convert_to_meters(connector.Height) * convert_to_meters(connector.Width))
             if connector.Shape == ConnectorProfileType.Round:
                 size_variants.append(2 * convert_to_meters(connector.Radius) * math.pi)
-
         size = min(size_variants)
-        UnitUtils.ConvertFromInternalUnits(
-            size,
-            UnitTypeId.SquareMeters)
+        UnitUtils.ConvertFromInternalUnits(size, UnitTypeId.SquareMeters)
     return size
 
 def get_network_element_pressure_drop(section, element, density, velocity, coefficient):
-    def calculate_pressure_drop():
-        return float(coefficient) * (density * math.pow(velocity, 2)) / 2  # ΔP = ξ * ρ * v² / 2
+    """
+    Получает потери напора элемента сети.
 
-    # 1. Воздуховоды и гибкие воздуховоды
-    if element.InAnyCategory([BuiltInCategory.OST_DuctCurves,
-                              BuiltInCategory.OST_FlexDuctCurves]):
+    Args:
+        section (Section): Секция системы.
+        element (Element): Элемент сети.
+        density (float): Плотность воздушной среды.
+        velocity (float): Скорость воздуха.
+        coefficient (str): Коэффициент элемента.
+
+    Returns:
+        float: Потери напора элемента в паскалях.
+    """
+    def calculate_pressure_drop():
+        return float(coefficient) * (density * math.pow(velocity, 2)) / 2
+
+    if element.InAnyCategory([BuiltInCategory.OST_DuctCurves, BuiltInCategory.OST_FlexDuctCurves]):
         pressure_drop = section.GetPressureDrop(element.Id)
         return UnitUtils.ConvertFromInternalUnits(pressure_drop, UnitTypeId.Pascals)
-
-    # 2. Пробуем взять значение из параметра
     pressure_drop = element.GetParamValueOrDefault("ФОП_ВИС_Потери давления")
     if pressure_drop is not None:
         return pressure_drop
-
-    # 3. Воздухораспределители
     if element.Category.Id.IntegerValue == int(BuiltInCategory.OST_DuctTerminal):
         if coefficient and float(coefficient) != 0:
             return calculate_pressure_drop()
-        return 10  # фиксированное значение
-
-    # 4. Фитинги, аксессуары, оборудование
-    if element.InAnyCategory([
-        BuiltInCategory.OST_DuctFitting,
-        BuiltInCategory.OST_DuctAccessory,
-        BuiltInCategory.OST_MechanicalEquipment]):
+        return 10
+    if element.InAnyCategory([BuiltInCategory.OST_DuctFitting, BuiltInCategory.OST_DuctAccessory, BuiltInCategory.OST_MechanicalEquipment]):
         return calculate_pressure_drop()
-
     return 0
 
 def show_network_report(data, selected_system, output, density):
-    print ('Плотность воздушной среды: ' + str(density) + ' кг/м3')
+    """
+    Отображает отчет о расчете аэродинамики системы.
 
-    output.print_table(table_data=data,
-                       title=("Отчет о расчете аэродинамики системы " + selected_system.name),
-                       columns=[
-                           "Номер участка",
-                           "Наименование элемента",
-                           "Длина, м.п.",
-                           "Размер, м2",
-                           "Расход, м3/ч",
-                           "Скорость, м/с",
-                           "КМС",
-                           "Потери напора элемента, Па",
-                           "Суммарные потери напора, Па",
-                           "Id элемента"],
-                       formats=['', '', ''],
-                       )
+    Args:
+        data (list): Данные для отчета.
+        selected_system (SelectedSystem): Выбранная система.
+        output (Output): Объект для вывода отчета.
+        density (float): Плотность воздушной среды.
+    """
+    print('Плотность воздушной среды: ' + str(density) + ' кг/м3')
+    output.print_table(
+        table_data=data,
+        title=("Отчет о расчете аэродинамики системы " + selected_system.name),
+        columns=[
+            "Номер участка",
+            "Наименование элемента",
+            "Длина, м.п.",
+            "Размер, м2",
+            "Расход, м3/ч",
+            "Скорость, м/с",
+            "КМС",
+            "Потери напора элемента, Па",
+            "Суммарные потери напора, Па",
+            "Id элемента"
+        ],
+        formats=['', '', '']
+    )
 
 def get_network_element_flow(section, element):
+    """
+    Получает расход воздуха для элемента сети.
+
+    Args:
+        section (Section): Секция системы.
+        element (Element): Элемент сети.
+
+    Returns:
+        int: Расход воздуха в кубометрах в час.
+    """
     if element.Category.IsId(BuiltInCategory.OST_DuctFitting):
-        if element.MEPModel.PartType == PartType.TapAdjustable or element.MEPModel.PartType == PartType.Tee:
+        if element.MEPModel.PartType in [PartType.TapAdjustable, PartType.Tee]:
             tee_params = calculator.tee_params.get(element.Id)
             if tee_params is not None:
-
                 if tee_params.name in [calculator.TEE_SUPPLY_PASS_NAME,
                                        calculator.TEE_EXHAUST_PASS_ROUND_NAME,
                                        calculator.TEE_EXHAUST_PASS_RECT_NAME]:
-                    flow = tee_params.Lp
-                else:
-                    flow = tee_params.Lo
-                return int(flow)
-
+                    return int(tee_params.Lp)
+                return int(tee_params.Lo)
     if element.Category.IsId(BuiltInCategory.OST_DuctTerminal):
         flow = element.GetParamValue(BuiltInParameter.RBS_DUCT_FLOW_PARAM)
     else:
         flow = section.Flow
-
-    # Конвертация из внутренних единиц в м³/ч (кубометры в час)
     flow = UnitUtils.ConvertFromInternalUnits(flow, UnitTypeId.CubicMetersPerHour)
-
     return int(flow)
 
 def get_network_element_velocity(element, flow, real_size):
-    velocity = (float(flow) * 1000000)/(3600 * real_size *1000000) #скорость в живом сечении
+    """
+    Получает скорость воздуха в живом сечении элемента.
 
-    return velocity
+    Args:
+        element (Element): Элемент сети.
+        flow (int): Расход воздуха.
+        real_size (float): Реальный размер элемента.
+
+    Returns:
+        float: Скорость воздуха в метрах в секунду.
+    """
+    return (float(flow) * 1000000) / (3600 * real_size * 1000000)
 
 def round_floats(value):
+    """
+    Округляет числа с плавающей запятой до трех знаков после запятой.
+
+    Args:
+        value (float): Число для округления.
+
+    Returns:
+        float: Округленное число.
+    """
     if isinstance(value, float):
         return round(value, 3)
     return value
 
 def sort_key(element):
+    """
+    Возвращает ключ сортировки для элемента.
+
+    Args:
+        element (Element): Элемент для сортировки.
+
+    Returns:
+        int: Ключ сортировки.
+    """
     if element.Category.IsId(BuiltInCategory.OST_DuctTerminal):
         return 0
-    elif element.Category.IsId(BuiltInCategory.OST_FlexDuctCurves):
+    if element.Category.IsId(BuiltInCategory.OST_FlexDuctCurves):
         return 1
-    elif element.Category.IsId(BuiltInCategory.OST_DuctCurves):
+    if element.Category.IsId(BuiltInCategory.OST_DuctCurves):
         return 2
-    elif element.Category.IsId(BuiltInCategory.OST_DuctFitting):
+    if element.Category.IsId(BuiltInCategory.OST_DuctFitting):
         return 3
-    return 4  # Все остальные
+    return 4
 
 def optimise_data_to_demonstration(data):
-    # Шаг 1: Группировка по flow с допуском ±5 и сохранением порядка
+    """
+    Оптимизирует данные для демонстрации.
+
+    Args:
+        data (list): Данные для оптимизации.
+
+    Returns:
+        list: Оптимизированные данные.
+    """
     flow_ordered = OrderedDict()
 
     def find_similar_flow_key(flow):
@@ -434,14 +567,13 @@ def optimise_data_to_demonstration(data):
 
     for row in data:
         if isinstance(row, list) and len(row) > 4:
-            flow = float(row[4])  # Явное приведение для уверенности
+            flow = float(row[4])
             similar_key = find_similar_flow_key(flow)
             if similar_key is not None:
                 flow_ordered[similar_key].append(row)
             else:
                 flow_ordered[flow] = [row]
 
-    # Шаг 2: Назначаем count по порядку групп
     count = 1
     new_data = []
     for rows in flow_ordered.values():
@@ -450,17 +582,15 @@ def optimise_data_to_demonstration(data):
             new_data.append(row)
         count += 1
 
-    data[:] = new_data  # Обновляем основной список
+    data[:] = new_data
     grouped = defaultdict(list)
 
-    # Шаг 2.5: Обновляем max_summ_loss — накапливаемое значение element_loss
     cumulative_loss = 0.0
     for row in data:
         element_loss = float(row[7])
         cumulative_loss += element_loss
         row[8] = str(cumulative_loss)
 
-    # Шаг 3: Вставка заголовков перед каждой группой count
     i = 0
     old_count = None
     while i < len(data):
@@ -473,7 +603,6 @@ def optimise_data_to_demonstration(data):
             old_count = count
         i += 1
 
-    # Шаг 4: Агрегация воздуховодов по count и size
     for row in data:
         if isinstance(row, list) and len(row) > 1:
             count, name, length, size, flow, velocity, coefficient, element_loss, summ_loss, id = row
@@ -496,49 +625,54 @@ def optimise_data_to_demonstration(data):
             for row in group_rows[1:]:
                 data.remove(row)
 
-    # Шаг 5: Добавляем заголовок в самое начало
     data.insert(0, ['Участок №1'])
-
     return data
 
 def prepare_section_elements(section):
-    elements_ids = section.GetElementIds()
+    """
+    Подготавливает элементы секции системы.
 
+    Args:
+        section (Section): Секция системы.
+
+    Returns:
+        list: Список элементов секции.
+    """
+    elements_ids = section.GetElementIds()
     segment_elements = []
     for element_id in elements_ids:
         if element_id in passed_elements:
             continue
-
         element = doc.GetElement(element_id)
         if not element.Category.IsId(BuiltInCategory.OST_DuctCurves):
             passed_elements.append(element_id)
-
         segment_elements.append(element)
-
     segment_elements.sort(key=sort_key)
-
     return segment_elements
 
-def form_data_list(system, density, output ):
+def form_data_list(system, density, output):
+    """
+    Формирует список данных для отчета.
+
+    Args:
+        system (Element): Система для формирования данных.
+        density (float): Плотность воздушной среды.
+        output (Output): Объект для вывода отчета.
+
+    Returns:
+        list: Список данных для отчета.
+    """
     def get_data_by_element():
         element_type = element.GetElementType()
-
         length = get_network_element_length(section, element.Id)
-
         coefficient = get_network_element_coefficient(section, element)
-
         real_size = get_network_element_real_size(element, element_type)
-
         flow = get_network_element_flow(section, element)
-
         velocity = get_network_element_velocity(element, flow, real_size)
-
         name = get_network_element_name(element)
-
         pressure_drop = get_network_element_pressure_drop(section, element, density, velocity, coefficient)
-
         value = [
-            0,  # Count
+            0,
             name,
             length,
             real_size,
@@ -546,93 +680,86 @@ def form_data_list(system, density, output ):
             velocity,
             coefficient,
             pressure_drop,
-            0,  # Суммарные потери
-            output.linkify(element.Id)]
-
+            0,
+            output.linkify(element.Id)
+        ]
         rounded_value = [round_floats(item) for item in value]
-
         return rounded_value
 
     path_numbers = system.GetCriticalPathSectionNumbers()
-
-    critical_path_numbers = []
-    for number in path_numbers:
-        critical_path_numbers.append(number)
+    critical_path_numbers = list(path_numbers)
     if system.SystemType == DuctSystemType.SupplyAir:
         critical_path_numbers.reverse()
 
     data = []
     for number in critical_path_numbers:
         section = system.GetSectionByNumber(number)
-
         segment_elements = prepare_section_elements(section)
-
         for element in segment_elements:
             if not pass_data_filter(element, section):
                 continue
-
             value = get_data_by_element()
-
             data.append(value)
-
     return data
 
 def pass_data_filter(element, section):
-    if element.Category.IsId(BuiltInCategory.OST_DuctFitting) and \
-            (element.MEPModel.PartType == element.MEPModel.PartType.Cap or
-             element.MEPModel.PartType == element.MEPModel.PartType.Union):
+    """
+    Проверяет, проходит ли элемент фильтр данных.
+
+    Args:
+        element (Element): Элемент для проверки.
+        section (Section): Секция системы.
+
+    Returns:
+        bool: True, если элемент проходит фильтр, иначе False.
+    """
+    if element.Category.IsId(BuiltInCategory.OST_DuctFitting) and element.MEPModel.PartType in [element.MEPModel.PartType.Cap, element.MEPModel.PartType.Union]:
         return False
     if element.Category.IsId(BuiltInCategory.OST_DuctCurves) and get_network_element_flow(section, element) == 0:
         return False
     return True
 
 def process_method_setup(selected_system):
+    """
+    Обрабатывает настройку метода расчета для выбранной системы.
+
+    Args:
+        selected_system (SelectedSystem): Выбранная система.
+    """
     if selected_system.elements is None:
         forms.alert(
             "Не найдены элементы в системе.",
             "Ошибка",
-            exitscript=True)
-
+            exitscript=True
+        )
     system = doc.GetElement(selected_system.system.Id)
-
     calculator.get_critical_path(system)
-
     if len(calculator.critical_path_numbers) == 0:
         forms.alert(
             "Не найден диктующий путь, проверьте расчетность системы.",
             "Ошибка",
-            exitscript=True)
-
+            exitscript=True
+        )
     network_elements = get_fittings_and_accessory(selected_system.elements)
-
     editor_report.show_report()
-
-    # Требуемый метод "Определенный коэффициент"
     specific_coefficient_method = get_loss_methods()
-
     with revit.Transaction("BIM: Установка метода расчета"):
-        # Необходимо сначала в отдельной транзакции переключиться на определенный коэффициент, где это нужно
         for element in network_elements:
             set_calculation_method(element, specific_coefficient_method)
-
     fittings_coefficients = {}
     for element in network_elements:
         if element.Category.IsId(BuiltInCategory.OST_DuctFitting):
             fittings_coefficients[element.Id] = get_local_coefficient(element, system)
-
     with revit.Transaction("BIM: Пересчет потерь напора"):
         for element in network_elements:
-            # устанавливаем 0 на арматуру, чтоб она не убивала расчеты и считаем на фитинги
             set_coefficient_value(element, specific_coefficient_method, fittings_coefficients)
 
-
-
-doc = __revit__.ActiveUIDocument.Document  # type: Document
+doc = __revit__.ActiveUIDocument.Document
 uidoc = __revit__.ActiveUIDocument
 view = doc.ActiveView
 
-coefficient_param = SharedParamsConfig.Instance.VISLocalResistanceCoef # ФОП_ВИС_КМС
-cross_section_param = SharedParamsConfig.Instance.VISCrossSection # ФОП_ВИС_Живое сечение, м2
+coefficient_param = SharedParamsConfig.Instance.VISLocalResistanceCoef
+cross_section_param = SharedParamsConfig.Instance.VISCrossSection
 
 calculator = CoefficientCalculator.AerodinamicCoefficientCalculator(doc, uidoc, view)
 editor_report = EditorReport()
@@ -643,9 +770,7 @@ passed_elements = []
 @log_plugin(EXEC_PARAMS.command_name)
 def script_execute(plugin_logger):
     setup_params()
-
     selected_system = get_system_elements()
-
     process_method_setup(selected_system) # Ставим метод расчета Определенный коэффициент и заполняем его для фитингов
 
     # заново забираем систему  через ID, мы в прошлой транзакции обновили потери напора на элементах, поэтому данные
@@ -653,15 +778,10 @@ def script_execute(plugin_logger):
     selected_system = get_system_elements()
     system = doc.GetElement(selected_system.system.Id)
     output = script.get_output()
-
     settings = DuctSettings.GetDuctSettings(doc)
-
     density = UnitUtils.ConvertFromInternalUnits(settings.AirDensity, UnitTypeId.KilogramsPerCubicMeter)
-
     raw_data = form_data_list(system, density, output)
-
     data = optimise_data_to_demonstration(raw_data)
-
     show_network_report(data, selected_system, output, density)
 
 script_execute()
