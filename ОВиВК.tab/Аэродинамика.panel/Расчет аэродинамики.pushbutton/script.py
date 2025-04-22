@@ -168,14 +168,14 @@ def get_server_by_id(server_guid, service_id):
             return server
     return None
 
-def set_method(element, method):
+def set_calculation_method(element, method):
     param = element.get_Parameter(BuiltInParameter.RBS_DUCT_FITTING_LOSS_METHOD_SERVER_PARAM)
     current_guid = param.AsString()
 
     if current_guid != calculator.LOSS_GUID_CONST:
         param.Set(method.server_id.ToString())
 
-def set_method_value(element, method, element_coefficients):
+def set_coefficient_value(element, method, element_coefficients):
     local_section_coefficient = 0
 
     if element.Category.IsId(BuiltInCategory.OST_DuctFitting):
@@ -192,7 +192,7 @@ def set_method_value(element, method, element_coefficients):
         entity.Set(method.coefficient_field, str(local_section_coefficient))
         element.SetEntity(entity)
 
-def split_elements(system_elements):
+def get_fittings_and_accessory(system_elements):
     elements = []
 
     for element in system_elements:
@@ -377,7 +377,7 @@ def show_network_report(data, selected_system, output, density):
                        formats=['', '', ''],
                        )
 
-def get_flow(section, element):
+def get_network_element_flow(section, element):
     if element.Category.IsId(BuiltInCategory.OST_DuctFitting):
         if element.MEPModel.PartType == PartType.TapAdjustable or element.MEPModel.PartType == PartType.Tee:
             tee_params = calculator.tee_params.get(element.Id)
@@ -401,7 +401,7 @@ def get_flow(section, element):
 
     return int(flow)
 
-def get_velocity(element, flow, real_size):
+def get_network_element_velocity(element, flow, real_size):
     velocity = (float(flow) * 1000000)/(3600 * real_size *1000000) #скорость в живом сечении
 
     return velocity
@@ -529,9 +529,9 @@ def form_data_list(system, density, output ):
 
         real_size = get_network_element_real_size(element, element_type)
 
-        flow = get_flow(section, element)
+        flow = get_network_element_flow(section, element)
 
-        velocity = get_velocity(element, flow, real_size)
+        velocity = get_network_element_velocity(element, flow, real_size)
 
         name = get_network_element_name(element)
 
@@ -582,9 +582,50 @@ def pass_data_filter(element, section):
             (element.MEPModel.PartType == element.MEPModel.PartType.Cap or
              element.MEPModel.PartType == element.MEPModel.PartType.Union):
         return False
-    if element.Category.IsId(BuiltInCategory.OST_DuctCurves) and get_flow(section, element) == 0:
+    if element.Category.IsId(BuiltInCategory.OST_DuctCurves) and get_network_element_flow(section, element) == 0:
         return False
     return True
+
+def process_method_setup(selected_system):
+    if selected_system.elements is None:
+        forms.alert(
+            "Не найдены элементы в системе.",
+            "Ошибка",
+            exitscript=True)
+
+    system = doc.GetElement(selected_system.system.Id)
+
+    calculator.get_critical_path(system)
+
+    if len(calculator.critical_path_numbers) == 0:
+        forms.alert(
+            "Не найден диктующий путь, проверьте расчетность системы.",
+            "Ошибка",
+            exitscript=True)
+
+    network_elements = get_fittings_and_accessory(selected_system.elements)
+
+    editor_report.show_report()
+
+    # Требуемый метод "Определенный коэффициент"
+    specific_coefficient_method = get_loss_methods()
+
+    with revit.Transaction("BIM: Установка метода расчета"):
+        # Необходимо сначала в отдельной транзакции переключиться на определенный коэффициент, где это нужно
+        for element in network_elements:
+            set_calculation_method(element, specific_coefficient_method)
+
+    fittings_coefficients = {}
+    for element in network_elements:
+        if element.Category.IsId(BuiltInCategory.OST_DuctFitting):
+            fittings_coefficients[element.Id] = get_local_coefficient(element, system)
+
+    with revit.Transaction("BIM: Пересчет потерь напора"):
+        for element in network_elements:
+            # устанавливаем 0 на арматуру, чтоб она не убивала расчеты и считаем на фитинги
+            set_coefficient_value(element, specific_coefficient_method, fittings_coefficients)
+
+
 
 doc = __revit__.ActiveUIDocument.Document  # type: Document
 uidoc = __revit__.ActiveUIDocument
@@ -605,45 +646,11 @@ def script_execute(plugin_logger):
 
     selected_system = get_system_elements()
 
-    if selected_system.elements is None:
-        forms.alert(
-            "Не найдены элементы в системе.",
-            "Ошибка",
-            exitscript=True)
-
-    system = doc.GetElement(selected_system.system.Id)
-
-    calculator.get_critical_path(system)
-
-    if len(calculator.critical_path_numbers) == 0:
-        forms.alert(
-            "Не найден диктующий путь, проверьте расчетность системы.",
-            "Ошибка",
-            exitscript=True)
-
-    network_elements = split_elements(selected_system.elements)
-
-    editor_report.show_report()
-
-    method = get_loss_methods()
-
-    with revit.Transaction("BIM: Установка метода расчета"):
-        # Необходимо сначала в отдельной транзакции переключиться на определенный коэффициент, где это нужно
-        for element in network_elements:
-            set_method(element, method)
-
-    fittings_coefficients = {}
-    for element in network_elements:
-        if element.Category.IsId(BuiltInCategory.OST_DuctFitting):
-            fittings_coefficients[element.Id] = get_local_coefficient(element, system)
-
-    with revit.Transaction("BIM: Пересчет потерь напора"):
-        for element in network_elements:
-            # устанавливаем 0 на арматуру, чтоб она не убивала расчеты и считаем на фитинги
-            set_method_value(element, method, fittings_coefficients)
+    process_method_setup(selected_system) # Ставим метод расчета Определенный коэффициент и заполняем его для фитингов
 
     # заново забираем систему  через ID, мы в прошлой транзакции обновили потери напора на элементах, поэтому данные
     # на системе могли измениться
+    selected_system = get_system_elements()
     system = doc.GetElement(selected_system.system.Id)
     output = script.get_output()
 

@@ -320,7 +320,7 @@ class AerodinamicCoefficientCalculator:
                 coefficient = ((f / F) ** 2 + 0.7 * (f / F) ** 2) if output_element == main_element else (
                             0.4 + 0.7 * (f / F) ** 2)
                 base_name = 'Колено прямоугольное с изменением сечения'
-                duct_input, duct_output = self.find_input_output_connector(main_element)
+                duct_input = self.find_input_output_connector(main_element)[0]
                 self.remember_element_name(element, base_name, [input_connector, duct_input])
                 return coefficient
 
@@ -584,13 +584,13 @@ class AerodinamicCoefficientCalculator:
             else:
                 main_element = output_element
             try:
-                diameter = UnitUtils.ConvertFromInternalUnits(main_element.Diameter, UnitTypeId.Millimeters)
+                diameter = UnitUtils.ConvertFromInternalUnits(main_element.Diameter, UnitTypeId.Meters)
                 area = math.pi * (diameter / 2) ** 2
             except Exception:
-                height = UnitUtils.ConvertFromInternalUnits(main_element.Height, UnitTypeId.Millimeters)
-                width = UnitUtils.ConvertFromInternalUnits(main_element.Width, UnitTypeId.Millimeters)
+                height = UnitUtils.ConvertFromInternalUnits(main_element.Height, UnitTypeId.Meters)
+                width = UnitUtils.ConvertFromInternalUnits(main_element.Width, UnitTypeId.Meters)
 
-                area = height / 1000 * width / 1000
+                area = height * width
 
             fc = area
             fp = area
