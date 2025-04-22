@@ -36,6 +36,8 @@ from dosymep.Bim4Everyone.Templates import ProjectParameters
 from dosymep.Bim4Everyone.SharedParams import SharedParamsConfig
 
 class ConnectorData:
+    """Класс для хранения данных о коннекторе."""
+
     radius = None
     height = None
     width = None
@@ -44,8 +46,13 @@ class ConnectorData:
     connected_element = None
     flow = None
 
-
     def __init__(self, connector):
+        """
+        Инициализация объекта ConnectorData.
+
+        Args:
+            connector (Connector): Объект коннектора.
+        """
         self.connector_element = connector
         self.shape = connector.Shape
         self.get_connected_element()
@@ -55,11 +62,11 @@ class ConnectorData:
 
         if connector.Shape == ConnectorProfileType.Round:
             self.radius = UnitUtils.ConvertFromInternalUnits(connector.Radius, UnitTypeId.Millimeters)
-            self.area = math.pi * ((self.radius/1000) ** 2)
+            self.area = math.pi * ((self.radius / 1000) ** 2)
         elif connector.Shape == ConnectorProfileType.Rectangular:
             self.height = UnitUtils.ConvertFromInternalUnits(connector.Height, UnitTypeId.Millimeters)
             self.width = UnitUtils.ConvertFromInternalUnits(connector.Width, UnitTypeId.Millimeters)
-            self.area = self.height/1000 * self.width/1000
+            self.area = self.height / 1000 * self.width / 1000
         else:
             forms.alert(
                 "Не предусмотрена обработка овальных коннекторов.",
@@ -67,11 +74,20 @@ class ConnectorData:
                 exitscript=True)
 
     def get_connector_angle(self):
+        """
+        Вычисляет угол коннектора в градусах.
+
+        Returns:
+            float: Угол коннектора в градусах.
+        """
         radians = self.connector_element.Angle
         angle = radians * (180 / math.pi)
         return angle
 
     def get_connected_element(self):
+        """
+        Определяет элемент, к которому подключен коннектор.
+        """
         for reference in self.connector_element.AllRefs:
             if ((reference.Owner.Category.IsId(BuiltInCategory.OST_DuctCurves) or
                     reference.Owner.Category.IsId(BuiltInCategory.OST_DuctFitting)) or
@@ -79,12 +95,24 @@ class ConnectorData:
                 self.connected_element = reference.Owner
 
 class TeeCharacteristic:
+    """Класс для хранения характеристик тройника."""
+
     def __init__(self,
                  input_output_angle,
                  input_branch_angle,
                  input_connector_data,
                  output_connector_data,
                  branch_connector_data):
+        """
+        Инициализация объекта TeeCharacteristic.
+
+        Args:
+            input_output_angle (float): Угол между входным и выходным коннекторами.
+            input_branch_angle (float): Угол между входным и ответвляющимся коннекторами.
+            input_connector_data (ConnectorData): Данные входного коннектора.
+            output_connector_data (ConnectorData): Данные выходного коннектора.
+            branch_connector_data (ConnectorData): Данные ответвляющегося коннектора.
+        """
         self.input_output_angle = input_output_angle
         self.input_branch_angle = input_branch_angle
         self.input_connector_data = input_connector_data
@@ -92,7 +120,21 @@ class TeeCharacteristic:
         self.branch_connector_data = branch_connector_data
 
 class TapTeeCharacteristic:
+    """Класс для хранения характеристик тройника с отводом."""
+
     def __init__(self, Lo, Lc, Lp, fo, fc, fp, name):
+        """
+        Инициализация объекта TapTeeCharacteristic.
+
+        Args:
+            Lo (float): Расход в ответвлении.
+            Lc (float): Расход в основном потоке.
+            Lp (float): Расход в проходном потоке.
+            fo (float): Площадь ответвления.
+            fc (float): Площадь основного потока.
+            fp (float): Площадь проходного потока.
+            name (str): Название типа тройника.
+        """
         self.name = name
         self.Lo = Lo
         self.Lc = Lc
@@ -102,7 +144,21 @@ class TapTeeCharacteristic:
         self.fp = fp
 
 class ElementCharacteristic:
-    def __init__(self, name, Lo = None, Lc = None, Lp = None, fo = None, fc = None, fp = None):
+    """Класс для хранения характеристик элемента."""
+
+    def __init__(self, name, Lo=None, Lc=None, Lp=None, fo=None, fc=None, fp=None):
+        """
+        Инициализация объекта ElementCharacteristic.
+
+        Args:
+            name (str): Название элемента.
+            Lo (float, optional): Расход в ответвлении.
+            Lc (float, optional): Расход в основном потоке.
+            Lp (float, optional): Расход в проходном потоке.
+            fo (float, optional): Площадь ответвления.
+            fc (float, optional): Площадь основного потока.
+            fp (float, optional): Площадь проходного потока.
+        """
         self.name = name
         self.Lo = Lo
         self.Lc = Lc
@@ -112,16 +168,16 @@ class ElementCharacteristic:
         self.fp = fp
 
 class AerodinamicCoefficientCalculator:
+    """Класс для расчета аэродинамических коэффициентов."""
+
     LOSS_GUID_CONST = "46245996-eebb-4536-ac17-9c1cd917d8cf"
-    # Гуид для удельных потерь
     COEFF_GUID_CONST = "5a598293-1504-46cc-a9c0-de55c82848b9"
-    # Это - Гуид "Определенный коэффициент". Вроде бы одинаков всегда
 
     TEE_SUPPLY_PASS_NAME = 'Тройник на проход нагнетание круглый/прямоугольный'
     TEE_SUPPLY_BRANCH_ROUND_NAME = 'Тройник нагнетание ответвление круглый'
     TEE_SUPPLY_BRANCH_RECT_NAME = 'Тройник нагнетание ответвление прямоугольный'
     TEE_SUPPLY_SEPARATION_NAME = 'Тройник симметричный разделение потока нагнетание'
-    TEE_EXHAUST_PASS_ROUND_NAME ='Тройник всасывание на проход круглый'
+    TEE_EXHAUST_PASS_ROUND_NAME = 'Тройник всасывание на проход круглый'
     TEE_EXHAUST_PASS_RECT_NAME = 'Тройник всасывание на проход прямоугольный'
     TEE_EXHAUST_BRANCH_ROUND_NAME = 'Тройник всасывание ответвление круглый'
     TEE_EXHAUST_BRANCH_RECT_NAME = 'Тройник всасывание ответвление прямоугольный'
@@ -136,11 +192,25 @@ class AerodinamicCoefficientCalculator:
     tee_params = {}
 
     def __init__(self, doc, uidoc, view):
+        """
+        Инициализация объекта AerodinamicCoefficientCalculator.
+
+        Args:
+            doc (Document): Документ.
+            uidoc (UIDocument): Интерфейс пользователя документа.
+            view (View): Вид.
+        """
         self.doc = doc
         self.uidoc = uidoc
         self.view = view
 
     def get_critical_path(self, system):
+        """
+        Получает критический путь системы.
+
+        Args:
+            system (System): Система.
+        """
         self.system = system
 
         path_numbers = system.GetCriticalPathSectionNumbers()
@@ -149,8 +219,16 @@ class AerodinamicCoefficientCalculator:
         if system.SystemType == DuctSystemType.SupplyAir:
             self.critical_path_numbers.reverse()
 
-
     def get_connectors(self, element):
+        """
+        Получает коннекторы элемента.
+
+        Args:
+            element (Element): Элемент.
+
+        Returns:
+            list: Список коннекторов.
+        """
         connectors = []
 
         if isinstance(element, FamilyInstance) and element.MEPModel.ConnectorManager is not None:
@@ -174,6 +252,16 @@ class AerodinamicCoefficientCalculator:
         return connectors
 
     def remember_element_name(self, element, base_name, connector_data_elements, length=None, angle=None):
+        """
+        Сохраняет название элемента с учетом его размеров и угла.
+
+        Args:
+            element (Element): Элемент.
+            base_name (str): Базовое название.
+            connector_data_elements (list): Данные коннекторов.
+            length (float, optional): Длина.
+            angle (float, optional): Угол.
+        """
         # Собираем размеры
         size_parts = []
         for c in connector_data_elements:
@@ -204,6 +292,15 @@ class AerodinamicCoefficientCalculator:
         self.element_names[element.Id] = base_name + ' ' + size
 
     def get_connector_data_instances(self, element):
+        """
+        Получает экземпляры данных коннекторов для элемента.
+
+        Args:
+            element (Element): Элемент.
+
+        Returns:
+            list: Список экземпляров данных коннекторов.
+        """
         connectors = self.get_connectors(element)
         connector_data_instances = []
         for connector in connectors:
@@ -211,7 +308,15 @@ class AerodinamicCoefficientCalculator:
         return connector_data_instances
 
     def find_input_output_connector(self, element):
+        """
+        Находит входной и выходной коннекторы элемента.
 
+        Args:
+            element (Element): Элемент.
+
+        Returns:
+            tuple: Кортеж (входной коннектор, выходной коннектор).
+        """
         connector_data_instances = self.get_connector_data_instances(element)
 
         input_connector = None  # Первый на пути следования воздуха коннектор
@@ -265,15 +370,13 @@ class AerodinamicCoefficientCalculator:
                     if connector_data.direction == FlowDirectionType.Out:
                         output_connector = connector_data
                     else:
-                        #Добавляем все In, чтоб потом выбрать с максимальным расходом
+                        # Добавляем все In, чтоб потом выбрать с максимальным расходом
                         flow_connectors.append(connector_data)
 
             # Если мы ищем output для SupplyAir, выбираем коннектор с максимальным flow
-
             if self.system.SystemType == DuctSystemType.SupplyAir:
                 output_connector = max(flow_connectors, key=lambda c: c.flow)
             # Если мы ищем input для ExhaustAir/ReturnAir, выбираем коннектор с максимальным flow
-
             elif self.system.SystemType in [DuctSystemType.ExhaustAir, DuctSystemType.ReturnAir]:
                 input_connector = max(flow_connectors, key=lambda c: c.flow)
 
@@ -286,15 +389,15 @@ class AerodinamicCoefficientCalculator:
         return input_connector, output_connector
 
     def get_elbow_coefficient(self, element):
-        '''
-        90 гр=0,25 * (b/h)^0,25 * ( 1,07 * e^(2/(2(R+b/2)/b+1)) -1 )^2
-        45 гр=0,708*КМС90гр
+        """
+        Вычисляет коэффициент отвода для элемента.
 
-        Непонятно откуда формула, но ее результаты сходятся с прил. 3 в ВСН и прил. 25.11 в учебнике Краснова.
-        Формулы из ВСН и Посохина похожие, но они явно с опечатками, кривой результат
+        Args:
+            element (Element): Элемент.
 
-        '''
-
+        Returns:
+            float: Коэффициент отвода.
+        """
         connector_data = self.get_connector_data_instances(element)
         connector = connector_data[0]
 
@@ -318,7 +421,7 @@ class AerodinamicCoefficientCalculator:
 
             if f != F:
                 coefficient = ((f / F) ** 2 + 0.7 * (f / F) ** 2) if output_element == main_element else (
-                            0.4 + 0.7 * (f / F) ** 2)
+                    0.4 + 0.7 * (f / F) ** 2)
                 base_name = 'Колено прямоугольное с изменением сечения'
                 duct_input = self.find_input_output_connector(main_element)[0]
                 self.remember_element_name(element, base_name, [input_connector, duct_input])
@@ -352,11 +455,25 @@ class AerodinamicCoefficientCalculator:
         return coefficient
 
     def get_transition_coefficient(self, element):
-        '''
-        Краснов Ю.С. Системы вентиляции и кондиционирования Прил. 25.1
-        '''
+        """
+        Вычисляет коэффициент перехода для элемента.
 
+        Args:
+            element (Element): Элемент.
+
+        Returns:
+            float: Коэффициент перехода.
+        """
         def get_transition_variables(element):
+            """
+            Получает переменные для расчета коэффициента перехода.
+
+            Args:
+                element (Element): Элемент.
+
+            Returns:
+                tuple: Кортеж (входной коннектор, выходной коннектор, длина, угол).
+            """
             input_conn, output_conn = self.find_input_output_connector(element)
             input_origin = input_conn.connector_element.Origin
             output_origin = output_conn.connector_element.Origin
@@ -382,7 +499,7 @@ class AerodinamicCoefficientCalculator:
 
         if is_confuser:
             d = output_conn.radius * 2 if is_circular else (4.0 * output_conn.width * output_conn.height) / (
-                        2 * (output_conn.width + output_conn.height))
+                2 * (output_conn.width + output_conn.height))
             l_d = length / float(d)
 
             thresholds = [(1, [(10, 0.41), (20, 0.34), (30, 0.27), (180, 0.24)]),
@@ -423,7 +540,25 @@ class AerodinamicCoefficientCalculator:
         return 0  # В случае равных сечений
 
     def get_tee_coefficient(self, element):
+        """
+        Вычисляет коэффициент тройника для элемента.
+
+        Args:
+            element (Element): Элемент.
+
+        Returns:
+            float: Коэффициент тройника.
+        """
         def get_tee_orientation(element):
+            """
+            Определяет ориентацию тройника.
+
+            Args:
+                element (Element): Элемент.
+
+            Returns:
+                TeeCharacteristic: Объект TeeCharacteristic с ориентацией тройника.
+            """
             connector_data_instances = self.get_connector_data_instances(element)
 
             input_connector, output_connector = self.find_input_output_connector(element)
@@ -475,9 +610,18 @@ class AerodinamicCoefficientCalculator:
             return result
 
         def get_tap_tee_type_name(input_connector, output_connector):
+            """
+            Определяет тип тройника с отводом.
+
+            Args:
+                input_connector (ConnectorData): Входной коннектор.
+                output_connector (ConnectorData): Выходной коннектор.
+
+            Returns:
+                str: Название типа тройника.
+            """
             input_element = input_connector.connected_element
             output_element = output_connector.connected_element
-
 
             main_critical = False
             if self.system.SystemType == DuctSystemType.SupplyAir:
@@ -514,6 +658,16 @@ class AerodinamicCoefficientCalculator:
                     return self.TEE_EXHAUST_PASS_ROUND_NAME
 
         def get_tee_type_name(tee_orientation, shape):
+            """
+            Определяет тип тройника.
+
+            Args:
+                tee_orientation (TeeCharacteristic): Ориентация тройника.
+                shape (ConnectorProfileType): Форма коннектора.
+
+            Returns:
+                str: Название типа тройника.
+            """
             flow_90_degree = tee_orientation.input_output_angle < 100
             branch_90_degree = tee_orientation.input_branch_angle < 100
 
@@ -547,6 +701,17 @@ class AerodinamicCoefficientCalculator:
                     return self.TEE_EXHAUST_MERGER_NAME
 
         def get_tap_tee_variables(input_connector, output_connector, tee_type_name):
+            """
+            Получает переменные для расчета коэффициента тройника с отводом.
+
+            Args:
+                input_connector (ConnectorData): Входной коннектор.
+                output_connector (ConnectorData): Выходной коннектор.
+                tee_type_name (str): Название типа тройника.
+
+            Returns:
+                tuple: Кортеж (Lo, Lp, Lc, fo, fc, fp).
+            """
             input_element = input_connector.connected_element
             output_element = output_connector.connected_element
 
@@ -565,7 +730,6 @@ class AerodinamicCoefficientCalculator:
                 main_flows = self.get_flows_by_two_elements(input_element, element)
             else:
                 main_flows = self.get_flows_by_two_elements(output_element, element)
-
 
             if self.system.SystemType == DuctSystemType.SupplyAir:
                 Lo = output_connector.flow
@@ -601,6 +765,16 @@ class AerodinamicCoefficientCalculator:
             return Lo, Lp, Lc, fo, fc, fp
 
         def get_tee_variables(tee_orientation, tee_type_name):
+            """
+            Получает переменные для расчета коэффициента тройника.
+
+            Args:
+                tee_orientation (TeeCharacteristic): Ориентация тройника.
+                tee_type_name (str): Название типа тройника.
+
+            Returns:
+                tuple: Кортеж (Lo, Lp, Lc, fo, fc, fp).
+            """
             if (tee_type_name == self.TEE_SUPPLY_PASS_NAME
                     or tee_type_name == self.TEE_SUPPLY_SEPARATION_NAME):
                 Lc = tee_orientation.input_connector_data.flow
@@ -631,7 +805,6 @@ class AerodinamicCoefficientCalculator:
                 fp = tee_orientation.input_connector_data.area
                 fo = tee_orientation.branch_connector_data.area
 
-
             if (tee_type_name == self.TEE_EXHAUST_BRANCH_RECT_NAME
                     or tee_type_name == self.TEE_EXHAUST_BRANCH_ROUND_NAME):
                 Lc = tee_orientation.output_connector_data.flow
@@ -647,58 +820,42 @@ class AerodinamicCoefficientCalculator:
             return Lo, Lp, Lc, fo, fc, fp
 
         def calculate_tee_coefficient(tee_type_name, Lo, Lp, Lc, fp, fo, fc):
-            '''
+            """
+            Рассчитывает коэффициент тройника.
 
-            Расчетные формулы:
+            Args:
+                tee_type_name (str): Название типа тройника.
+                Lo (float): Расход в ответвлении.
+                Lp (float): Расход в проходном потоке.
+                Lc (float): Расход в основном потоке.
+                fp (float): Площадь проходного потока.
+                fo (float): Площадь ответвления.
+                fc (float): Площадь основного потока.
 
-            Тройник на проход нагнетание круглый/прямоуг.
-            ВСН прил.1 формула 3
-            Посохин прил.2
-
-            Тройник нагнетание ответвление круглый:
-            ВСН прил.1 формула 4
-
-            Тройник нагнетание ответвление прямоугольный:
-            ВСН прил.1 формула 9
-
-            Тройник симметричный разделение потока нагнетание
-            Идельчик диаграмма 7-29, стр. 379
-
-            Тройник всасывание на проход круглый/прямоугольный
-            Посохин прил.2
-            ВСН прил.1 формула 1
-
-            Тройник всасывание ответвление круглый
-            ВСН прил.1 формула 2
-
-            Тройник всасывание ответвление прямоугольный
-            Посохин прил.2
-
-            '''
-
-
+            Returns:
+                float: Коэффициент тройника.
+            """
             fp_normed = fp / fc  # Нормированная площадь прохода
             fo_normed = fo / fc  # Нормированная площадь ответвления
-            Lo_normed = Lo / Lc  # Нормированый расход в ответвлении
+            Lo_normed = Lo / Lc  # Нормированный расход в ответвлении
             Lp_normed = Lp / Lc  # Нормированный расход в проходе
 
             vo_normed = Lo_normed / fo_normed
             vp_normed = Lp_normed / fp_normed
             fn_sqrt = math.sqrt(fp_normed)
 
-
             if tee_type_name == self.TEE_SUPPLY_PASS_NAME:
-                return (0.45*(fp_normed/(1-Lo_normed))**2+(0.6-1.7*fp_normed)*(fp_normed/(1-Lo_normed))
-                        -(0.25-0.9*fp_normed**2)+0.19*((1-Lo_normed)/fp_normed))
+                return (0.45 * (fp_normed / (1 - Lo_normed)) ** 2 + (0.6 - 1.7 * fp_normed) * (fp_normed / (1 - Lo_normed))
+                        - (0.25 - 0.9 * fp_normed ** 2) + 0.19 * ((1 - Lo_normed) / fp_normed))
 
             if tee_type_name == self.TEE_SUPPLY_BRANCH_ROUND_NAME:
                 return ((fo_normed / Lo_normed) ** 2
-                        - 0.58 * (fo_normed/Lo_normed) + 0.54
+                        - 0.58 * (fo_normed / Lo_normed) + 0.54
                         + 0.025 * (Lo_normed / fo_normed))
 
             if tee_type_name == self.TEE_SUPPLY_BRANCH_RECT_NAME:
                 return ((fo_normed / Lo_normed) ** 2
-                        - 0.42 * (fo_normed/Lo_normed) + 0.81
+                        - 0.42 * (fo_normed / Lo_normed) + 0.81
                         - 0.06 * (Lo_normed / fo_normed))
 
             if tee_type_name == self.TEE_SUPPLY_SEPARATION_NAME:
@@ -722,10 +879,10 @@ class AerodinamicCoefficientCalculator:
             if tee_type_name == self.TEE_EXHAUST_BRANCH_RECT_NAME:
                 return (
                         (fo_normed / Lo_normed) ** 2) * (4.1 * ((fp_normed / fo_normed) ** 1.25) *
-                                                  (Lo_normed**1.5) *
-                                                  ( (fp_normed + fo_normed) **(
-                                                          (0.3/ Lo_normed) * math.sqrt(fo_normed/fp_normed) - 2 ))
-                                                         - 0.5 * (fp_normed/fo_normed)
+                                                  (Lo_normed ** 1.5) *
+                                                  ((fp_normed + fo_normed) ** (
+                                                          (0.3 / Lo_normed) * math.sqrt(fo_normed / fp_normed) - 2))
+                                                         - 0.5 * (fp_normed / fo_normed)
                 )
 
             if tee_type_name == self.TEE_EXHAUST_MERGER_NAME:
@@ -789,13 +946,21 @@ class AerodinamicCoefficientCalculator:
 
         Lo, Lp, Lc, fo, fc, fp = get_variables(*get_args)
 
-
         coefficient = calculate_tee_coefficient(tee_type_name, Lo, Lp, Lc, fp, fo, fc)
-
 
         return coefficient
 
     def get_flows_by_two_elements(self, element_1, element_2):
+        """
+        Получает расходы по двум элементам.
+
+        Args:
+            element_1 (Element): Первый элемент.
+            element_2 (Element): Второй элемент.
+
+        Returns:
+            list: Список расходов.
+        """
         section_indexes = self.get_all_sections_in_system()
 
         flows = []
@@ -811,8 +976,12 @@ class AerodinamicCoefficientCalculator:
         return flows
 
     def get_all_sections_in_system(self):
-        """Возвращает список всех секций, к которым относятся элементы системы MEP"""
+        """
+        Возвращает список всех секций, к которым относятся элементы системы MEP.
 
+        Returns:
+            list: Список индексов секций.
+        """
         # Получаем все элементы системы
         elements = self.system.DuctNetwork
 
@@ -825,7 +994,7 @@ class AerodinamicCoefficientCalculator:
             try:
                 section = self.system.GetSectionByIndex(number)
             except:
-                section = None # Это делается для
+                section = None  # Это делается для
             if section is None:
                 continue
             found_section_indexes.add(number)
@@ -833,7 +1002,26 @@ class AerodinamicCoefficientCalculator:
         return sorted(found_section_indexes)
 
     def is_tap_elbow(self, element):
+        """
+        Проверяет, является ли элемент отводом с нулевым расходом.
+
+        Args:
+            element (Element): Элемент.
+
+        Returns:
+            bool: True, если элемент является отводом с нулевым расходом, иначе False.
+        """
         def get_zero_flow_section(element, section_indexes):
+            """
+            Получает секцию с нулевым расходом для элемента.
+
+            Args:
+                element (Element): Элемент.
+                section_indexes (list): Индексы секций.
+
+            Returns:
+                int: Номер секции с нулевым расходом или None.
+            """
             for section_index in section_indexes:
                 section = self.system.GetSectionByIndex(section_index)
 
@@ -854,11 +1042,18 @@ class AerodinamicCoefficientCalculator:
         return True
 
     def get_tap_adjustable_coefficient(self, element):
+        """
+        Вычисляет коэффициент для отвода с регулировкой.
 
+        Args:
+            element (Element): Элемент.
+
+        Returns:
+            float: Коэффициент отвода с регулировкой.
+        """
         if self.is_tap_elbow(element):
             coefficient = self.get_elbow_coefficient(element)
         else:
             coefficient = self.get_tee_coefficient(element)
-
 
         return coefficient
