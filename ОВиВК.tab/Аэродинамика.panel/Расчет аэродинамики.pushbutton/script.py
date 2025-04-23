@@ -12,27 +12,19 @@ import dosymep
 clr.ImportExtensions(dosymep.Revit)
 clr.ImportExtensions(dosymep.Bim4Everyone)
 
-import sys
-import System
 import math
 import CoefficientCalculator
+import CrossTeeCalculator
+import TransitionElbowCalculator
 from pyrevit import forms
-from pyrevit import revit
 from pyrevit import script
-from pyrevit import HOST_APP
 from pyrevit import EXEC_PARAMS
 
 from Autodesk.Revit.DB import *
-from Autodesk.Revit.UI import TaskDialog
-from Autodesk.Revit.UI.Selection import ObjectType
 from Autodesk.Revit.DB.ExternalService import *
 from Autodesk.Revit.DB.ExtensibleStorage import *
 from Autodesk.Revit.DB.Mechanical import *
-from Autodesk.Revit.UI.Selection import ObjectType, ISelectionFilter, Selection
-from System.Collections.Generic import List
-from System import Guid
 from pyrevit import revit
-from collections import namedtuple
 from collections import defaultdict, OrderedDict
 
 from dosymep.Bim4Everyone.Templates import ProjectParameters
@@ -284,13 +276,22 @@ def get_local_coefficient(fitting, system):
     """
     part_type = fitting.MEPModel.PartType
     if part_type == fitting.MEPModel.PartType.Elbow:
-        local_section_coefficient = calculator.get_elbow_coefficient(fitting)
+        local_section_coefficient = transition_elbow_calculator.get_elbow_coefficient(fitting)
     elif part_type == fitting.MEPModel.PartType.Transition:
-        local_section_coefficient = calculator.get_transition_coefficient(fitting)
+        local_section_coefficient = transition_elbow_calculator.get_transition_coefficient(fitting)
     elif part_type == fitting.MEPModel.PartType.Tee:
-        local_section_coefficient = calculator.get_tee_coefficient(fitting)
+        local_section_coefficient = cross_tee_calculator.get_tee_coefficient(fitting)
     elif part_type == fitting.MEPModel.PartType.TapAdjustable:
-        local_section_coefficient = calculator.get_tap_adjustable_coefficient(fitting)
+        is_cross = cross_tee_calculator.is_tap_cross(fitting)
+
+        if is_cross:
+            fitting_2, duct_element = is_cross
+            local_section_coefficient = cross_tee_calculator.get_tap_cross_coefficient(fitting, fitting_2, duct_element)
+        elif transition_elbow_calculator.is_tap_elbow(fitting):
+            local_section_coefficient = transition_elbow_calculator.get_elbow_coefficient(fitting)
+        else:
+            local_section_coefficient = cross_tee_calculator.get_tee_coefficient(fitting)
+
     else:
         local_section_coefficient = 0
     fitting_coefficient_cash[fitting.Id.IntegerValue] = local_section_coefficient
@@ -306,7 +307,11 @@ def get_network_element_name(element):
     Returns:
         str: Название элемента.
     """
-    element_name = calculator.element_names.get(element.Id)
+
+    element_name = transition_elbow_calculator.element_names.get(element.Id)
+    if element_name is None:
+        element_name = cross_tee_calculator.element_names.get(element.Id)
+
     if element_name is not None:
         return element_name
     if element.Category.IsId(BuiltInCategory.OST_DuctCurves):
@@ -325,7 +330,7 @@ def get_network_element_name(element):
         if element.MEPModel.PartType == PartType.Tee:
             return 'Тройник'
         if element.MEPModel.PartType == PartType.TapAdjustable:
-            if calculator.is_tap_elbow(element):
+            if transition_elbow_calculator.is_tap_elbow(element):
                 return 'Отвод'
             return "Боковое ответвление"
     return 'Арматура'
@@ -390,11 +395,12 @@ def get_network_element_real_size(element, element_type):
 
     if element.Category.IsId(BuiltInCategory.OST_DuctFitting):
         if element.MEPModel.PartType in [PartType.TapAdjustable, PartType.Tee]:
-            tee_params = calculator.tee_params.get(element.Id)
+            tee_params = cross_tee_calculator.tee_params.get(element.Id)
+
             if tee_params is not None:
-                if tee_params.name in [calculator.TEE_SUPPLY_PASS_NAME,
-                                       calculator.TEE_EXHAUST_PASS_ROUND_NAME,
-                                       calculator.TEE_EXHAUST_PASS_RECT_NAME]:
+                if tee_params.name in [cross_tee_calculator.TEE_SUPPLY_PASS_NAME,
+                                       cross_tee_calculator.TEE_EXHAUST_PASS_ROUND_NAME,
+                                       cross_tee_calculator.TEE_EXHAUST_PASS_RECT_NAME]:
                     return tee_params.fp
                 return tee_params.fo
     size = element.GetParamValueOrDefault(cross_section_param)
@@ -485,11 +491,11 @@ def get_network_element_flow(section, element):
     """
     if element.Category.IsId(BuiltInCategory.OST_DuctFitting):
         if element.MEPModel.PartType in [PartType.TapAdjustable, PartType.Tee]:
-            tee_params = calculator.tee_params.get(element.Id)
+            tee_params = cross_tee_calculator.tee_params.get(element.Id)
             if tee_params is not None:
-                if tee_params.name in [calculator.TEE_SUPPLY_PASS_NAME,
-                                       calculator.TEE_EXHAUST_PASS_ROUND_NAME,
-                                       calculator.TEE_EXHAUST_PASS_RECT_NAME]:
+                if tee_params.name in [cross_tee_calculator.TEE_SUPPLY_PASS_NAME,
+                                       cross_tee_calculator.TEE_EXHAUST_PASS_ROUND_NAME,
+                                       cross_tee_calculator.TEE_EXHAUST_PASS_RECT_NAME]:
                     return int(tee_params.Lp)
                 return int(tee_params.Lo)
     if element.Category.IsId(BuiltInCategory.OST_DuctTerminal):
@@ -734,6 +740,8 @@ def process_method_setup(selected_system):
         )
     system = doc.GetElement(selected_system.system.Id)
     calculator.get_critical_path(system)
+    cross_tee_calculator.get_critical_path(system)
+    transition_elbow_calculator.get_critical_path(system)
     if len(calculator.critical_path_numbers) == 0:
         forms.alert(
             "Не найден диктующий путь, проверьте расчетность системы.",
@@ -762,6 +770,8 @@ coefficient_param = SharedParamsConfig.Instance.VISLocalResistanceCoef
 cross_section_param = SharedParamsConfig.Instance.VISCrossSection
 
 calculator = CoefficientCalculator.AerodinamicCoefficientCalculator(doc, uidoc, view)
+cross_tee_calculator = CrossTeeCalculator.CrossTeeCoefficientCalculator(doc, uidoc, view)
+transition_elbow_calculator = TransitionElbowCalculator.TransitionElbowCoefficientCalculator(doc, uidoc, view)
 editor_report = EditorReport()
 fitting_coefficient_cash = {}
 passed_elements = []
