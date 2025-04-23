@@ -8,7 +8,7 @@ clr.AddReference("RevitAPIUI")
 clr.AddReference("dosymep.Revit.dll")
 clr.AddReference("dosymep.Bim4Everyone.dll")
 import dosymep
-import CoefficientCalculator
+import CalculatorClassLib
 
 clr.ImportExtensions(dosymep.Revit)
 clr.ImportExtensions(dosymep.Bim4Everyone)
@@ -35,7 +35,7 @@ from dosymep.Bim4Everyone.SharedParams import SharedParamsConfig
 
 
 
-class CrossTeeCoefficientCalculator(CoefficientCalculator.AerodinamicCoefficientCalculator):
+class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCalculator):
     TEE_SUPPLY_PASS_NAME = 'Тройник на проход нагнетание круглый/прямоугольный'
     TEE_SUPPLY_BRANCH_ROUND_NAME = 'Тройник нагнетание ответвление круглый'
     TEE_SUPPLY_BRANCH_RECT_NAME = 'Тройник нагнетание ответвление прямоугольный'
@@ -136,7 +136,7 @@ class CrossTeeCoefficientCalculator(CoefficientCalculator.AerodinamicCoefficient
             input_output_angle = calculate_angle(vec_input_location, vec_output_location)
             input_branch_angle = calculate_angle(vec_input_location, vec_branch_location)
 
-            result = CoefficientCalculator.TeeVariables(input_output_angle,
+            result = CalculatorClassLib.TeeVariables(input_output_angle,
                                   input_branch_angle,
                                   input_connector,
                                   output_connector,
@@ -298,7 +298,7 @@ class CrossTeeCoefficientCalculator(CoefficientCalculator.AerodinamicCoefficient
             fp = area
             fo = input_connector.area
 
-            self.tee_params[element.Id] = CoefficientCalculator.TapTeeCharacteristic(Lo,
+            self.tee_params[element.Id] = CalculatorClassLib.TapTeeCharacteristic(Lo,
                                                                                      Lc,
                                                                                      Lp,
                                                                                      fo,
@@ -359,7 +359,7 @@ class CrossTeeCoefficientCalculator(CoefficientCalculator.AerodinamicCoefficient
                 fp = tee_orientation.branch_connector_data.area
                 fo = tee_orientation.input_connector_data.area
 
-            self.tee_params[element.Id] = CoefficientCalculator.TapTeeCharacteristic(Lo,
+            self.tee_params[element.Id] = CalculatorClassLib.TapTeeCharacteristic(Lo,
                                                                                      Lc,
                                                                                      Lp,
                                                                                      fo,
@@ -506,7 +506,7 @@ class CrossTeeCoefficientCalculator(CoefficientCalculator.AerodinamicCoefficient
         connector_data_instances_2 = self.get_connector_data_instances(element_2)
         connector_data_instances_duct = self.get_connector_data_instances(duct)
 
-        self.tee_params[element_1.Id] = CoefficientCalculator.TapTeeCharacteristic(1, 1, 1, 1, 1, 1, "Крестовина")
+        self.tee_params[element_1.Id] = CalculatorClassLib.TapTeeCharacteristic(1, 1, 1, 1, 1, 1, "Крестовина")
         self.remember_element_name(element_1, 'Крестовина', [connector_data_instances_1[0],
                                                              connector_data_instances_2[0],
                                                              connector_data_instances_duct[0],

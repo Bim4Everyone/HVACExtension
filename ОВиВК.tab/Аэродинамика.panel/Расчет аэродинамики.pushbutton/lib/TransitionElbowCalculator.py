@@ -8,7 +8,7 @@ clr.AddReference("RevitAPIUI")
 clr.AddReference("dosymep.Revit.dll")
 clr.AddReference("dosymep.Bim4Everyone.dll")
 import dosymep
-import CoefficientCalculator
+import CalculatorClassLib
 
 clr.ImportExtensions(dosymep.Revit)
 clr.ImportExtensions(dosymep.Bim4Everyone)
@@ -33,7 +33,7 @@ from Autodesk.Revit.DB.Mechanical import *
 from dosymep.Bim4Everyone.Templates import ProjectParameters
 from dosymep.Bim4Everyone.SharedParams import SharedParamsConfig
 
-class TransitionElbowCoefficientCalculator(CoefficientCalculator.AerodinamicCoefficientCalculator):
+class TransitionElbowCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCalculator):
     def get_transition_coefficient(self, element):
         """
         Вычисляет коэффициент для диффузора или конфузора.

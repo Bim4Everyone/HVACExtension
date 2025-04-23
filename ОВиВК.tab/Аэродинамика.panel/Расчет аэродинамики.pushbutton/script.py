@@ -13,7 +13,7 @@ clr.ImportExtensions(dosymep.Revit)
 clr.ImportExtensions(dosymep.Bim4Everyone)
 
 import math
-import CoefficientCalculator
+import CalculatorClassLib
 import CrossTeeCalculator
 import TransitionElbowCalculator
 from pyrevit import forms
@@ -190,7 +190,7 @@ def get_loss_methods():
     for server_id in server_ids:
         server = get_server_by_id(server_id, service_id)
         name = server.GetName()
-        if str(server_id) == calculator.COEFF_GUID_CONST:
+        if str(server_id) == calc_lib.COEFF_GUID_CONST:
             calculation_method = CalculationMethod(name, server, server_id)
             return calculation_method
     return None
@@ -223,7 +223,7 @@ def set_calculation_method(element, method):
     """
     param = element.get_Parameter(BuiltInParameter.RBS_DUCT_FITTING_LOSS_METHOD_SERVER_PARAM)
     current_guid = param.AsString()
-    if current_guid != calculator.LOSS_GUID_CONST:
+    if current_guid != calc_lib.LOSS_GUID_CONST:
         param.Set(method.server_id.ToString())
 
 def set_coefficient_value(element, method, element_coefficients):
@@ -240,7 +240,7 @@ def set_coefficient_value(element, method, element_coefficients):
         local_section_coefficient = element_coefficients[element.Id]
     param = element.get_Parameter(BuiltInParameter.RBS_DUCT_FITTING_LOSS_METHOD_SERVER_PARAM)
     current_guid = param.AsString()
-    if local_section_coefficient != 0 and current_guid != calculator.LOSS_GUID_CONST:
+    if local_section_coefficient != 0 and current_guid != calc_lib.LOSS_GUID_CONST:
         element = doc.GetElement(element.Id)
         entity = element.GetEntity(method.schema)
         entity.Set(method.coefficient_field, str(local_section_coefficient))
@@ -407,7 +407,7 @@ def get_network_element_real_size(element, element_type):
     if not size:
         size = element_type.GetParamValueOrDefault(cross_section_param)
     if not size:
-        connectors = calculator.get_connectors(element)
+        connectors = calc_lib.get_connectors(element)
         size_variants = []
         for connector in connectors:
             if connector.Shape == ConnectorProfileType.Rectangular:
@@ -739,10 +739,10 @@ def process_method_setup(selected_system):
             exitscript=True
         )
     system = doc.GetElement(selected_system.system.Id)
-    calculator.get_critical_path(system)
+    calc_lib.get_critical_path(system)
     cross_tee_calculator.get_critical_path(system)
     transition_elbow_calculator.get_critical_path(system)
-    if len(calculator.critical_path_numbers) == 0:
+    if len(calc_lib.critical_path_numbers) == 0:
         forms.alert(
             "Не найден диктующий путь, проверьте расчетность системы.",
             "Ошибка",
@@ -769,7 +769,7 @@ view = doc.ActiveView
 coefficient_param = SharedParamsConfig.Instance.VISLocalResistanceCoef
 cross_section_param = SharedParamsConfig.Instance.VISCrossSection
 
-calculator = CoefficientCalculator.AerodinamicCoefficientCalculator(doc, uidoc, view)
+calc_lib = CalculatorClassLib.AerodinamicCoefficientCalculator(doc, uidoc, view)
 cross_tee_calculator = CrossTeeCalculator.CrossTeeCoefficientCalculator(doc, uidoc, view)
 transition_elbow_calculator = TransitionElbowCalculator.TransitionElbowCoefficientCalculator(doc, uidoc, view)
 editor_report = EditorReport()
