@@ -46,17 +46,107 @@ class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCal
     TEE_EXHAUST_BRANCH_RECT_NAME = 'Тройник всасывание ответвление прямоугольный'
     TEE_EXHAUST_MERGER_NAME = 'Тройник симметричный слияние'
 
-    def get_tee_coefficient(self, element):
+    CROSS_SUPPLY_BRANCH_RECT_NAME = 'Крестовина на нагнетании ответвление прямоугольная'
+    CROSS_EXHAUST_PASS_RECT_NAME = 'Крестовина на всасывании проход прямоугольная'
+    CROSS_EXHAUST_BRANCH_RECT_NAME = 'Крестовина на всасывании ответвление прямоугольная'
+
+    CROSS_SUPPLY_BRANCH_ROUND_NAME = 'Крестовина на нагнетании ответвление круглая'
+    CROSS_SUPPLY_PASS_ROUND_NAME = 'Крестовина на нагнетании проход круглая'
+    CROSS_EXHAUST_BRANCH_ROUND_NAME = 'Крестовина на нагнетании ответвление круглая'
+    CROSS_EXHAUST_PASS_ROUND_NAME = 'Крестовина на нагнетании проход круглая'
+
+
+    def __calculate_tee_coefficient(self, tee_type_name, Lo, Lp, Lc, fp, fo, fc):
         """
-        Вычисляет коэффициент тройника для элемента.
+        Рассчитывает коэффициент тройника.
 
         Args:
-            element (Element): Элемент.
+            tee_type_name (str): Название типа тройника.
+            Lo (float): Расход в ответвлении.
+            Lp (float): Расход в проходном потоке.
+            Lc (float): Расход в основном потоке.
+            fp (float): Площадь проходного потока.
+            fo (float): Площадь ответвления.
+            fc (float): Площадь основного потока.
 
         Returns:
             float: Коэффициент тройника.
         """
+        fp_normed = fp / fc  # Нормированная площадь прохода
+        fo_normed = fo / fc  # Нормированная площадь ответвления
+        Lo_normed = Lo / Lc  # Нормированный расход в ответвлении
+        Lp_normed = Lp / Lc  # Нормированный расход в проходе
 
+        vo_normed = Lo_normed / fo_normed
+        vp_normed = Lp_normed / fp_normed
+        fn_sqrt = math.sqrt(fp_normed)
+
+        if tee_type_name == self.TEE_SUPPLY_PASS_NAME:
+            return (0.45 * (fp_normed / (1 - Lo_normed)) ** 2 + (0.6 - 1.7 * fp_normed) * (fp_normed / (1 - Lo_normed))
+                    - (0.25 - 0.9 * fp_normed ** 2) + 0.19 * ((1 - Lo_normed) / fp_normed))
+
+        if tee_type_name == self.TEE_SUPPLY_BRANCH_ROUND_NAME:
+            return ((fo_normed / Lo_normed) ** 2
+                    - 0.58 * (fo_normed / Lo_normed) + 0.54
+                    + 0.025 * (Lo_normed / fo_normed))
+
+        if tee_type_name == self.TEE_SUPPLY_BRANCH_RECT_NAME:
+            return ((fo_normed / Lo_normed) ** 2
+                    - 0.42 * (fo_normed / Lo_normed) + 0.81
+                    - 0.06 * (Lo_normed / fo_normed))
+
+        if tee_type_name == self.TEE_SUPPLY_SEPARATION_NAME:
+            return 1 + 0.3 * ((Lo_normed / fo_normed) ** 2)
+
+        if tee_type_name == self.TEE_EXHAUST_PASS_ROUND_NAME:
+            return (((1 - fn_sqrt) + 0.5 * Lo_normed + 0.05) *
+                    ((1.7 + (1 / (2 * fo_normed) - 1) * Lo_normed - math.sqrt((fp_normed + fo_normed) * Lo_normed))
+                     * ((fp_normed / (1 - Lo_normed)) ** 2)))
+
+        if tee_type_name == self.TEE_EXHAUST_PASS_RECT_NAME:
+            return (((1 - fn_sqrt) + 0.5 * Lo_normed + 0.05) *
+                    (1.5 + (1 / (2 * fo_normed) - 1) * Lo_normed - math.sqrt((fp_normed + fo_normed) * Lo_normed))
+                    * ((fp_normed / (1 - Lo_normed)) ** 2))
+
+        if tee_type_name == self.TEE_EXHAUST_BRANCH_ROUND_NAME:
+            return ((-0.7 - 6.05 * (1 - fp_normed) ** 3) * (fo_normed / Lo_normed) ** 2
+                    + (1.32 + 3.23 * (1 - fp_normed) ** 2) * (fo_normed / Lo_normed)
+                    + (0.5 + 0.42 * fp_normed) - 0.167 * (Lo_normed / fo_normed))
+
+        if tee_type_name == self.TEE_EXHAUST_BRANCH_RECT_NAME:
+            return (
+                    (fo_normed / Lo_normed) ** 2) * (4.1 * ((fp_normed / fo_normed) ** 1.25) *
+                                                     (Lo_normed ** 1.5) *
+                                                     ((fp_normed + fo_normed) ** (
+                                                             (0.3 / Lo_normed) * math.sqrt(fo_normed / fp_normed) - 2))
+                                                     - 0.5 * (fp_normed / fo_normed)
+                                                     )
+
+        if tee_type_name == self.TEE_EXHAUST_MERGER_NAME:
+            if fo_normed <= 0.35:
+                return 1
+            else:
+                if Lo_normed <= 0.4:
+                    # Формула из Excel для случая Lo_normed <= 0.4
+                    result = (
+                            0.9 * (1 - Lo_normed) *
+                            (1 + (Lo_normed / fo_normed) ** 2 - 2 * (
+                                    1 - Lo_normed) ** 2 - 2 * Lo_normed ** 2 * 6.1257422745431E-17 / fo_normed) /
+                            (Lo_normed / fo_normed) ** 2
+                    )
+                else:
+                    # Формула из Excel для случая Lo_normed > 0.4
+                    result = (
+                            0.55 *
+                            (1 + (Lo_normed / fo_normed) ** 2 - 2 * (
+                                    1 - Lo_normed) ** 2 - 2 * Lo_normed ** 2 * 6.1257422745431E-17 / fo_normed) /
+                            (Lo_normed / fo_normed) ** 2
+                    )
+                return result
+
+        return None  # Если тип тройника не найден
+
+    def is_tap_cross(self, element):
         def angle_between_vectors(v1, v2):
             dot = v1.DotProduct(v2)
             len1 = v1.GetLength()
@@ -83,6 +173,50 @@ class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCal
                 return con_xyz
 
             return None
+
+        input_connector, output_connector = self.find_input_output_connector(element)
+        input_element = input_connector.connected_element
+        output_element = output_connector.connected_element
+
+        if self.system.SystemType == DuctSystemType.SupplyAir:
+            tap_to_duct_connector = input_connector
+            duct_element = input_element
+        else:
+            tap_to_duct_connector = output_connector
+            duct_element = output_element
+
+        duct_connectors = self.get_connectors(duct_element)
+        tap_xyz = tap_to_duct_connector.connector_element.Origin
+
+        for connector in duct_element.ConnectorManager.Connectors:
+            con_xyz = connector.Origin
+            connector_set = connector.AllRefs
+            skip_connector = False  # флаг
+
+            owner = None
+            for ref_connector in connector_set:
+                if ref_connector.Owner.Id == element.Id:
+                    skip_connector = True
+                    break  # прерываем внутренний цикл
+
+                owner = ref_connector.Owner
+
+            if skip_connector:
+                continue  # переходим к следующему connector
+            result = find_right_angle_pair(tap_xyz, con_xyz, duct_connectors)
+            if result:
+                return owner, duct_element
+
+    def get_tee_coefficient(self, element):
+        """
+        Вычисляет коэффициент тройника для элемента.
+
+        Args:
+            element (Element): Элемент.
+
+        Returns:
+            float: Коэффициент тройника.
+        """
 
         def get_tee_orientation(element):
             """
@@ -158,35 +292,35 @@ class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCal
             input_element = input_connector.connected_element
             output_element = output_connector.connected_element
 
-            main_critical = False
+            duct_critical = False
             if self.system.SystemType == DuctSystemType.SupplyAir:
-                main_element = output_element
+                duct_element = output_element
             else:
-                main_element = input_element
+                duct_element = input_element
 
             for number in self.critical_path_numbers:
                 section = self.system.GetSectionByNumber(number)
                 elements_ids = section.GetElementIds()
-                if main_element.Id in elements_ids:
-                    main_critical = True
+                if duct_element.Id in elements_ids:
+                    duct_critical = True
                     break
 
-            if self.system.SystemType == DuctSystemType.SupplyAir and main_critical:
+            if self.system.SystemType == DuctSystemType.SupplyAir and duct_critical:
                 if input_connector.shape == ConnectorProfileType.Rectangular:
                     return self.TEE_SUPPLY_BRANCH_RECT_NAME
                 else:
                     return self.TEE_SUPPLY_BRANCH_ROUND_NAME
 
-            elif self.system.SystemType == DuctSystemType.SupplyAir and not main_critical:
+            elif self.system.SystemType == DuctSystemType.SupplyAir and not duct_critical:
                 return self.TEE_SUPPLY_PASS_NAME
 
-            elif self.system.SystemType != DuctSystemType.SupplyAir and main_critical:
+            elif self.system.SystemType != DuctSystemType.SupplyAir and duct_critical:
                 if input_connector.shape == ConnectorProfileType.Rectangular:
                     return self.TEE_EXHAUST_BRANCH_RECT_NAME
                 else:
                     return self.TEE_EXHAUST_BRANCH_ROUND_NAME
 
-            elif self.system.SystemType != DuctSystemType.SupplyAir and not main_critical:
+            elif self.system.SystemType != DuctSystemType.SupplyAir and not duct_critical:
                 if input_connector.shape == ConnectorProfileType.Rectangular:
                     return self.TEE_EXHAUST_PASS_RECT_NAME
                 else:
@@ -410,166 +544,86 @@ class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCal
 
         return coefficient
 
-    def __calculate_tee_coefficient(self, tee_type_name, Lo, Lp, Lc, fp, fo, fc):
-        """
-        Рассчитывает коэффициент тройника.
-
-        Args:
-            tee_type_name (str): Название типа тройника.
-            Lo (float): Расход в ответвлении.
-            Lp (float): Расход в проходном потоке.
-            Lc (float): Расход в основном потоке.
-            fp (float): Площадь проходного потока.
-            fo (float): Площадь ответвления.
-            fc (float): Площадь основного потока.
-
-        Returns:
-            float: Коэффициент тройника.
-        """
-        fp_normed = fp / fc  # Нормированная площадь прохода
-        fo_normed = fo / fc  # Нормированная площадь ответвления
-        Lo_normed = Lo / Lc  # Нормированный расход в ответвлении
-        Lp_normed = Lp / Lc  # Нормированный расход в проходе
-
-        vo_normed = Lo_normed / fo_normed
-        vp_normed = Lp_normed / fp_normed
-        fn_sqrt = math.sqrt(fp_normed)
-
-        if tee_type_name == self.TEE_SUPPLY_PASS_NAME:
-            return (0.45 * (fp_normed / (1 - Lo_normed)) ** 2 + (0.6 - 1.7 * fp_normed) * (fp_normed / (1 - Lo_normed))
-                    - (0.25 - 0.9 * fp_normed ** 2) + 0.19 * ((1 - Lo_normed) / fp_normed))
-
-        if tee_type_name == self.TEE_SUPPLY_BRANCH_ROUND_NAME:
-            return ((fo_normed / Lo_normed) ** 2
-                    - 0.58 * (fo_normed / Lo_normed) + 0.54
-                    + 0.025 * (Lo_normed / fo_normed))
-
-        if tee_type_name == self.TEE_SUPPLY_BRANCH_RECT_NAME:
-            return ((fo_normed / Lo_normed) ** 2
-                    - 0.42 * (fo_normed / Lo_normed) + 0.81
-                    - 0.06 * (Lo_normed / fo_normed))
-
-        if tee_type_name == self.TEE_SUPPLY_SEPARATION_NAME:
-            return 1 + 0.3 * ((Lo_normed / fo_normed) ** 2)
-
-        if tee_type_name == self.TEE_EXHAUST_PASS_ROUND_NAME:
-            return (((1 - fn_sqrt) + 0.5 * Lo_normed + 0.05) *
-                    ((1.7 + (1 / (2 * fo_normed) - 1) * Lo_normed - math.sqrt((fp_normed + fo_normed) * Lo_normed))
-                     * ((fp_normed / (1 - Lo_normed)) ** 2)))
-
-        if tee_type_name == self.TEE_EXHAUST_PASS_RECT_NAME:
-            return (((1 - fn_sqrt) + 0.5 * Lo_normed + 0.05) *
-                    (1.5 + (1 / (2 * fo_normed) - 1) * Lo_normed - math.sqrt((fp_normed + fo_normed) * Lo_normed))
-                    * ((fp_normed / (1 - Lo_normed)) ** 2))
-
-        if tee_type_name == self.TEE_EXHAUST_BRANCH_ROUND_NAME:
-            return ((-0.7 - 6.05 * (1 - fp_normed) ** 3) * (fo_normed / Lo_normed) ** 2
-                    + (1.32 + 3.23 * (1 - fp_normed) ** 2) * (fo_normed / Lo_normed)
-                    + (0.5 + 0.42 * fp_normed) - 0.167 * (Lo_normed / fo_normed))
-
-        if tee_type_name == self.TEE_EXHAUST_BRANCH_RECT_NAME:
-            return (
-                    (fo_normed / Lo_normed) ** 2) * (4.1 * ((fp_normed / fo_normed) ** 1.25) *
-                                                     (Lo_normed ** 1.5) *
-                                                     ((fp_normed + fo_normed) ** (
-                                                             (0.3 / Lo_normed) * math.sqrt(fo_normed / fp_normed) - 2))
-                                                     - 0.5 * (fp_normed / fo_normed)
-                                                     )
-
-        if tee_type_name == self.TEE_EXHAUST_MERGER_NAME:
-            if fo_normed <= 0.35:
-                return 1
-            else:
-                if Lo_normed <= 0.4:
-                    # Формула из Excel для случая Lo_normed <= 0.4
-                    result = (
-                            0.9 * (1 - Lo_normed) *
-                            (1 + (Lo_normed / fo_normed) ** 2 - 2 * (
-                                    1 - Lo_normed) ** 2 - 2 * Lo_normed ** 2 * 6.1257422745431E-17 / fo_normed) /
-                            (Lo_normed / fo_normed) ** 2
-                    )
-                else:
-                    # Формула из Excel для случая Lo_normed > 0.4
-                    result = (
-                            0.55 *
-                            (1 + (Lo_normed / fo_normed) ** 2 - 2 * (
-                                    1 - Lo_normed) ** 2 - 2 * Lo_normed ** 2 * 6.1257422745431E-17 / fo_normed) /
-                            (Lo_normed / fo_normed) ** 2
-                    )
-                return result
-
-        return None  # Если тип тройника не найден
-
     def get_tap_cross_coefficient(self, element_1, element_2, duct):
+        def get_tap_cross_name():
+            input_connector_1, output_connector_1 = self.find_input_output_connector(element_1)
+            input_connector_2, output_connector_2 = self.find_input_output_connector(element_2)
+
+            input_element_1 = input_connector_1.connected_element
+            output_element_1 = output_connector_1.connected_element
+
+            input_element_2 = input_connector_2.connected_element
+            output_element_2 = output_connector_2.connected_element
+
+
+            if self.system.SystemType != DuctSystemType.SupplyAir:
+                duct = output_element_1
+                branch_duct_1 = input_element_1
+                branch_duct_2 = input_element_2
+            else:
+                duct = input_element_1
+                branch_duct_1 = output_element_1
+                branch_duct_2 = output_element_2
+
+            duct_connectors = self.get_connectors(duct)
+            Lo_1 = max(self.get_element_sections_flows(branch_duct_1))
+            Lo_2 = max(self.get_element_sections_flows(branch_duct_2))
+
+            flows_1 = self.get_element_sections_flows(element_1)
+            flows_2 = self.get_element_sections_flows(element_2)
+            all_flows = flows_1 + flows_2
+            excluded = [Lo_1, Lo_2]
+
+            # Оставим только значения, которые не равны Lo_1 или Lo_2
+            filtered_flows = [f for f in all_flows if f not in excluded]
+
+            Lc = max(filtered_flows) if filtered_flows else None
+            Lp = min(filtered_flows) if filtered_flows else None
+
+            duct_critical = False
+            branch_critical = False
+            for number in self.critical_path_numbers:
+                section = self.system.GetSectionByNumber(number)
+                elements_ids = section.GetElementIds()
+                if duct.Id in elements_ids:
+                    duct_critical = True
+                    break
+                if branch_duct_1.Id in elements_ids or branch_duct_2.Id in elements_ids:
+                    branch_critical = True
+                    break
+
+            if not duct_critical and not branch_critical:
+                if Lo_1 > Lp or Lo_2 > Lp:
+                    if self.system.SystemType == DuctSystemType.SupplyAir:
+                        if duct_connectors[0].Shape == ConnectorProfileType.Round:
+                            print(self.CROSS_SUPPLY_BRANCH_ROUND_NAME)
+                        else:
+                            print(self.CROSS_SUPPLY_BRANCH_RECT_NAME)
+                    else:
+                        if duct_connectors[0].Shape == ConnectorProfileType.Round:
+                            print(self.CROSS_EXHAUST_BRANCH_ROUND_NAME)
+                        else:
+                            print(self.CROSS_EXHAUST_BRANCH_RECT_NAME)
+
+                else:
+                    pass
+
+            print(Lc, Lp, Lo_1, Lo_2)
+
+            return 'Name'
 
         connector_data_instances_1 = self.get_connector_data_instances(element_1)
         connector_data_instances_2 = self.get_connector_data_instances(element_2)
         connector_data_instances_duct = self.get_connector_data_instances(duct)
+
+        tap_cross_name = get_tap_cross_name()
 
         self.tee_params[element_1.Id] = CalculatorClassLib.TapTeeCharacteristic(1, 1, 1, 1, 1, 1, "Крестовина")
         self.remember_element_name(element_1, 'Крестовина', [connector_data_instances_1[0],
                                                              connector_data_instances_2[0],
                                                              connector_data_instances_duct[0],
                                                              connector_data_instances_duct[0]])
+
+        print('_______________________')
         return 1
 
-    def is_tap_cross(self, element):
-        def angle_between_vectors(v1, v2):
-            dot = v1.DotProduct(v2)
-            len1 = v1.GetLength()
-            len2 = v2.GetLength()
-            if len1 == 0 or len2 == 0:
-                return None
-            cos_theta = dot / (len1 * len2)
-            # Ограничим cos в [-1, 1] во избежание math domain error
-            cos_theta = max(min(cos_theta, 1), -1)
-            return math.acos(cos_theta)  # в радианах
-
-        def find_right_angle_pair(tap_xyz, con_xyz, duct_connectors, tolerance_deg=10):
-            if len(duct_connectors) != 2:
-                return None  # Нужно ровно 2 точки
-
-            base_vec = duct_connectors[1].Origin - duct_connectors[0].Origin
-
-            vec = con_xyz - tap_xyz
-            angle_rad = angle_between_vectors(vec, base_vec)
-            if angle_rad is None:
-                return None
-            angle_deg = math.degrees(angle_rad)
-            if abs(angle_deg - 90) <= tolerance_deg:
-                return con_xyz
-
-            return None
-
-        input_connector, output_connector = self.find_input_output_connector(element)
-        input_element = input_connector.connected_element
-        output_element = output_connector.connected_element
-
-        if self.system.SystemType == DuctSystemType.SupplyAir:
-            tap_to_duct_connector = input_connector
-            duct_element = input_element
-        else:
-            tap_to_duct_connector = output_connector
-            duct_element = output_element
-
-        duct_connectors = self.get_connectors(duct_element)
-        tap_xyz = tap_to_duct_connector.connector_element.Origin
-
-        for connector in duct_element.ConnectorManager.Connectors:
-            con_xyz = connector.Origin
-            connector_set = connector.AllRefs
-            skip_connector = False  # флаг
-
-            owner = None
-            for ref_connector in connector_set:
-                if ref_connector.Owner.Id == element.Id:
-                    skip_connector = True
-                    break  # прерываем внутренний цикл
-
-                owner = ref_connector.Owner
-
-            if skip_connector:
-                continue  # переходим к следующему connector
-            result = find_right_angle_pair(tap_xyz, con_xyz, duct_connectors)
-            if result:
-                return owner, duct_element
