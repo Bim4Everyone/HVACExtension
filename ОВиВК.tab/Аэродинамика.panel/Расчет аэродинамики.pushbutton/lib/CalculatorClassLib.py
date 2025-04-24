@@ -192,7 +192,7 @@ class AerodinamicCoefficientCalculator(object):
         if isinstance(element, Connector):
             return element.Shape == ConnectorProfileType.Rectangular
         if isinstance(element, ConnectorData):
-            return element.ConnectorElement.Shape == ConnectorProfileType.Rectangular
+            return element.connector_element.Shape == ConnectorProfileType.Rectangular
         else:
             connectors = self.get_connectors(element)
             return connectors[0].Shape == ConnectorProfileType.Rectangular

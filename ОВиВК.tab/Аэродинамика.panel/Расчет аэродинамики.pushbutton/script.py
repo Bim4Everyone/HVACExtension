@@ -291,7 +291,8 @@ def get_local_coefficient(fitting, system):
             local_section_coefficient = transition_elbow_calculator.get_elbow_coefficient(fitting)
         else:
             local_section_coefficient = cross_tee_calculator.get_tee_coefficient(fitting)
-
+    elif part_type == fitting.MEPModel.PartType.Cross:
+        local_section_coefficient = cross_tee_calculator.get_cross_coefficient(fitting)
     else:
         local_section_coefficient = 0
     fitting_coefficient_cash[fitting.Id.IntegerValue] = local_section_coefficient

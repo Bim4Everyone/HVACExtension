@@ -62,7 +62,7 @@ class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCal
     tap_crosses_filtered = []
 
 
-    def __calculate_tee_coefficient(self, tee_type_name, Lo, Lp, Lc, fp, fo, fc):
+    def __calculate_coefficient(self, tee_type_name, Lo, Lp, Lc, fp, fo, fc):
         """
         Рассчитывает коэффициент тройника.
 
@@ -554,9 +554,44 @@ class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCal
 
         Lo, Lp, Lc, fo, fc, fp = get_variables(*get_args)
 
-        coefficient = self.__calculate_tee_coefficient(tee_type_name, Lo, Lp, Lc, fp, fo, fc)
+        coefficient = self.__calculate_coefficient(tee_type_name, Lo, Lp, Lc, fp, fo, fc)
 
         return coefficient
+
+    def get_cross_name(self, is_rectangular, duct_critical, branch_1_critical, branch_2_critical, Lo_1, Lo_2, Lp):
+        name_map = {
+            True: {  # Supply
+                "PASS": {
+                    True: self.CROSS_SUPPLY_PASS_RECT_NAME,
+                    False: self.CROSS_SUPPLY_PASS_ROUND_NAME
+                },
+                "BRANCH": {
+                    True: self.CROSS_SUPPLY_BRANCH_RECT_NAME,
+                    False: self.CROSS_SUPPLY_BRANCH_ROUND_NAME
+                }
+            },
+            False: {  # Exhaust
+                "PASS": {
+                    True: self.CROSS_EXHAUST_PASS_RECT_NAME,
+                    False: self.CROSS_EXHAUST_PASS_ROUND_NAME
+                },
+                "BRANCH": {
+                    True: self.CROSS_EXHAUST_BRANCH_RECT_NAME,
+                    False: self.CROSS_EXHAUST_BRANCH_ROUND_NAME
+                }
+            }
+        }
+
+        if duct_critical:
+            kind = "PASS"
+        elif branch_1_critical or branch_2_critical:
+            kind = "BRANCH"
+        else:
+            kind = "BRANCH" if (Lo_1 > Lp or Lo_2 > Lp) else "PASS"
+
+        result_name = name_map[self.system_is_supply][kind][is_rectangular]
+
+        return result_name
 
     def get_tap_cross_coefficient(self, element_1, element_2, duct):
         def get_tap_cross_variables():
@@ -606,7 +641,7 @@ class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCal
                 if duct.Id in elements_ids:
                     duct_critical = True
                     break
-                if branch_duct_1.Id in elements_ids or branch_duct_2.Id in elements_ids:
+                if branch_duct_1.Id in elements_ids:
                     branch_1_critical = True
                     break
                 if branch_duct_2.Id in elements_ids:
@@ -615,37 +650,13 @@ class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCal
 
             is_rectangular = self.is_rectangular(duct_connectors[0])
 
-            name_map = {
-                True: {  # Supply
-                    "PASS": {
-                        True: self.CROSS_SUPPLY_PASS_RECT_NAME,
-                        False: self.CROSS_SUPPLY_PASS_ROUND_NAME
-                    },
-                    "BRANCH": {
-                        True: self.CROSS_SUPPLY_BRANCH_RECT_NAME,
-                        False: self.CROSS_SUPPLY_BRANCH_ROUND_NAME
-                    }
-                },
-                False: {  # Exhaust
-                    "PASS": {
-                        True: self.CROSS_EXHAUST_PASS_RECT_NAME,
-                        False: self.CROSS_EXHAUST_PASS_ROUND_NAME
-                    },
-                    "BRANCH": {
-                        True: self.CROSS_EXHAUST_BRANCH_RECT_NAME,
-                        False: self.CROSS_EXHAUST_BRANCH_ROUND_NAME
-                    }
-                }
-            }
-
-            if duct_critical:
-                kind = "PASS"
-            elif branch_1_critical or branch_2_critical:
-                kind = "BRANCH"
-            else:
-                kind = "BRANCH" if (Lo_1 > Lp or Lo_2 > Lp) else "PASS"
-
-            result_name = name_map[self.system_is_supply][kind][is_rectangular]
+            result_name = self.get_cross_name(is_rectangular,
+                                             duct_critical,
+                                             branch_1_critical,
+                                             branch_2_critical,
+                                             Lo_1,
+                                             Lo_2,
+                                             Lp)
 
             fc = self.get_area(duct)
             fp = fc
@@ -658,7 +669,6 @@ class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCal
             else:
                 fo_result = fo_2
                 Lo_result = Lo_2
-
 
 
             return result_name, Lc, Lp, Lo_result, fc, fp, fo_result
@@ -675,5 +685,129 @@ class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCal
                                                              connector_data_instances_duct[0],
                                                              connector_data_instances_duct[0]])
 
-        return self.__calculate_tee_coefficient(tap_cross_name, Lo, Lp, Lc, fp, fo, fc)
+        return self.__calculate_coefficient(tap_cross_name, Lo, Lp, Lc, fp, fo, fc)
 
+    def get_cross_coefficient(self, element):
+        def get_angle_between_connectors(connector_1, connector_2):
+
+            # Получаем координаты центров соединений
+            input_origin = connector_1.connector_element.Origin
+            output_origin = connector_2.connector_element.Origin
+
+
+            # Получаем координату точки вставки тройника
+            location = element.Location.Point
+
+            # Создаем векторы направлений от точки вставки тройника
+            vec_input_location = input_origin - location
+            vec_output_location = output_origin - location
+
+
+            # Функция вычисления угла между векторами
+            def calculate_angle(vec1, vec2):
+                dot_product = vec1.DotProduct(vec2)
+                norm1 = vec1.GetLength()
+                norm2 = vec2.GetLength()
+
+                cosine = dot_product / (norm1 * norm2)
+                # Защита от выхода за границы из-за округления
+                cosine = max(-1.0, min(1.0, cosine))
+
+                return math.degrees(math.acos(cosine))
+
+            # Вычисляем углы
+            input_output_angle = calculate_angle(vec_input_location, vec_output_location)
+
+            return input_output_angle
+
+        def get_cross_variables():
+            body_connector = max(connector_data_instances, key=lambda c: c.flow)
+
+            other_connectors = [c for c in connector_data_instances if c != body_connector]
+
+            pass_connector = next(
+                (connector for connector in other_connectors
+                 if abs(get_angle_between_connectors(body_connector, connector) - 180) <= 5),
+                None
+            )
+            # Определяем branch_connector как оставшийся коннектор
+            excluded_ids = {body_connector.connector_element.Id, pass_connector.connector_element.Id}
+            # Отбираем все коннекторы, не входящие в excluded_ids
+            branch_connectors = [cd for cd in connector_data_instances if cd.connector_element.Id not in excluded_ids]
+
+            branch_connector_1 = branch_connectors[0] if len(branch_connectors) > 0 else None
+            branch_connector_2 = branch_connectors[1] if len(branch_connectors) > 1 else None
+
+            input_connector, output_connector = self.find_input_output_connector(element)
+
+            Lc = body_connector.flow
+            fc = body_connector.area
+            Lp = pass_connector.flow
+            fp = pass_connector.area
+
+            if self.system_is_supply:
+                if pass_connector.connector_element.Id == output_connector.connector_element.Id:
+                    if self.is_rectangular(input_connector):
+                        cross_name = self.CROSS_SUPPLY_PASS_RECT_NAME
+                    else:
+                        cross_name = self.CROSS_SUPPLY_PASS_ROUND_NAME
+
+                    main_branch = max([branch_connector_1, branch_connector_2], key=lambda c: c.flow)
+                    Lo = main_branch.flow
+                    fo = main_branch.area
+
+                if branch_connector_1.connector_element.Id == output_connector.connector_element.Id:
+                    if self.is_rectangular(input_connector):
+                        cross_name = self.CROSS_EXHAUST_BRANCH_RECT_NAME
+                    else:
+                        cross_name = self.CROSS_EXHAUST_BRANCH_ROUND_NAME
+
+                    Lo = branch_connector_1.flow
+                    fo = branch_connector_1.area
+
+                if branch_connector_2.connector_element.Id == output_connector.connector_element.Id:
+                    if self.is_rectangular(input_connector):
+                        cross_name = self.CROSS_EXHAUST_BRANCH_RECT_NAME
+                    else:
+                        cross_name = self.CROSS_EXHAUST_BRANCH_ROUND_NAME
+
+                    Lo = branch_connector_2.flow
+                    fo = branch_connector_2.area
+
+            else:
+                if pass_connector.connector_element.Id == input_connector.connector_element.Id:
+                    if self.is_rectangular(input_connector):
+                        cross_name = self.CROSS_EXHAUST_PASS_RECT_NAME
+                    else:
+                        cross_name = self.CROSS_EXHAUST_PASS_ROUND_NAME
+
+                    main_branch = max([branch_connector_1, branch_connector_2], key=lambda c: c.flow)
+                    Lo = main_branch.flow
+                    fo = main_branch.area
+
+                if branch_connector_1.connector_element.Id == input_connector.connector_element.Id:
+                    if self.is_rectangular(input_connector):
+                        cross_name = self.CROSS_EXHAUST_BRANCH_RECT_NAME
+                    else:
+                        cross_name = self.CROSS_EXHAUST_BRANCH_ROUND_NAME
+
+                    Lo = branch_connector_1.flow
+                    fo = branch_connector_1.area
+                if branch_connector_2.connector_element.Id == input_connector.connector_element.Id:
+                    if self.is_rectangular(input_connector):
+                        cross_name = self.CROSS_EXHAUST_BRANCH_RECT_NAME
+                    else:
+                        cross_name = self.CROSS_EXHAUST_BRANCH_ROUND_NAME
+
+                    Lo = branch_connector_2.flow
+                    fo = branch_connector_2.area
+
+            return cross_name, Lc, Lp, Lo, fc, fp, fo
+
+        connector_data_instances = self.get_connector_data_instances(element)
+
+        cross_name, Lc, Lp, Lo, fc, fp, fo = get_cross_variables()
+
+        self.tee_params[element.Id] = CalculatorClassLib.TapTeeCharacteristic(Lo, Lc, Lp, fo, fc, fp, cross_name)
+        self.remember_element_name(element, cross_name, connector_data_instances)
+        return self.__calculate_coefficient(cross_name, Lo, Lp, Lc, fp, fo, fc)
