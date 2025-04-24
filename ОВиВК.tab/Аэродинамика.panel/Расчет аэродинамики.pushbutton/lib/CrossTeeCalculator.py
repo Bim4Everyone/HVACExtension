@@ -87,16 +87,20 @@ class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCal
         vp_normed = Lp_normed / fp_normed
         fn_sqrt = math.sqrt(fp_normed)
 
-        if tee_type_name == self.TEE_SUPPLY_PASS_NAME:
+        if tee_type_name in [self.TEE_SUPPLY_PASS_NAME,
+                             self.CROSS_SUPPLY_PASS_RECT_NAME,
+                             self.CROSS_SUPPLY_PASS_ROUND_NAME]:
             return (0.45 * (fp_normed / (1 - Lo_normed)) ** 2 + (0.6 - 1.7 * fp_normed) * (fp_normed / (1 - Lo_normed))
                     - (0.25 - 0.9 * fp_normed ** 2) + 0.19 * ((1 - Lo_normed) / fp_normed))
 
-        if tee_type_name == self.TEE_SUPPLY_BRANCH_ROUND_NAME:
+        if tee_type_name in [self.TEE_SUPPLY_BRANCH_ROUND_NAME,
+                             self.CROSS_SUPPLY_BRANCH_ROUND_NAME]:
             return ((fo_normed / Lo_normed) ** 2
                     - 0.58 * (fo_normed / Lo_normed) + 0.54
                     + 0.025 * (Lo_normed / fo_normed))
 
-        if tee_type_name == self.TEE_SUPPLY_BRANCH_RECT_NAME:
+        if tee_type_name in [self.TEE_SUPPLY_BRANCH_RECT_NAME,
+                             self.CROSS_SUPPLY_BRANCH_RECT_NAME]:
             return ((fo_normed / Lo_normed) ** 2
                     - 0.42 * (fo_normed / Lo_normed) + 0.81
                     - 0.06 * (Lo_normed / fo_normed))
@@ -104,22 +108,26 @@ class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCal
         if tee_type_name == self.TEE_SUPPLY_SEPARATION_NAME:
             return 1 + 0.3 * ((Lo_normed / fo_normed) ** 2)
 
-        if tee_type_name == self.TEE_EXHAUST_PASS_ROUND_NAME:
+        if tee_type_name in [self.TEE_EXHAUST_PASS_ROUND_NAME,
+                             self.CROSS_EXHAUST_PASS_ROUND_NAME]:
             return (((1 - fn_sqrt) + 0.5 * Lo_normed + 0.05) *
                     ((1.7 + (1 / (2 * fo_normed) - 1) * Lo_normed - math.sqrt((fp_normed + fo_normed) * Lo_normed))
                      * ((fp_normed / (1 - Lo_normed)) ** 2)))
 
-        if tee_type_name == self.TEE_EXHAUST_PASS_RECT_NAME:
+        if tee_type_name in [self.TEE_EXHAUST_PASS_RECT_NAME,
+                             self.CROSS_EXHAUST_PASS_RECT_NAME]:
             return (((1 - fn_sqrt) + 0.5 * Lo_normed + 0.05) *
                     (1.5 + (1 / (2 * fo_normed) - 1) * Lo_normed - math.sqrt((fp_normed + fo_normed) * Lo_normed))
                     * ((fp_normed / (1 - Lo_normed)) ** 2))
 
-        if tee_type_name == self.TEE_EXHAUST_BRANCH_ROUND_NAME:
+        if tee_type_name in [self.TEE_EXHAUST_BRANCH_ROUND_NAME,
+                             self.CROSS_EXHAUST_BRANCH_ROUND_NAME]:
             return ((-0.7 - 6.05 * (1 - fp_normed) ** 3) * (fo_normed / Lo_normed) ** 2
                     + (1.32 + 3.23 * (1 - fp_normed) ** 2) * (fo_normed / Lo_normed)
                     + (0.5 + 0.42 * fp_normed) - 0.167 * (Lo_normed / fo_normed))
 
-        if tee_type_name == self.TEE_EXHAUST_BRANCH_RECT_NAME:
+        if tee_type_name in [self.TEE_EXHAUST_BRANCH_RECT_NAME,
+                             self.CROSS_EXHAUST_BRANCH_RECT_NAME]:
             return (
                     (fo_normed / Lo_normed) ** 2) * (4.1 * ((fp_normed / fo_normed) ** 1.25) *
                                                      (Lo_normed ** 1.5) *
@@ -667,5 +675,5 @@ class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCal
                                                              connector_data_instances_duct[0],
                                                              connector_data_instances_duct[0]])
 
-        return 1
+        return self.__calculate_tee_coefficient(tap_cross_name, Lo, Lp, Lc, fp, fo, fc)
 

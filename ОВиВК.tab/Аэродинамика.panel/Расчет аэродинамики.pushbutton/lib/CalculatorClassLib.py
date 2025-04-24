@@ -189,7 +189,6 @@ class AerodinamicCoefficientCalculator(object):
         self.section_indexes = self.get_all_sections_in_system()
 
     def is_rectangular(self, element):
-        print(isinstance(element, Connector))
         if isinstance(element, Connector):
             return element.Shape == ConnectorProfileType.Rectangular
         if isinstance(element, ConnectorData):
