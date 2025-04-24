@@ -150,6 +150,7 @@ class AerodinamicCoefficientCalculator(object):
     uidoc = None
     view = None
     system = None
+    system_is_supply = None
     all_sections_in_system = None
     section_indexes = None
     element_names = {}
@@ -180,10 +181,53 @@ class AerodinamicCoefficientCalculator(object):
         path_numbers = system.GetCriticalPathSectionNumbers()
         self.critical_path_numbers = list(path_numbers)
 
-        if system.SystemType == DuctSystemType.SupplyAir:
+        self.system_is_supply = system.SystemType == DuctSystemType.SupplyAir
+
+        if self.system_is_supply:
             self.critical_path_numbers.reverse()
 
         self.section_indexes = self.get_all_sections_in_system()
+
+    def is_rectangular(self, element):
+        print(isinstance(element, Connector))
+        if isinstance(element, Connector):
+            return element.Shape == ConnectorProfileType.Rectangular
+        if isinstance(element, ConnectorData):
+            return element.ConnectorElement.Shape == ConnectorProfileType.Rectangular
+        else:
+            connectors = self.get_connectors(element)
+            return connectors[0].Shape == ConnectorProfileType.Rectangular
+
+    def get_area(self, element):
+        def get_connector_area(connector):
+            area = None
+            if connector.Shape == ConnectorProfileType.Oval:
+                forms.alert(
+                    "Не предусмотрена обработка овальных коннекторов.",
+                    "Ошибка",
+                    exitscript=True)
+
+            if connector.Shape == ConnectorProfileType.Round:
+                radius = UnitUtils.ConvertFromInternalUnits(connector.Radius, UnitTypeId.Millimeters)
+                area = math.pi * ((radius / 1000) ** 2)
+            elif connector.Shape == ConnectorProfileType.Rectangular:
+                height = UnitUtils.ConvertFromInternalUnits(connector.Height, UnitTypeId.Millimeters)
+                width = UnitUtils.ConvertFromInternalUnits(connector.Width, UnitTypeId.Millimeters)
+                area = height / 1000 * width / 1000
+
+            return area
+
+        if isinstance(element, ConnectorData):
+            return element.area
+
+        if isinstance(element, Connector):
+            area = get_connector_area(element)
+            return area
+
+        else:
+            connectors = self.get_connectors(element)
+            area = get_connector_area(connectors[0])
+            return area
 
     def get_all_sections_in_system(self):
         """

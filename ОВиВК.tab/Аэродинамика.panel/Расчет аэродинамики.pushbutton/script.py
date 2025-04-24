@@ -400,7 +400,11 @@ def get_network_element_real_size(element, element_type):
             if tee_params is not None:
                 if tee_params.name in [cross_tee_calculator.TEE_SUPPLY_PASS_NAME,
                                        cross_tee_calculator.TEE_EXHAUST_PASS_ROUND_NAME,
-                                       cross_tee_calculator.TEE_EXHAUST_PASS_RECT_NAME]:
+                                       cross_tee_calculator.TEE_EXHAUST_PASS_RECT_NAME,
+                                       cross_tee_calculator.CROSS_SUPPLY_PASS_RECT_NAME,
+                                       cross_tee_calculator.CROSS_EXHAUST_PASS_RECT_NAME,
+                                       cross_tee_calculator.CROSS_SUPPLY_PASS_ROUND_NAME,
+                                       cross_tee_calculator.CROSS_EXHAUST_PASS_ROUND_NAME]:
                     return tee_params.fp
                 return tee_params.fo
     size = element.GetParamValueOrDefault(cross_section_param)
@@ -495,7 +499,11 @@ def get_network_element_flow(section, element):
             if tee_params is not None:
                 if tee_params.name in [cross_tee_calculator.TEE_SUPPLY_PASS_NAME,
                                        cross_tee_calculator.TEE_EXHAUST_PASS_ROUND_NAME,
-                                       cross_tee_calculator.TEE_EXHAUST_PASS_RECT_NAME]:
+                                       cross_tee_calculator.TEE_EXHAUST_PASS_RECT_NAME,
+                                       cross_tee_calculator.CROSS_SUPPLY_PASS_RECT_NAME,
+                                       cross_tee_calculator.CROSS_EXHAUST_PASS_RECT_NAME,
+                                       cross_tee_calculator.CROSS_SUPPLY_PASS_ROUND_NAME,
+                                       cross_tee_calculator.CROSS_EXHAUST_PASS_ROUND_NAME]:
                     return int(tee_params.Lp)
                 return int(tee_params.Lo)
     if element.Category.IsId(BuiltInCategory.OST_DuctTerminal):
@@ -723,6 +731,9 @@ def pass_data_filter(element, section):
         return False
     if element.Category.IsId(BuiltInCategory.OST_DuctCurves) and get_network_element_flow(section, element) == 0:
         return False
+    if element.Id in cross_tee_calculator.tap_crosses_filtered:
+        return False
+
     return True
 
 def process_method_setup(selected_system):
