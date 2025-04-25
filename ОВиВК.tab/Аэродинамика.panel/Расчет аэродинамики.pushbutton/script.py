@@ -420,15 +420,8 @@ def get_network_element_real_size(element, element_type):
     if not size:
         size = element_type.GetParamValueOrDefault(cross_section_param)
     if not size:
-        connectors = calc_lib.get_connectors(element)
-        size_variants = []
-        for connector in connectors:
-            if connector.Shape == ConnectorProfileType.Rectangular:
-                size_variants.append(convert_to_meters(connector.Height) * convert_to_meters(connector.Width))
-            if connector.Shape == ConnectorProfileType.Round:
-                size_variants.append(2 * convert_to_meters(connector.Radius) * math.pi)
-        size = min(size_variants)
-        UnitUtils.ConvertFromInternalUnits(size, UnitTypeId.SquareMeters)
+        size = calc_lib.get_area(element)
+
     return size
 
 def get_network_element_pressure_drop(section, element, density, velocity, coefficient):
@@ -458,7 +451,9 @@ def get_network_element_pressure_drop(section, element, density, velocity, coeff
         if coefficient and float(coefficient) != 0:
             return calculate_pressure_drop()
         return 10
-    if element.InAnyCategory([BuiltInCategory.OST_DuctFitting, BuiltInCategory.OST_DuctAccessory, BuiltInCategory.OST_MechanicalEquipment]):
+    if element.InAnyCategory([BuiltInCategory.OST_DuctFitting,
+                              BuiltInCategory.OST_DuctAccessory,
+                              BuiltInCategory.OST_MechanicalEquipment]):
         return calculate_pressure_drop()
     return 0
 

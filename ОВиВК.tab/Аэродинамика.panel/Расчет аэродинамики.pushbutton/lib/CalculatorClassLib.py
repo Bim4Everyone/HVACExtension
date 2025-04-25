@@ -225,7 +225,15 @@ class AerodinamicCoefficientCalculator(object):
 
         else:
             connectors = self.get_connectors(element)
-            area = get_connector_area(connectors[0])
+            hvac_connector = next((conn for conn in connectors if conn.Domain == Domain.DomainHvac), None)
+            if hvac_connector is None:
+                forms.alert(
+                    "Не удалось определить площадь одного из элементов. ID: " + str(element.Id),
+                    "Ошибка",
+                    exitscript=True
+                )
+
+            area = get_connector_area(hvac_connector)
             return area
 
     def get_all_sections_in_system(self):
