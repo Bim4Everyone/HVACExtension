@@ -555,41 +555,39 @@ class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCal
 
     def get_test_tee_coefficient(self, element):
         def get_tee_variables():
+            body_connector = None
+            branch_connector = None
+            pass_connector = None
+            other_connectors = None
+
             has_zero_flow = any(c.flow == 0 for c in connector_data_instances)
 
             if has_zero_flow:
-                forms.alert(
-                    "У одного из тройников есть нулевые расходы на разветвлении. Если вы используете тройник как отвод "
-                    "- перечертите используя врезки или отвод. ID элемента - " + str(element.Id),
-                    "Ошибка",
-                    exitscript=True)
+                non_zero_connectors = [c for c in connector_data_instances if c.flow > 0]
+                body_connector = non_zero_connectors[0]
+                branch_connector = non_zero_connectors[1]
+                pass_connector = next((c for c in connector_data_instances if c not in non_zero_connectors), None)
+            else:
+                body_connector = max(connector_data_instances, key=lambda c: c.flow)
+                other_connectors = [c for c in connector_data_instances if c != body_connector]
 
-            body_connector = max(connector_data_instances, key=lambda c: c.flow)
-
-            other_connectors = [c for c in connector_data_instances if c != body_connector]
-
-            pass_connector = next(
-                (connector for connector in other_connectors
-                 if abs(self.__get_angle_between_connectors(element, body_connector, connector) - 180) <= 5),
-                None
-            )
+                pass_connector = next(
+                    (connector for connector in other_connectors
+                     if abs(self.__get_angle_between_connectors(element, body_connector, connector) - 180) <= 5),
+                    None
+                )
 
             tee_name = None
 
-            if self.system_is_supply and pass_connector is None:
+            if self.system_is_supply and (pass_connector is None or pass_connector.flow == 0):
                 tee_name = self.TEE_SUPPLY_SEPARATION_NAME
-            if not self.system_is_supply and pass_connector is None:
+            if not self.system_is_supply and (pass_connector is None or pass_connector.flow == 0):
                 tee_name = self.TEE_EXHAUST_MERGER_NAME
 
-            if element.Id.IntegerValue == 20739327:
-                print(pass_connector)
-                print('Угол между стволом и проходом ' + str(abs(self.__get_angle_between_connectors(element, body_connector, pass_connector) - 180)))
-                print('Найдено имя '+ str(tee_name))
-
-            if pass_connector == None: # проход не нашелся, значит у нас разделение или слияние
+            if pass_connector is None and other_connectors is not None: # проход не нашелся, значит у нас разделение или слияние
                 branch_connector = max(connector_data_instances, key=lambda c: c.flow)
                 pass_connector = [c for c in other_connectors if c != branch_connector][0]
-            else:
+            elif branch_connector is None and other_connectors is not None:
                 branch_connector = [c for c in other_connectors if c != pass_connector][0]
 
             input_connector, output_connector = self.find_input_output_connector(element)
@@ -624,16 +622,11 @@ class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCal
                         else:
                             tee_name = self.TEE_EXHAUST_BRANCH_ROUND_NAME
 
-            if element.Id.IntegerValue == 20579411:
-                print('Найдено имя '+ str(tee_name))
-
             return tee_name, Lc, Lp, Lo, fc, fp, fo
 
         connector_data_instances = self.get_connector_data_instances(element)
 
         tee_name, Lc, Lp, Lo, fc, fp, fo = get_tee_variables()
-        print(element.Id)
-        print(tee_name)
 
         self.tee_params[element.Id] = CalculatorClassLib.MulticonElementCharacteristic(Lo, Lc, Lp, fo, fc, fp, tee_name)
 
