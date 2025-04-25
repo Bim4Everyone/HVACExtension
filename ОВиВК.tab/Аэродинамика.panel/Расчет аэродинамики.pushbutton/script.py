@@ -317,9 +317,22 @@ def get_network_element_name(element):
         str: Название элемента.
     """
 
+    def get_name_addon():
+        mark = element.GetParamValueOrDefault("ADSK_Марка") \
+               or element_type.GetParamValueOrDefault("ADSK_Марка", "")
+        short_name = element.GetParamValueOrDefault("ADSK_Наименование краткое") \
+                     or element_type.GetParamValueOrDefault("ADSK_Наименование краткое")
+
+        return short_name or mark or ""
+
+    element_type = element.GetElementType()
     element_name = transition_elbow_calculator.element_names.get(element.Id)
+    name_addon = get_name_addon()
     if element_name is None:
         element_name = cross_tee_calculator.element_names.get(element.Id)
+    if name_addon == "":
+
+        name_addon = element_type.GetParamValueOrDefault("ADSK_Марка", "")
 
     if element_name is not None:
         return element_name
@@ -328,9 +341,11 @@ def get_network_element_name(element):
     if element.Category.IsId(BuiltInCategory.OST_FlexDuctCurves):
         return 'Гибкий воздуховод'
     if element.Category.IsId(BuiltInCategory.OST_DuctTerminal):
-        return 'Воздухораспределитель'
+        return 'Воздухораспределитель ' + name_addon
     if element.Category.IsId(BuiltInCategory.OST_MechanicalEquipment):
-        return 'Оборудование'
+        return 'Оборудование ' + name_addon
+    if element.Category.IsId(BuiltInCategory.OST_DuctAccessory):
+        return 'Арматура ' + name_addon
     if element.Category.IsId(BuiltInCategory.OST_DuctFitting):
         if element.MEPModel.PartType == PartType.Elbow:
             return 'Отвод воздуховода'
@@ -342,7 +357,8 @@ def get_network_element_name(element):
             if transition_elbow_calculator.is_tap_elbow(element):
                 return 'Отвод'
             return "Боковое ответвление"
-    return 'Арматура'
+
+    return "Неопознанный элемент"
 
 def get_network_element_length(section, element_id):
     """
