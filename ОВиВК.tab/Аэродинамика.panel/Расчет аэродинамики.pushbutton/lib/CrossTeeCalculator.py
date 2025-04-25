@@ -555,72 +555,71 @@ class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCal
 
     def get_test_tee_coefficient(self, element):
         def get_tee_variables():
-            body_connector = None
-            branch_connector = None
-            pass_connector = None
+            body_connector = branch_connector = pass_connector = None
             other_connectors = None
 
             has_zero_flow = any(c.flow == 0 for c in connector_data_instances)
 
             if has_zero_flow:
-                non_zero_connectors = [c for c in connector_data_instances if c.flow > 0]
-                body_connector = non_zero_connectors[0]
-                branch_connector = non_zero_connectors[1]
-                pass_connector = next((c for c in connector_data_instances if c not in non_zero_connectors), None)
+                pass_connector = next((c for c in connector_data_instances if c.flow == 0), None)
+                non_zero_connectors = sorted(
+                    (c for c in connector_data_instances if c.flow > 0),
+                    key=lambda c: c.area,
+                    reverse=True
+                )
+                body_connector, branch_connector = non_zero_connectors[:2]
             else:
                 body_connector = max(connector_data_instances, key=lambda c: c.flow)
                 other_connectors = [c for c in connector_data_instances if c != body_connector]
-
                 pass_connector = next(
-                    (connector for connector in other_connectors
-                     if abs(self.__get_angle_between_connectors(element, body_connector, connector) - 180) <= 5),
+                    (
+                        c for c in other_connectors
+                        if abs(self.__get_angle_between_connectors(element, body_connector, c) - 180) <= 5
+                    ),
                     None
                 )
 
+            # Предустановка имени тройника
             tee_name = None
+            is_supply = self.system_is_supply
+            is_exhaust = not is_supply
+            pass_is_zero = pass_connector is None or pass_connector.flow == 0
 
-            if self.system_is_supply and (pass_connector is None or pass_connector.flow == 0):
+            if is_supply and pass_is_zero:
                 tee_name = self.TEE_SUPPLY_SEPARATION_NAME
-            if not self.system_is_supply and (pass_connector is None or pass_connector.flow == 0):
+            elif is_exhaust and pass_is_zero:
                 tee_name = self.TEE_EXHAUST_MERGER_NAME
 
-            if pass_connector is None and other_connectors is not None: # проход не нашелся, значит у нас разделение или слияние
+            if pass_connector is None and other_connectors:
                 branch_connector = max(connector_data_instances, key=lambda c: c.flow)
-                pass_connector = [c for c in other_connectors if c != branch_connector][0]
-            elif branch_connector is None and other_connectors is not None:
-                branch_connector = [c for c in other_connectors if c != pass_connector][0]
+                pass_connector = next(c for c in other_connectors if c != branch_connector)
+            elif branch_connector is None and other_connectors:
+                branch_connector = next(c for c in other_connectors if c != pass_connector)
 
             input_connector, output_connector = self.find_input_output_connector(element)
 
-            Lc = body_connector.flow
-            fc = body_connector.area
-            Lp = pass_connector.flow
-            fp = pass_connector.area
-            Lo = branch_connector.flow
-            fo = branch_connector.area
+            # Расчет значений
+            Lc, fc = body_connector.flow, body_connector.area
+            Lp, fp = pass_connector.flow, pass_connector.area
+            Lo, fo = branch_connector.flow, branch_connector.area
 
             if tee_name is None:
-                if self.system_is_supply:
-                    if pass_connector.connector_element.Id == output_connector.connector_element.Id:
+                output_id = output_connector.connector_element.Id
+                input_id = input_connector.connector_element.Id
+                pass_id = pass_connector.connector_element.Id
+                branch_id = branch_connector.connector_element.Id
+                is_rect = self.is_rectangular(input_connector)
+
+                if is_supply:
+                    if pass_id == output_id:
                         tee_name = self.TEE_SUPPLY_PASS_NAME
-
-                    if branch_connector.connector_element.Id == output_connector.connector_element.Id:
-                        if self.is_rectangular(input_connector):
-                            tee_name = self.TEE_EXHAUST_BRANCH_RECT_NAME
-                        else:
-                            tee_name = self.TEE_EXHAUST_BRANCH_ROUND_NAME
+                    elif branch_id == output_id:
+                        tee_name = self.TEE_EXHAUST_BRANCH_RECT_NAME if is_rect else self.TEE_EXHAUST_BRANCH_ROUND_NAME
                 else:
-                    if pass_connector.connector_element.Id == input_connector.connector_element.Id:
-                        if self.is_rectangular(input_connector):
-                            tee_name = self.TEE_EXHAUST_PASS_RECT_NAME
-                        else:
-                            tee_name = self.TEE_EXHAUST_PASS_ROUND_NAME
-
-                    if branch_connector.connector_element.Id == input_connector.connector_element.Id:
-                        if self.is_rectangular(input_connector):
-                            tee_name = self.TEE_EXHAUST_BRANCH_RECT_NAME
-                        else:
-                            tee_name = self.TEE_EXHAUST_BRANCH_ROUND_NAME
+                    if pass_id == input_id:
+                        tee_name = self.TEE_EXHAUST_PASS_RECT_NAME if is_rect else self.TEE_EXHAUST_PASS_ROUND_NAME
+                    elif branch_id == input_id:
+                        tee_name = self.TEE_EXHAUST_BRANCH_RECT_NAME if is_rect else self.TEE_EXHAUST_BRANCH_ROUND_NAME
 
             return tee_name, Lc, Lp, Lo, fc, fp, fo
 
