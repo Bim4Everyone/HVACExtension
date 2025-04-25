@@ -61,7 +61,6 @@ class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCal
 
     tap_crosses_filtered = []
 
-
     def __calculate_coefficient(self, tee_type_name, Lo, Lp, Lc, fp, fo, fc):
         """
         Рассчитывает коэффициент тройника.
@@ -160,7 +159,36 @@ class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCal
 
         return None  # Если тип тройника не найден
 
-    def is_tap_cross(self, element):
+    def __get_angle_between_connectors(self, element, connector_1, connector_2):
+        # Получаем координаты центров соединений
+        input_origin = connector_1.connector_element.Origin
+        output_origin = connector_2.connector_element.Origin
+
+        # Получаем координату точки вставки тройника
+        location = element.Location.Point
+
+        # Создаем векторы направлений от точки вставки тройника
+        vec_input_location = input_origin - location
+        vec_output_location = output_origin - location
+
+        # Функция вычисления угла между векторами
+        def calculate_angle(vec1, vec2):
+            dot_product = vec1.DotProduct(vec2)
+            norm1 = vec1.GetLength()
+            norm2 = vec2.GetLength()
+
+            cosine = dot_product / (norm1 * norm2)
+            # Защита от выхода за границы из-за округления
+            cosine = max(-1.0, min(1.0, cosine))
+
+            return math.degrees(math.acos(cosine))
+
+        # Вычисляем углы
+        input_output_angle = calculate_angle(vec_input_location, vec_output_location)
+
+        return input_output_angle
+
+    def get_tap_partner_if_exists(self, element):
         def angle_between_vectors(v1, v2):
             dot = v1.DotProduct(v2)
             len1 = v1.GetLength()
@@ -221,385 +249,103 @@ class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCal
             if result:
                 return owner, duct_element
 
-    def get_tee_coefficient(self, element):
-        """
-        Вычисляет коэффициент тройника для элемента.
+    def get_double_tap_tee_coefficient(self, element_1, element_2, duct):
+        def get_double_tap_tee_variables():
+            input_connector_1, output_connector_1 = self.find_input_output_connector(element_1)
+            input_connector_2, output_connector_2 = self.find_input_output_connector(element_2)
 
-        Args:
-            element (Element): Элемент.
 
-        Returns:
-            float: Коэффициент тройника.
-        """
+            input_element_1 = input_connector_1.connected_element
+            output_element_1 = output_connector_1.connected_element
 
-        def get_tee_orientation(element):
-            """
-            Определяет ориентацию тройника.
+            input_element_2 = input_connector_2.connected_element
+            output_element_2 = output_connector_2.connected_element
 
-            Args:
-                element (Element): Элемент.
 
-            Returns:
-                TeeVariables: Объект TeeVariables с ориентацией тройника.
-            """
-            connector_data_instances = self.get_connector_data_instances(element)
-
-            input_connector, output_connector = self.find_input_output_connector(element)
-            branch_connector = None  # Коннектор-ответвление
-
-            # Определяем branch_connector как оставшийся коннектор
-            excluded_ids = {input_connector.connector_element.Id, output_connector.connector_element.Id}
-
-            branch_connector = next(
-                (cd for cd in connector_data_instances if cd.connector_element.Id not in excluded_ids),
-                None
-            )
-
-            # Получаем координаты центров соединений
-            input_origin = input_connector.connector_element.Origin
-            output_origin = output_connector.connector_element.Origin
-            branch_origin = branch_connector.connector_element.Origin
-
-            # Получаем координату точки вставки тройника
-            location = element.Location.Point
-
-            # Создаем векторы направлений от точки вставки тройника
-            vec_input_location = input_origin - location
-            vec_output_location = output_origin - location
-            vec_branch_location = branch_origin - location
-
-            # Функция вычисления угла между векторами
-            def calculate_angle(vec1, vec2):
-                dot_product = vec1.DotProduct(vec2)
-                norm1 = vec1.GetLength()
-                norm2 = vec2.GetLength()
-
-                cosine = dot_product / (norm1 * norm2)
-                # Защита от выхода за границы из-за округления
-                cosine = max(-1.0, min(1.0, cosine))
-
-                return math.degrees(math.acos(cosine))
-
-            # Вычисляем углы
-            input_output_angle = calculate_angle(vec_input_location, vec_output_location)
-            input_branch_angle = calculate_angle(vec_input_location, vec_branch_location)
-
-            result = CalculatorClassLib.TeeVariables(input_output_angle,
-                                  input_branch_angle,
-                                  input_connector,
-                                  output_connector,
-                                  branch_connector)
-
-            return result
-
-        def get_tap_tee_type_name(input_connector, output_connector):
-            """
-            Определяет тип врезки-тройника.
-
-            Args:
-                input_connector (ConnectorData): Входной коннектор.
-                output_connector (ConnectorData): Выходной коннектор.
-
-            Returns:
-                str: Название типа тройника.
-            """
-            input_element = input_connector.connected_element
-            output_element = output_connector.connected_element
-
-            duct_critical = False
-            if self.system.SystemType == DuctSystemType.SupplyAir:
-                duct_element = output_element
+            if self.system.SystemType != DuctSystemType.SupplyAir:
+                duct = output_element_1
+                branch_duct_1 = input_element_1
+                branch_duct_2 = input_element_2
             else:
-                duct_element = input_element
+                duct = input_element_1
+                branch_duct_1 = output_element_1
+                branch_duct_2 = output_element_2
 
+            Lo_1 = max(self.get_element_sections_flows(branch_duct_1))
+            Lo_2 = max(self.get_element_sections_flows(branch_duct_2))
+
+            flows_1 = self.get_element_sections_flows(element_1)
+            flows_2 = self.get_element_sections_flows(element_2)
+            all_flows = flows_1 + flows_2
+            excluded = [Lo_1, Lo_2]
+
+            # Оставим только значения, которые не равны Lo_1 или Lo_2
+            filtered_flows = [f for f in all_flows if f not in excluded]
+
+            Lc = max(filtered_flows) if filtered_flows else None
+            Lp = min(filtered_flows) if filtered_flows else None
+
+            branch_1_critical = False
+            branch_2_critical = False
             for number in self.critical_path_numbers:
                 section = self.system.GetSectionByNumber(number)
                 elements_ids = section.GetElementIds()
-                if duct_element.Id in elements_ids:
-                    duct_critical = True
+                if branch_duct_1.Id in elements_ids:
+                    branch_1_critical = True
+                    break
+                if branch_duct_2.Id in elements_ids:
+                    branch_2_critical = True
                     break
 
-            if self.system.SystemType == DuctSystemType.SupplyAir and duct_critical:
-                if input_connector.shape == ConnectorProfileType.Rectangular:
-                    return self.TEE_SUPPLY_BRANCH_RECT_NAME
-                else:
-                    return self.TEE_SUPPLY_BRANCH_ROUND_NAME
-
-            elif self.system.SystemType == DuctSystemType.SupplyAir and not duct_critical:
-                return self.TEE_SUPPLY_PASS_NAME
-
-            elif self.system.SystemType != DuctSystemType.SupplyAir and duct_critical:
-                if input_connector.shape == ConnectorProfileType.Rectangular:
-                    return self.TEE_EXHAUST_BRANCH_RECT_NAME
-                else:
-                    return self.TEE_EXHAUST_BRANCH_ROUND_NAME
-
-            elif self.system.SystemType != DuctSystemType.SupplyAir and not duct_critical:
-                if input_connector.shape == ConnectorProfileType.Rectangular:
-                    return self.TEE_EXHAUST_PASS_RECT_NAME
-                else:
-                    return self.TEE_EXHAUST_PASS_ROUND_NAME
-
-        def get_tee_type_name(tee_orientation, shape):
-            """
-            Определяет тип тройника.
-
-            Args:
-                tee_orientation (TeeVariables): Ориентация тройника.
-                shape (ConnectorProfileType): Форма коннектора.
-
-            Returns:
-                str: Название типа тройника.
-            """
-            flow_90_degree = tee_orientation.input_output_angle < 100
-            branch_90_degree = tee_orientation.input_branch_angle < 100
-
-            if self.system.SystemType == DuctSystemType.SupplyAir:
-                if not flow_90_degree and branch_90_degree:
-                    return self.TEE_SUPPLY_PASS_NAME
-
-                if flow_90_degree and not branch_90_degree:
-                    if shape == ConnectorProfileType.Rectangular:
-                        return self.TEE_SUPPLY_BRANCH_RECT_NAME
-                    else:
-                        return self.TEE_SUPPLY_BRANCH_ROUND_NAME
-
-                if flow_90_degree and branch_90_degree:
-                    return self.TEE_SUPPLY_SEPARATION_NAME
-
+            if self.system_is_supply:
+                result_name = self.TEE_SUPPLY_SEPARATION_NAME
             else:
-                if not flow_90_degree and branch_90_degree:
-                    if shape == ConnectorProfileType.Rectangular:
-                        return self.TEE_EXHAUST_PASS_RECT_NAME
-                    else:
-                        return self.TEE_EXHAUST_PASS_ROUND_NAME
+                result_name = self.TEE_EXHAUST_MERGER_NAME
 
-                if flow_90_degree and branch_90_degree:
-                    if shape == ConnectorProfileType.Rectangular:
-                        return self.TEE_EXHAUST_BRANCH_RECT_NAME
-                    else:
-                        return self.TEE_EXHAUST_BRANCH_ROUND_NAME
+            fc = self.get_area(duct)
+            fp = fc
+            fo_1 = self.get_area(input_connector_1)
+            fo_2 = self.get_area(input_connector_2)
 
-                if flow_90_degree and not branch_90_degree:
-                    return self.TEE_EXHAUST_MERGER_NAME
-
-        def get_tap_tee_variables(input_connector, output_connector, tee_type_name):
-            """
-            Получает переменные для расчета КМС врезки-тройника
-
-            Args:
-                input_connector (ConnectorData): Входной коннектор.
-                output_connector (ConnectorData): Выходной коннектор.
-                tee_type_name (str): Название типа тройника.
-
-            Returns:
-                tuple: Кортеж (Lo, Lp, Lc, fo, fc, fp).
-            """
-            input_element = input_connector.connected_element
-            output_element = output_connector.connected_element
-
-
-
-            if self.system.SystemType == DuctSystemType.SupplyAir:
-                main_flows = self.get_section_flows_by_two_elements(input_element, element)
+            if branch_1_critical or (not branch_2_critical and Lo_1 > Lo_2):
+                fo_result = fo_1
+                Lo_result = Lo_1
             else:
-                main_flows = self.get_section_flows_by_two_elements(output_element, element)
-
-            if len(main_flows) == 0:
-                forms.alert(
-                    "Невозможно обработать расходы на секциях. " + str(element.Id),
-                    "Ошибка",
-                    exitscript=True)
-
-            if self.system.SystemType == DuctSystemType.SupplyAir:
-                Lo = output_connector.flow
-                tap_to_duct_connector = input_connector
-                duct_element = input_element
-            else:
-                Lo = input_connector.flow
-                tap_to_duct_connector = output_connector
-                duct_element = output_element
+                fo_result = fo_2
+                Lo_result = Lo_2
 
 
+            return result_name, Lc, Lp, Lo_result, fc, fp, fo_result
 
-            if len(main_flows) == 2:
-                Lc = max(main_flows)
-                Lp = min(main_flows)
-            if len(main_flows) == 1:
-                # Если у нас нашелся только один расход, это значит, что на соседней секции нет нашей врезки
-                # и определеить является наш расход проходом или стволом не представляется возможным.
-                # Требуется получить все расходы врезок в воздуховод и перебором отыскать недостающий
+        connector_data_instances_1 = self.get_connector_data_instances(element_1)
+        connector_data_instances_2 = self.get_connector_data_instances(element_2)
+        connector_data_instances_duct = self.get_connector_data_instances(duct)
 
-                Lp = max(main_flows)
-                Lc = Lp + Lo
 
-            try:
-                diameter = UnitUtils.ConvertFromInternalUnits(duct_element.Diameter, UnitTypeId.Meters)
-                area = math.pi * (diameter / 2) ** 2
-            except Exception:
-                height = UnitUtils.ConvertFromInternalUnits(duct_element.Height, UnitTypeId.Meters)
-                width = UnitUtils.ConvertFromInternalUnits(duct_element.Width, UnitTypeId.Meters)
+        if element_1.Id not in self.tap_crosses_filtered and element_2.Id not in self.tap_crosses_filtered:
+            self.tap_crosses_filtered.append(element_2.Id)
 
-                area = height * width
+        double_tap_tee_name, Lc, Lp, Lo, fc, fp, fo = get_double_tap_tee_variables()
 
-            fc = area
-            fp = area
-            fo = input_connector.area
+        self.tee_params[element_1.Id] =  CalculatorClassLib.MulticonElementCharacteristic(Lo,
+                                                                                          Lc,
+                                                                                          Lp,
+                                                                                          fo,
+                                                                                          fc,
+                                                                                          fp,
+                                                                                          double_tap_tee_name)
 
-            self.tee_params[element.Id] = CalculatorClassLib.TapTeeCharacteristic(Lo,
-                                                                                     Lc,
-                                                                                     Lp,
-                                                                                     fo,
-                                                                                     fc,
-                                                                                     fp,
-                                                                                     tee_type_name)
+        self.remember_element_name(element_1, double_tap_tee_name, [connector_data_instances_1[0],
+                                                             connector_data_instances_2[0],
+                                                             connector_data_instances_duct[0]])
 
-            return Lo, Lp, Lc, fo, fc, fp
-
-        def get_tee_variables(tee_orientation, tee_type_name):
-            """
-            Получает переменные для расчета коэффициента тройника.
-
-            Args:
-                tee_orientation (TeeVariables): Ориентация тройника.
-                tee_type_name (str): Название типа тройника.
-
-            Returns:
-                tuple: Кортеж (Lo, Lp, Lc, fo, fc, fp).
-            """
-            if (tee_type_name == self.TEE_SUPPLY_PASS_NAME
-                    or tee_type_name == self.TEE_SUPPLY_SEPARATION_NAME):
-                Lc = tee_orientation.input_connector_data.flow
-                Lp = tee_orientation.output_connector_data.flow
-                Lo = tee_orientation.branch_connector_data.flow
-
-                fc = tee_orientation.input_connector_data.area
-                fp = tee_orientation.output_connector_data.area
-                fo = tee_orientation.branch_connector_data.area
-
-            if (tee_type_name == self.TEE_SUPPLY_BRANCH_ROUND_NAME
-                    or tee_type_name == self.TEE_SUPPLY_BRANCH_RECT_NAME):
-                Lc = tee_orientation.input_connector_data.flow
-                Lp = tee_orientation.branch_connector_data.flow
-                Lo = tee_orientation.output_connector_data.flow
-
-                fc = tee_orientation.input_connector_data.area
-                fp = tee_orientation.branch_connector_data.area
-                fo = tee_orientation.output_connector_data.area
-
-            if (tee_type_name == self.TEE_EXHAUST_PASS_RECT_NAME
-                    or tee_type_name == self.TEE_EXHAUST_PASS_ROUND_NAME
-                    or tee_type_name == self.TEE_EXHAUST_MERGER_NAME):
-                Lc = tee_orientation.output_connector_data.flow
-                Lp = tee_orientation.input_connector_data.flow
-                Lo = tee_orientation.branch_connector_data.flow
-                fc = tee_orientation.output_connector_data.area
-                fp = tee_orientation.input_connector_data.area
-                fo = tee_orientation.branch_connector_data.area
-
-            if (tee_type_name == self.TEE_EXHAUST_BRANCH_RECT_NAME
-                    or tee_type_name == self.TEE_EXHAUST_BRANCH_ROUND_NAME):
-                Lc = tee_orientation.output_connector_data.flow
-                Lp = tee_orientation.branch_connector_data.flow
-                Lo = tee_orientation.input_connector_data.flow
-
-                fc = tee_orientation.output_connector_data.area
-                fp = tee_orientation.branch_connector_data.area
-                fo = tee_orientation.input_connector_data.area
-
-            self.tee_params[element.Id] = CalculatorClassLib.TapTeeCharacteristic(Lo,
-                                                                                     Lc,
-                                                                                     Lp,
-                                                                                     fo,
-                                                                                     fc,
-                                                                                     fp,
-                                                                                     tee_type_name)
-
-            return Lo, Lp, Lc, fo, fc, fp
-
-        is_tap = element.MEPModel.PartType == PartType.TapAdjustable
-
-        if is_tap:
-            input_connector, output_connector = self.find_input_output_connector(element)
-            tee_type_name = get_tap_tee_type_name(input_connector, output_connector)
-
-            connected_element = input_connector.connected_element if self.system.SystemType == DuctSystemType.SupplyAir else output_connector.connected_element
-            duct_input, duct_output = self.find_input_output_connector(connected_element)
-
-            connector_data_list = [duct_input, duct_output, input_connector]
-            get_variables = get_tap_tee_variables
-            get_args = (input_connector, output_connector, tee_type_name)
-
-        else:
-            tee_orientation = get_tee_orientation(element)
-            shape = tee_orientation.input_connector_data.shape
-            tee_type_name = get_tee_type_name(tee_orientation, shape)
-
-            connector_data_list = [
-                tee_orientation.input_connector_data,
-                tee_orientation.output_connector_data,
-                tee_orientation.branch_connector_data
-            ]
-            get_variables = get_tee_variables
-            get_args = (tee_orientation, tee_type_name)
-
-        self.remember_element_name(element, tee_type_name, connector_data_list)
-
-        if tee_type_name is None:
-            forms.alert(
-                "Не получилось обработать тройник. " + str(element.Id),
-                "Ошибка",
-                exitscript=True
-            )
-
-        Lo, Lp, Lc, fo, fc, fp = get_variables(*get_args)
-
-        coefficient = self.__calculate_coefficient(tee_type_name, Lo, Lp, Lc, fp, fo, fc)
-
-        return coefficient
-
-    def get_cross_name(self, is_rectangular, duct_critical, branch_1_critical, branch_2_critical, Lo_1, Lo_2, Lp):
-        name_map = {
-            True: {  # Supply
-                "PASS": {
-                    True: self.CROSS_SUPPLY_PASS_RECT_NAME,
-                    False: self.CROSS_SUPPLY_PASS_ROUND_NAME
-                },
-                "BRANCH": {
-                    True: self.CROSS_SUPPLY_BRANCH_RECT_NAME,
-                    False: self.CROSS_SUPPLY_BRANCH_ROUND_NAME
-                }
-            },
-            False: {  # Exhaust
-                "PASS": {
-                    True: self.CROSS_EXHAUST_PASS_RECT_NAME,
-                    False: self.CROSS_EXHAUST_PASS_ROUND_NAME
-                },
-                "BRANCH": {
-                    True: self.CROSS_EXHAUST_BRANCH_RECT_NAME,
-                    False: self.CROSS_EXHAUST_BRANCH_ROUND_NAME
-                }
-            }
-        }
-
-        if duct_critical:
-            kind = "PASS"
-        elif branch_1_critical or branch_2_critical:
-            kind = "BRANCH"
-        else:
-            kind = "BRANCH" if (Lo_1 > Lp or Lo_2 > Lp) else "PASS"
-
-        result_name = name_map[self.system_is_supply][kind][is_rectangular]
-
-        return result_name
+        return self.__calculate_coefficient(double_tap_tee_name, Lo, Lp, Lc, fp, fo, fc)
 
     def get_tap_cross_coefficient(self, element_1, element_2, duct):
         def get_tap_cross_variables():
             input_connector_1, output_connector_1 = self.find_input_output_connector(element_1)
             input_connector_2, output_connector_2 = self.find_input_output_connector(element_2)
 
-            if element_1.Id not in self.tap_crosses_filtered and element_2.Id not in self.tap_crosses_filtered:
-                self.tap_crosses_filtered.append(element_2.Id)
 
             input_element_1 = input_connector_1.connected_element
             output_element_1 = output_connector_1.connected_element
@@ -650,13 +396,37 @@ class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCal
 
             is_rectangular = self.is_rectangular(duct_connectors[0])
 
-            result_name = self.get_cross_name(is_rectangular,
-                                             duct_critical,
-                                             branch_1_critical,
-                                             branch_2_critical,
-                                             Lo_1,
-                                             Lo_2,
-                                             Lp)
+            name_map = {
+                True: {  # Supply
+                    "PASS": {
+                        True: self.CROSS_SUPPLY_PASS_RECT_NAME,
+                        False: self.CROSS_SUPPLY_PASS_ROUND_NAME
+                    },
+                    "BRANCH": {
+                        True: self.CROSS_SUPPLY_BRANCH_RECT_NAME,
+                        False: self.CROSS_SUPPLY_BRANCH_ROUND_NAME
+                    }
+                },
+                False: {  # Exhaust
+                    "PASS": {
+                        True: self.CROSS_EXHAUST_PASS_RECT_NAME,
+                        False: self.CROSS_EXHAUST_PASS_ROUND_NAME
+                    },
+                    "BRANCH": {
+                        True: self.CROSS_EXHAUST_BRANCH_RECT_NAME,
+                        False: self.CROSS_EXHAUST_BRANCH_ROUND_NAME
+                    }
+                }
+            }
+
+            if duct_critical:
+                kind = "PASS"
+            elif branch_1_critical or branch_2_critical:
+                kind = "BRANCH"
+            else:
+                kind = "BRANCH" if (Lo_1 > Lp or Lo_2 > Lp) else "PASS"
+
+            result_name = name_map[self.system_is_supply][kind][is_rectangular]
 
             fc = self.get_area(duct)
             fp = fc
@@ -673,13 +443,16 @@ class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCal
 
             return result_name, Lc, Lp, Lo_result, fc, fp, fo_result
 
+        if element_1.Id not in self.tap_crosses_filtered and element_2.Id not in self.tap_crosses_filtered:
+            self.tap_crosses_filtered.append(element_2.Id)
+
         connector_data_instances_1 = self.get_connector_data_instances(element_1)
         connector_data_instances_2 = self.get_connector_data_instances(element_2)
         connector_data_instances_duct = self.get_connector_data_instances(duct)
 
         tap_cross_name, Lc, Lp, Lo, fc, fp, fo = get_tap_cross_variables()
 
-        self.tee_params[element_1.Id] = CalculatorClassLib.TapTeeCharacteristic(Lo, Lc, Lp, fo, fc, fp, tap_cross_name)
+        self.tee_params[element_1.Id] = CalculatorClassLib.MulticonElementCharacteristic(Lo, Lc, Lp, fo, fc, fp, tap_cross_name)
         self.remember_element_name(element_1, tap_cross_name, [connector_data_instances_1[0],
                                                              connector_data_instances_2[0],
                                                              connector_data_instances_duct[0],
@@ -688,38 +461,6 @@ class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCal
         return self.__calculate_coefficient(tap_cross_name, Lo, Lp, Lc, fp, fo, fc)
 
     def get_cross_coefficient(self, element):
-        def get_angle_between_connectors(connector_1, connector_2):
-
-            # Получаем координаты центров соединений
-            input_origin = connector_1.connector_element.Origin
-            output_origin = connector_2.connector_element.Origin
-
-
-            # Получаем координату точки вставки тройника
-            location = element.Location.Point
-
-            # Создаем векторы направлений от точки вставки тройника
-            vec_input_location = input_origin - location
-            vec_output_location = output_origin - location
-
-
-            # Функция вычисления угла между векторами
-            def calculate_angle(vec1, vec2):
-                dot_product = vec1.DotProduct(vec2)
-                norm1 = vec1.GetLength()
-                norm2 = vec2.GetLength()
-
-                cosine = dot_product / (norm1 * norm2)
-                # Защита от выхода за границы из-за округления
-                cosine = max(-1.0, min(1.0, cosine))
-
-                return math.degrees(math.acos(cosine))
-
-            # Вычисляем углы
-            input_output_angle = calculate_angle(vec_input_location, vec_output_location)
-
-            return input_output_angle
-
         def get_cross_variables():
             body_connector = max(connector_data_instances, key=lambda c: c.flow)
 
@@ -727,7 +468,7 @@ class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCal
 
             pass_connector = next(
                 (connector for connector in other_connectors
-                 if abs(get_angle_between_connectors(body_connector, connector) - 180) <= 5),
+                 if abs(self.__get_angle_between_connectors(element, body_connector, connector) - 180) <= 5),
                 None
             )
             # Определяем branch_connector как оставшийся коннектор
@@ -808,6 +549,192 @@ class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCal
 
         cross_name, Lc, Lp, Lo, fc, fp, fo = get_cross_variables()
 
-        self.tee_params[element.Id] = CalculatorClassLib.TapTeeCharacteristic(Lo, Lc, Lp, fo, fc, fp, cross_name)
+        self.tee_params[element.Id] = CalculatorClassLib.MulticonElementCharacteristic(Lo, Lc, Lp, fo, fc, fp, cross_name)
         self.remember_element_name(element, cross_name, connector_data_instances)
         return self.__calculate_coefficient(cross_name, Lo, Lp, Lc, fp, fo, fc)
+
+    def get_test_tee_coefficient(self, element):
+        def get_tee_variables():
+            has_zero_flow = any(c.flow == 0 for c in connector_data_instances)
+
+            if has_zero_flow:
+                forms.alert(
+                    "У одного из тройников есть нулевые расходы на разветвлении. Если вы используете тройник как отвод "
+                    "- перечертите используя врезки или отвод. ID элемента - " + str(element.Id),
+                    "Ошибка",
+                    exitscript=True)
+
+            body_connector = max(connector_data_instances, key=lambda c: c.flow)
+
+            other_connectors = [c for c in connector_data_instances if c != body_connector]
+
+            pass_connector = next(
+                (connector for connector in other_connectors
+                 if abs(self.__get_angle_between_connectors(element, body_connector, connector) - 180) <= 5),
+                None
+            )
+
+            tee_name = None
+
+            if self.system_is_supply and pass_connector is None:
+                tee_name = self.TEE_SUPPLY_SEPARATION_NAME
+            if not self.system_is_supply and pass_connector is None:
+                tee_name = self.TEE_EXHAUST_MERGER_NAME
+
+            if element.Id.IntegerValue == 20739327:
+                print(pass_connector)
+                print('Угол между стволом и проходом ' + str(abs(self.__get_angle_between_connectors(element, body_connector, pass_connector) - 180)))
+                print('Найдено имя '+ str(tee_name))
+
+            if pass_connector == None: # проход не нашелся, значит у нас разделение или слияние
+                branch_connector = max(connector_data_instances, key=lambda c: c.flow)
+                pass_connector = [c for c in other_connectors if c != branch_connector][0]
+            else:
+                branch_connector = [c for c in other_connectors if c != pass_connector][0]
+
+            input_connector, output_connector = self.find_input_output_connector(element)
+
+            Lc = body_connector.flow
+            fc = body_connector.area
+            Lp = pass_connector.flow
+            fp = pass_connector.area
+            Lo = branch_connector.flow
+            fo = branch_connector.area
+
+            if tee_name is None:
+                if self.system_is_supply:
+                    if pass_connector.connector_element.Id == output_connector.connector_element.Id:
+                        tee_name = self.TEE_SUPPLY_PASS_NAME
+
+                    if branch_connector.connector_element.Id == output_connector.connector_element.Id:
+                        if self.is_rectangular(input_connector):
+                            tee_name = self.TEE_EXHAUST_BRANCH_RECT_NAME
+                        else:
+                            tee_name = self.TEE_EXHAUST_BRANCH_ROUND_NAME
+                else:
+                    if pass_connector.connector_element.Id == input_connector.connector_element.Id:
+                        if self.is_rectangular(input_connector):
+                            tee_name = self.TEE_EXHAUST_PASS_RECT_NAME
+                        else:
+                            tee_name = self.TEE_EXHAUST_PASS_ROUND_NAME
+
+                    if branch_connector.connector_element.Id == input_connector.connector_element.Id:
+                        if self.is_rectangular(input_connector):
+                            tee_name = self.TEE_EXHAUST_BRANCH_RECT_NAME
+                        else:
+                            tee_name = self.TEE_EXHAUST_BRANCH_ROUND_NAME
+
+            if element.Id.IntegerValue == 20579411:
+                print('Найдено имя '+ str(tee_name))
+
+            return tee_name, Lc, Lp, Lo, fc, fp, fo
+
+        connector_data_instances = self.get_connector_data_instances(element)
+
+        tee_name, Lc, Lp, Lo, fc, fp, fo = get_tee_variables()
+        print(element.Id)
+        print(tee_name)
+
+        self.tee_params[element.Id] = CalculatorClassLib.MulticonElementCharacteristic(Lo, Lc, Lp, fo, fc, fp, tee_name)
+
+        self.remember_element_name(element, tee_name, connector_data_instances)
+
+        return self.__calculate_coefficient(tee_name, Lo, Lp, Lc, fp, fo, fc)
+
+    def get_test_tap_tee_coefficient(self, element):
+        def get_tap_cross_variables():
+            input_connector_1, output_connector_1 = self.find_input_output_connector(element)
+
+            input_element = input_connector_1.connected_element
+            output_element = output_connector_1.connected_element
+
+            if self.system.SystemType != DuctSystemType.SupplyAir:
+                duct = output_element
+                branch_duct = input_element
+
+            else:
+                duct = input_element
+                branch_duct = output_element
+
+
+            duct_connectors = self.get_connectors(duct)
+            Lo = max(self.get_element_sections_flows(branch_duct))
+
+
+            flows_1 = self.get_element_sections_flows(element)
+            all_flows = flows_1
+            excluded = [Lo]
+
+            # Оставим только значения, которые не равны Lo_1 или Lo_2
+            filtered_flows = [f for f in all_flows if f not in excluded]
+
+            Lc = max(filtered_flows) if filtered_flows else None
+            Lp = min(filtered_flows) if filtered_flows else None
+
+            duct_critical = False
+            branch_critical = False
+
+            for number in self.critical_path_numbers:
+                section = self.system.GetSectionByNumber(number)
+                elements_ids = section.GetElementIds()
+                if duct.Id in elements_ids:
+                    duct_critical = True
+                    break
+                if branch_duct.Id in elements_ids:
+                    branch_critical = True
+                    break
+
+            is_rectangular = self.is_rectangular(duct_connectors[0])
+
+            name_map = {
+                True: {  # Supply
+                    "PASS": {
+                        True: self.TEE_SUPPLY_PASS_NAME,
+                        False: self.TEE_SUPPLY_PASS_NAME
+                    },
+                    "BRANCH": {
+                        True: self.TEE_SUPPLY_BRANCH_RECT_NAME,
+                        False: self.TEE_SUPPLY_BRANCH_ROUND_NAME
+                    }
+                },
+                False: {  # Exhaust
+                    "PASS": {
+                        True: self.TEE_EXHAUST_PASS_RECT_NAME,
+                        False: self.TEE_EXHAUST_PASS_ROUND_NAME
+                    },
+                    "BRANCH": {
+                        True: self.TEE_EXHAUST_BRANCH_RECT_NAME,
+                        False: self.TEE_EXHAUST_BRANCH_ROUND_NAME
+                    }
+                }
+            }
+
+            if duct_critical:
+                kind = "PASS"
+            elif branch_critical:
+                kind = "BRANCH"
+            else:
+                kind = "BRANCH" if (Lo > Lp) else "PASS"
+
+            result_name = name_map[self.system_is_supply][kind][is_rectangular]
+
+            fc = self.get_area(duct)
+            fp = fc
+            fo = self.get_area(input_connector_1)
+
+            return result_name, Lc, Lp, Lo, fc, fp, fo, duct
+
+        connector_data_instances = self.get_connector_data_instances(element)
+
+        tap_tee_name, Lc, Lp, Lo, fc, fp, fo, duct = get_tap_cross_variables()
+
+        connector_data_instances_duct = self.get_connector_data_instances(duct)
+
+        self.tee_params[element.Id] = CalculatorClassLib.MulticonElementCharacteristic(Lo, Lc, Lp, fo, fc, fp,
+                                                                                         tap_tee_name)
+
+        self.remember_element_name(element, tap_tee_name, [connector_data_instances[0],
+                                                               connector_data_instances_duct[0],
+                                                               connector_data_instances_duct[0]])
+
+        return self.__calculate_coefficient(tap_tee_name, Lo, Lp, Lc, fp, fo, fc)

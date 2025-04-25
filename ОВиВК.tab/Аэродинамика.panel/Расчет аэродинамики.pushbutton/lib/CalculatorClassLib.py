@@ -116,7 +116,7 @@ class TeeVariables:
         self.output_connector_data = output_connector_data
         self.branch_connector_data = branch_connector_data
 
-class TapTeeCharacteristic:
+class MulticonElementCharacteristic:
     """Класс для хранения характеристик тройника с отводом."""
 
     def __init__(self, Lo, Lc, Lp, fo, fc, fp, name):

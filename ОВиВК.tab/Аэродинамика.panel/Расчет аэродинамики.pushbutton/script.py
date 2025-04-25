@@ -263,7 +263,7 @@ def get_fittings_and_accessory(system_elements):
             elements.append(element)
     return elements
 
-def get_local_coefficient(fitting, system):
+def calculate_local_coefficient(fitting, system):
     """
     Получает локальный коэффициент для фитинга.
 
@@ -274,28 +274,36 @@ def get_local_coefficient(fitting, system):
     Returns:
         float: Локальный коэффициент.
     """
+
     part_type = fitting.MEPModel.PartType
     if part_type == fitting.MEPModel.PartType.Elbow:
         local_section_coefficient = transition_elbow_calculator.get_elbow_coefficient(fitting)
     elif part_type == fitting.MEPModel.PartType.Transition:
         local_section_coefficient = transition_elbow_calculator.get_transition_coefficient(fitting)
     elif part_type == fitting.MEPModel.PartType.Tee:
-        local_section_coefficient = cross_tee_calculator.get_tee_coefficient(fitting)
+        local_section_coefficient = cross_tee_calculator.get_test_tee_coefficient(fitting)
     elif part_type == fitting.MEPModel.PartType.TapAdjustable:
-        is_cross = cross_tee_calculator.is_tap_cross(fitting)
+        has_partner = cross_tee_calculator.get_tap_partner_if_exists(fitting)
 
-        if is_cross:
-            fitting_2, duct_element = is_cross
-            local_section_coefficient = cross_tee_calculator.get_tap_cross_coefficient(fitting, fitting_2, duct_element)
+        if has_partner:
+            fitting_2, duct_element = has_partner
+
+            if transition_elbow_calculator.is_tap_elbow(fitting) or transition_elbow_calculator.is_tap_elbow(fitting_2):
+                local_section_coefficient = cross_tee_calculator.get_double_tap_tee_coefficient(fitting, fitting_2,
+                                                                                           duct_element)
+            else:
+                local_section_coefficient = cross_tee_calculator.get_tap_cross_coefficient(fitting, fitting_2,
+                                                                                           duct_element)
         elif transition_elbow_calculator.is_tap_elbow(fitting):
             local_section_coefficient = transition_elbow_calculator.get_elbow_coefficient(fitting)
         else:
-            local_section_coefficient = cross_tee_calculator.get_tee_coefficient(fitting)
+            local_section_coefficient = cross_tee_calculator.get_test_tap_tee_coefficient(fitting)
     elif part_type == fitting.MEPModel.PartType.Cross:
         local_section_coefficient = cross_tee_calculator.get_cross_coefficient(fitting)
     else:
         local_section_coefficient = 0
     fitting_coefficient_cash[fitting.Id.IntegerValue] = local_section_coefficient
+
     return local_section_coefficient
 
 def get_network_element_name(element):
@@ -454,35 +462,6 @@ def get_network_element_pressure_drop(section, element, density, velocity, coeff
         return calculate_pressure_drop()
     return 0
 
-def show_network_report(data, selected_system, output, density):
-    """
-    Отображает отчет о расчете аэродинамики системы.
-
-    Args:
-        data (list): Данные для отчета.
-        selected_system (SelectedSystem): Выбранная система.
-        output (Output): Объект для вывода отчета.
-        density (float): Плотность воздушной среды.
-    """
-    print('Плотность воздушной среды: ' + str(density) + ' кг/м3')
-    output.print_table(
-        table_data=data,
-        title=("Отчет о расчете аэродинамики системы " + selected_system.name),
-        columns=[
-            "Номер участка",
-            "Наименование элемента",
-            "Длина, м.п.",
-            "Размер, м2",
-            "Расход, м3/ч",
-            "Скорость, м/с",
-            "КМС",
-            "Потери напора элемента, Па",
-            "Суммарные потери напора, Па",
-            "Id элемента"
-        ],
-        formats=['', '', '']
-    )
-
 def get_network_element_flow(section, element):
     """
     Получает расход воздуха для элемента сети.
@@ -527,6 +506,35 @@ def get_network_element_velocity(element, flow, real_size):
         float: Скорость воздуха в метрах в секунду.
     """
     return (float(flow) * 1000000) / (3600 * real_size * 1000000)
+
+def show_network_report(data, selected_system, output, density):
+    """
+    Отображает отчет о расчете аэродинамики системы.
+
+    Args:
+        data (list): Данные для отчета.
+        selected_system (SelectedSystem): Выбранная система.
+        output (Output): Объект для вывода отчета.
+        density (float): Плотность воздушной среды.
+    """
+    print('Плотность воздушной среды: ' + str(density) + ' кг/м3')
+    output.print_table(
+        table_data=data,
+        title=("Отчет о расчете аэродинамики системы " + selected_system.name),
+        columns=[
+            "Номер участка",
+            "Наименование элемента",
+            "Длина, м.п.",
+            "Размер, м2",
+            "Расход, м3/ч",
+            "Скорость, м/с",
+            "КМС",
+            "Потери напора элемента, Па",
+            "Суммарные потери напора, Па",
+            "Id элемента"
+        ],
+        formats=['', '', '']
+    )
 
 def round_floats(value):
     """
@@ -641,6 +649,25 @@ def optimise_data_to_demonstration(data):
                 data.remove(row)
 
     data.insert(0, ['Участок №1'])
+
+    last_summ_loss = 0.0
+    for row in reversed(data):
+        if isinstance(row, list) and len(row) > 8:
+            try:
+                last_summ_loss = float(row[8])
+                break
+            except ValueError:
+                continue
+
+    # Создаём строку "Итого"
+    total_row = [""]+["Итого, Па"] + [""] * 6 + [str(round(last_summ_loss, 2))] + [""]
+
+    # Создаём строку "Итого + 15%"
+    total_row_15 = [""]+ ["Итого, Па + 15%"] + [""] * 6 + [str(round(last_summ_loss * 1.15, 2))] + [""]
+
+    data.append(total_row)
+    data.append(total_row_15)
+
     return data
 
 def prepare_section_elements(section):
@@ -750,6 +777,14 @@ def process_method_setup(selected_system):
             "Ошибка",
             exitscript=True
         )
+
+    network_elements = get_fittings_and_accessory(selected_system.elements)
+    editor_report.show_report()
+    specific_coefficient_method = get_loss_methods()
+    with revit.Transaction("BIM: Установка метода расчета"):
+        for element in network_elements:
+            set_calculation_method(element, specific_coefficient_method)
+
     system = doc.GetElement(selected_system.system.Id)
     calc_lib.get_critical_path(system)
     cross_tee_calculator.get_critical_path(system)
@@ -760,16 +795,12 @@ def process_method_setup(selected_system):
             "Ошибка",
             exitscript=True
         )
-    network_elements = get_fittings_and_accessory(selected_system.elements)
-    editor_report.show_report()
-    specific_coefficient_method = get_loss_methods()
-    with revit.Transaction("BIM: Установка метода расчета"):
-        for element in network_elements:
-            set_calculation_method(element, specific_coefficient_method)
+
+
     fittings_coefficients = {}
     for element in network_elements:
         if element.Category.IsId(BuiltInCategory.OST_DuctFitting):
-            fittings_coefficients[element.Id] = get_local_coefficient(element, system)
+            fittings_coefficients[element.Id] = calculate_local_coefficient(element, system)
     with revit.Transaction("BIM: Пересчет потерь напора"):
         for element in network_elements:
             set_coefficient_value(element, specific_coefficient_method, fittings_coefficients)
@@ -804,6 +835,7 @@ def script_execute(plugin_logger):
     density = UnitUtils.ConvertFromInternalUnits(settings.AirDensity, UnitTypeId.KilogramsPerCubicMeter)
     raw_data = form_data_list(system, density, output)
     data = optimise_data_to_demonstration(raw_data)
+
     show_network_report(data, selected_system, output, density)
 
 script_execute()
