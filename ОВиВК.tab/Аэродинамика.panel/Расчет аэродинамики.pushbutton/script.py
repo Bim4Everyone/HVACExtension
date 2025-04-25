@@ -259,13 +259,14 @@ def get_fittings_and_accessory(system_elements):
     elements = []
     for element in system_elements:
         editor_report.is_element_edited(element)
-        if element.Category.IsId(BuiltInCategory.OST_DuctFitting) or element.Category.IsId(BuiltInCategory.OST_DuctAccessory):
+        if (element.Category.IsId(BuiltInCategory.OST_DuctFitting)
+                or element.Category.IsId(BuiltInCategory.OST_DuctAccessory)):
             elements.append(element)
     return elements
 
-def calculate_local_coefficient(fitting, system):
+def calculate_local_coefficient(fitting):
     """
-    Получает локальный коэффициент для фитинга.
+    Высчитывает локальный коэффициент для фитинга.
 
     Args:
         fitting (Element): Фитинг для получения коэффициента.
@@ -316,6 +317,7 @@ def get_network_element_name(element):
     Returns:
         str: Название элемента.
     """
+
     def get_name_addon():
         mark = element.GetParamValueOrDefault("ADSK_Марка") \
                or element_type.GetParamValueOrDefault("ADSK_Марка", "")
@@ -546,41 +548,7 @@ def show_network_report(data, selected_system, output, density):
         formats=['', '', '']
     )
 
-def round_floats(value):
-    """
-    Округляет числа с плавающей запятой до трех знаков после запятой.
-
-    Args:
-        value (float): Число для округления.
-
-    Returns:
-        float: Округленное число.
-    """
-    if isinstance(value, float):
-        return round(value, 3)
-    return value
-
-def sort_key(element):
-    """
-    Возвращает ключ сортировки для элемента.
-
-    Args:
-        element (Element): Элемент для сортировки.
-
-    Returns:
-        int: Ключ сортировки.
-    """
-    if element.Category.IsId(BuiltInCategory.OST_DuctTerminal):
-        return 0
-    if element.Category.IsId(BuiltInCategory.OST_FlexDuctCurves):
-        return 1
-    if element.Category.IsId(BuiltInCategory.OST_DuctCurves):
-        return 2
-    if element.Category.IsId(BuiltInCategory.OST_DuctFitting):
-        return 3
-    return 4
-
-def optimise_data_to_demonstration(data):
+def prepare_data_to_demonstration(data):
     """
     Оптимизирует данные для демонстрации.
 
@@ -682,7 +650,7 @@ def optimise_data_to_demonstration(data):
 
 def prepare_section_elements(section):
     """
-    Подготавливает элементы секции системы.
+    Подготавливает элементы секции системы, сортируя их по категориям.
 
     Args:
         section (Section): Секция системы.
@@ -690,6 +658,27 @@ def prepare_section_elements(section):
     Returns:
         list: Список элементов секции.
     """
+
+    def sort_key(element):
+        """
+        Возвращает ключ сортировки для элемента.
+
+        Args:
+            element (Element): Элемент для сортировки.
+
+        Returns:
+            int: Ключ сортировки.
+        """
+        if element.Category.IsId(BuiltInCategory.OST_DuctTerminal):
+            return 0
+        if element.Category.IsId(BuiltInCategory.OST_FlexDuctCurves):
+            return 1
+        if element.Category.IsId(BuiltInCategory.OST_DuctCurves):
+            return 2
+        if element.Category.IsId(BuiltInCategory.OST_DuctFitting):
+            return 3
+        return 4
+
     elements_ids = section.GetElementIds()
     segment_elements = []
     for element_id in elements_ids:
@@ -702,7 +691,7 @@ def prepare_section_elements(section):
     segment_elements.sort(key=sort_key)
     return segment_elements
 
-def form_data_list(system, density, output):
+def form_raw_data_list(system, density, output):
     """
     Формирует список данных для отчета.
 
@@ -714,6 +703,12 @@ def form_data_list(system, density, output):
     Returns:
         list: Список данных для отчета.
     """
+
+    def round_floats(float_value):
+        if isinstance(float_value, float):
+            return round(float_value, 3)
+        return float_value
+
     def get_data_by_element():
         element_type = element.GetElementType()
         length = get_network_element_length(section, element.Id)
@@ -757,6 +752,8 @@ def form_data_list(system, density, output):
 def pass_data_filter(element, section):
     """
     Проверяет, проходит ли элемент фильтр данных.
+    Он не должен быть соединением или заглушкой, не должен быть врезкой-партнером и
+    посекционного воздуховода должен быть расход не 0.
 
     Args:
         element (Element): Элемент для проверки.
@@ -765,7 +762,9 @@ def pass_data_filter(element, section):
     Returns:
         bool: True, если элемент проходит фильтр, иначе False.
     """
-    if element.Category.IsId(BuiltInCategory.OST_DuctFitting) and element.MEPModel.PartType in [element.MEPModel.PartType.Cap, element.MEPModel.PartType.Union]:
+    if (element.Category.IsId(BuiltInCategory.OST_DuctFitting) and
+            element.MEPModel.PartType in [element.MEPModel.PartType.Cap,
+                                          element.MEPModel.PartType.Union]):
         return False
     if element.Category.IsId(BuiltInCategory.OST_DuctCurves) and get_network_element_flow(section, element) == 0:
         return False
@@ -799,6 +798,7 @@ def process_method_setup(selected_system):
     calc_lib.get_critical_path(system)
     cross_tee_calculator.get_critical_path(system)
     transition_elbow_calculator.get_critical_path(system)
+
     if len(calc_lib.critical_path_numbers) == 0:
         forms.alert(
             "Не найден диктующий путь, проверьте расчетность системы.",
@@ -806,11 +806,10 @@ def process_method_setup(selected_system):
             exitscript=True
         )
 
-
     fittings_coefficients = {}
     for element in network_elements:
         if element.Category.IsId(BuiltInCategory.OST_DuctFitting):
-            fittings_coefficients[element.Id] = calculate_local_coefficient(element, system)
+            fittings_coefficients[element.Id] = calculate_local_coefficient(element)
     with revit.Transaction("BIM: Пересчет потерь напора"):
         for element in network_elements:
             set_coefficient_value(element, specific_coefficient_method, fittings_coefficients)
@@ -843,8 +842,8 @@ def script_execute(plugin_logger):
     output = script.get_output()
     settings = DuctSettings.GetDuctSettings(doc)
     density = UnitUtils.ConvertFromInternalUnits(settings.AirDensity, UnitTypeId.KilogramsPerCubicMeter)
-    raw_data = form_data_list(system, density, output)
-    data = optimise_data_to_demonstration(raw_data)
+    raw_data = form_raw_data_list(system, density, output)
+    data = prepare_data_to_demonstration(raw_data)
 
     show_network_report(data, selected_system, output, density)
 
