@@ -44,16 +44,7 @@ class TransitionElbowCoefficientCalculator(CalculatorClassLib.AerodinamicCoeffic
         Returns:
             float: КМС.
         """
-        def get_transition_variables(element):
-            """
-            Получает переменные для расчета коэффициента перехода.
-
-            Args:
-                element (Element): Элемент.
-
-            Returns:
-                tuple: Кортеж (входной коннектор, выходной коннектор, длина, угол).
-            """
+        def get_transition_variables():
             input_conn, output_conn = self.find_input_output_connector(element)
             input_origin = input_conn.connector_element.Origin
             output_origin = output_conn.connector_element.Origin
@@ -69,7 +60,7 @@ class TransitionElbowCoefficientCalculator(CalculatorClassLib.AerodinamicCoeffic
 
             return input_conn, output_conn, length, angle_deg
 
-        input_conn, output_conn, length, angle = get_transition_variables(element)
+        input_conn, output_conn, length, angle = get_transition_variables()
 
         base_name = 'Заужение' if input_conn.area > output_conn.area else 'Расширение'
         self.remember_element_name(element, base_name, [input_conn, output_conn])
@@ -142,13 +133,7 @@ class TransitionElbowCoefficientCalculator(CalculatorClassLib.AerodinamicCoeffic
             main_element = input_element if self.system.SystemType == DuctSystemType.SupplyAir else output_element
 
             f = input_connector.area
-            try:
-                diameter = UnitUtils.ConvertFromInternalUnits(main_element.Diameter, UnitTypeId.Meters)
-                F = math.pi * (diameter / 2) ** 2
-            except:
-                height = UnitUtils.ConvertFromInternalUnits(main_element.Height, UnitTypeId.Meters)
-                width = UnitUtils.ConvertFromInternalUnits(main_element.Width, UnitTypeId.Meters)
-                F = (height * width)
+            F = self.get_element_area(main_element)
 
             if f != F:
                 coefficient = ((f / F) ** 2 + 0.7 * (f / F) ** 2) if output_element == main_element else (
@@ -195,30 +180,8 @@ class TransitionElbowCoefficientCalculator(CalculatorClassLib.AerodinamicCoeffic
         Returns:
             bool: True, если элемент является отводом, иначе False.
         """
-        def get_zero_flow_section(element, section_indexes):
-            """
-            Получает секцию с нулевым расходом для элемента.
 
-            Args:
-                element (Element): Элемент.
-                section_indexes (list): Индексы секций.
-
-            Returns:
-                int: Номер секции с нулевым расходом или None.
-            """
-            for section_index in section_indexes:
-                section = self.system.GetSectionByIndex(section_index)
-
-                if section.Flow == 0:
-                    section_elements = section.GetElementIds()
-
-                    if element.Id in section_elements:
-                        return section_index  # Возвращаем найденный номер секции
-            return None
-
-        elbow_section_zero_flow = get_zero_flow_section(element, self.section_indexes)
-
-        if elbow_section_zero_flow is None:
-            return False
-
-        return True
+        flows = self.get_element_sections_flows(element)
+        if 0 in flows:
+            return True
+        return False

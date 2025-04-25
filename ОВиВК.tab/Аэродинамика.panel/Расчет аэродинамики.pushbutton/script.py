@@ -281,7 +281,7 @@ def calculate_local_coefficient(fitting, system):
     elif part_type == fitting.MEPModel.PartType.Transition:
         local_section_coefficient = transition_elbow_calculator.get_transition_coefficient(fitting)
     elif part_type == fitting.MEPModel.PartType.Tee:
-        local_section_coefficient = cross_tee_calculator.get_test_tee_coefficient(fitting)
+        local_section_coefficient = cross_tee_calculator.get_tee_coefficient(fitting)
     elif part_type == fitting.MEPModel.PartType.TapAdjustable:
         has_partner = cross_tee_calculator.get_tap_partner_if_exists(fitting)
 
@@ -297,7 +297,7 @@ def calculate_local_coefficient(fitting, system):
         elif transition_elbow_calculator.is_tap_elbow(fitting):
             local_section_coefficient = transition_elbow_calculator.get_elbow_coefficient(fitting)
         else:
-            local_section_coefficient = cross_tee_calculator.get_test_tap_tee_coefficient(fitting)
+            local_section_coefficient = cross_tee_calculator.get_tap_tee_coefficient(fitting)
     elif part_type == fitting.MEPModel.PartType.Cross:
         local_section_coefficient = cross_tee_calculator.get_cross_coefficient(fitting)
     else:
@@ -316,7 +316,6 @@ def get_network_element_name(element):
     Returns:
         str: Название элемента.
     """
-
     def get_name_addon():
         mark = element.GetParamValueOrDefault("ADSK_Марка") \
                or element_type.GetParamValueOrDefault("ADSK_Марка", "")
@@ -436,7 +435,7 @@ def get_network_element_real_size(element, element_type):
     if not size:
         size = element_type.GetParamValueOrDefault(cross_section_param)
     if not size:
-        size = calc_lib.get_area(element)
+        size = calc_lib.get_element_area(element)
 
     return size
 

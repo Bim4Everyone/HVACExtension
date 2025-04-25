@@ -302,10 +302,10 @@ class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCal
             else:
                 result_name = self.TEE_EXHAUST_MERGER_NAME
 
-            fc = self.get_area(duct)
+            fc = self.get_element_area(duct)
             fp = fc
-            fo_1 = self.get_area(input_connector_1)
-            fo_2 = self.get_area(input_connector_2)
+            fo_1 = self.get_element_area(input_connector_1)
+            fo_2 = self.get_element_area(input_connector_2)
 
             if branch_1_critical or (not branch_2_critical and Lo_1 > Lo_2):
                 fo_result = fo_1
@@ -428,10 +428,10 @@ class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCal
 
             result_name = name_map[self.system_is_supply][kind][is_rectangular]
 
-            fc = self.get_area(duct)
+            fc = self.get_element_area(duct)
             fp = fc
-            fo_1 = self.get_area(input_connector_1)
-            fo_2 = self.get_area(input_connector_2)
+            fo_1 = self.get_element_area(input_connector_1)
+            fo_2 = self.get_element_area(input_connector_2)
 
             if branch_1_critical or (not branch_2_critical and Lo_1 > Lo_2):
                 fo_result = fo_1
@@ -553,7 +553,7 @@ class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCal
         self.remember_element_name(element, cross_name, connector_data_instances)
         return self.__calculate_coefficient(cross_name, Lo, Lp, Lc, fp, fo, fc)
 
-    def get_test_tee_coefficient(self, element):
+    def get_tee_coefficient(self, element):
         def get_tee_variables():
             body_connector = branch_connector = pass_connector = None
             other_connectors = None
@@ -633,7 +633,7 @@ class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCal
 
         return self.__calculate_coefficient(tee_name, Lo, Lp, Lc, fp, fo, fc)
 
-    def get_test_tap_tee_coefficient(self, element):
+    def get_tap_tee_coefficient(self, element):
         def get_tap_cross_variables():
             input_connector_1, output_connector_1 = self.find_input_output_connector(element)
 
@@ -710,9 +710,9 @@ class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCal
 
             result_name = name_map[self.system_is_supply][kind][is_rectangular]
 
-            fc = self.get_area(duct)
+            fc = self.get_element_area(duct)
             fp = fc
-            fo = self.get_area(input_connector_1)
+            fo = self.get_element_area(input_connector_1)
 
             return result_name, Lc, Lp, Lo, fc, fp, fo, duct
 

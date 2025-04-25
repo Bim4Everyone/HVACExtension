@@ -169,6 +169,32 @@ class AerodinamicCoefficientCalculator(object):
         self.uidoc = uidoc
         self.view = view
 
+    def __get_all_sections_in_system(self):
+        """
+        Возвращает список всех секций, к которым относятся элементы системы MEP.
+
+        Returns:
+            list: Список индексов секций.
+        """
+        # Получаем все элементы системы
+        elements = self.system.DuctNetwork
+
+        # Множество для хранения уникальных номеров секций
+        found_section_indexes = set()
+
+        # Пробуем пройтись по диапазону номеров секций
+        max_possible_sections = 500  # можно увеличить при необходимости
+        for number in range(0, max_possible_sections):
+            try:
+                section = self.system.GetSectionByIndex(number)
+            except:
+                section = None  # Это делается для
+            if section is None:
+                continue
+            found_section_indexes.add(number)
+
+        return sorted(found_section_indexes)
+
     def get_critical_path(self, system):
         """
         Получает критический путь системы.
@@ -186,7 +212,7 @@ class AerodinamicCoefficientCalculator(object):
         if self.system_is_supply:
             self.critical_path_numbers.reverse()
 
-        self.section_indexes = self.get_all_sections_in_system()
+        self.section_indexes = self.__get_all_sections_in_system()
 
     def is_rectangular(self, element):
         if isinstance(element, Connector):
@@ -197,7 +223,16 @@ class AerodinamicCoefficientCalculator(object):
             connectors = self.get_connectors(element)
             return connectors[0].Shape == ConnectorProfileType.Rectangular
 
-    def get_area(self, element):
+    def get_element_area(self, element):
+        """
+        Поиск площади любого элемента.
+
+        Args:
+            element: Элемент.
+
+        Returns:
+            float: Площадь в м2
+        """
         def get_connector_area(connector):
             area = None
             if connector.Shape == ConnectorProfileType.Oval:
@@ -236,35 +271,9 @@ class AerodinamicCoefficientCalculator(object):
             area = get_connector_area(hvac_connector)
             return area
 
-    def get_all_sections_in_system(self):
-        """
-        Возвращает список всех секций, к которым относятся элементы системы MEP.
-
-        Returns:
-            list: Список индексов секций.
-        """
-        # Получаем все элементы системы
-        elements = self.system.DuctNetwork
-
-        # Множество для хранения уникальных номеров секций
-        found_section_indexes = set()
-
-        # Пробуем пройтись по диапазону номеров секций
-        max_possible_sections = 500  # можно увеличить при необходимости
-        for number in range(0, max_possible_sections):
-            try:
-                section = self.system.GetSectionByIndex(number)
-            except:
-                section = None  # Это делается для
-            if section is None:
-                continue
-            found_section_indexes.add(number)
-
-        return sorted(found_section_indexes)
-
     def get_connectors(self, element):
         """
-        Получает коннекторы элемента.
+        Получает коннекторы элемента. Если элемент воздуховод получит только его коннекторы, врезки будут игнорироваться.
 
         Args:
             element (Element): Элемент.
@@ -432,6 +441,15 @@ class AerodinamicCoefficientCalculator(object):
         return input_connector, output_connector
 
     def get_element_sections_flows(self, element):
+        """
+        Получает расходы для всех секций элемента.
+
+        Args:
+            element (Element): Элемент.
+
+        Returns:
+            list: Список из всех расходов которые связаны с секциями элемента.
+        """
         flows = []
 
         for section_index in self.section_indexes:
@@ -444,27 +462,5 @@ class AerodinamicCoefficientCalculator(object):
 
         return flows
 
-    def get_section_flows_by_two_elements(self, element_1, element_2):
-        """
-        Получает расход в секции по двум элементам.
 
-        Args:
-            element_1 (Element): Первый элемент.
-            element_2 (Element): Второй элемент.
-
-        Returns:
-            list: Список расходов.
-        """
-
-        flows = []
-
-        for section_index in self.section_indexes:
-            section = self.system.GetSectionByIndex(section_index)
-            section_elements = section.GetElementIds()
-
-            if element_1.Id in section_elements and element_2.Id in section_elements:
-                flow = UnitUtils.ConvertFromInternalUnits(section.Flow, UnitTypeId.CubicMetersPerHour)
-                flows.append(flow)
-
-        return flows
 
