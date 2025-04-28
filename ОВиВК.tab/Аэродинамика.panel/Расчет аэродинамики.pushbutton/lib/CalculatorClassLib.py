@@ -369,7 +369,14 @@ class AerodinamicCoefficientCalculator(object):
         Returns:
             tuple: Кортеж (входной коннектор, выходной коннектор).
         """
+
+
+
         connector_data_instances = self.get_connector_data_instances(element)
+
+        # Для поиска входа-выхода нужны два коннектора, у решеток он один
+        if element.Category.IsId(BuiltInCategory.OST_DuctTerminal):
+            return connector_data_instances[0], connector_data_instances[0]
 
         input_connector = None  # Первый на пути следования воздуха коннектор
         output_connector = None  # Второй на пути следования воздуха коннектор
@@ -442,7 +449,7 @@ class AerodinamicCoefficientCalculator(object):
 
     def get_element_sections_flows(self, element):
         """
-        Получает расходы для всех секций элемента.
+        Получает расходы для всех секций элемента. Если элемент - воздухораспределитель, возвращает только его расход.
 
         Args:
             element (Element): Элемент.
@@ -450,7 +457,12 @@ class AerodinamicCoefficientCalculator(object):
         Returns:
             list: Список из всех расходов которые связаны с секциями элемента.
         """
+
         flows = []
+
+        if element.Category.IsId(BuiltInCategory.OST_DuctTerminal):
+            flow = element.GetParamValue(BuiltInParameter.RBS_DUCT_FLOW_PARAM)
+            return [flow]
 
         for section_index in self.section_indexes:
             section = self.system.GetSectionByIndex(section_index)

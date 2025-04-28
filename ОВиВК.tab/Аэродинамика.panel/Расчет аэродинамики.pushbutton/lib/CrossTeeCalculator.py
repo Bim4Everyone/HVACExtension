@@ -346,22 +346,22 @@ class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCal
             input_connector_1, output_connector_1 = self.find_input_output_connector(element_1)
             input_connector_2, output_connector_2 = self.find_input_output_connector(element_2)
 
-
             input_element_1 = input_connector_1.connected_element
             output_element_1 = output_connector_1.connected_element
-
             input_element_2 = input_connector_2.connected_element
             output_element_2 = output_connector_2.connected_element
 
+            is_supply_air = self.system.SystemType == DuctSystemType.SupplyAir
 
-            if self.system.SystemType != DuctSystemType.SupplyAir:
-                duct = output_element_1
-                branch_duct_1 = input_element_1
-                branch_duct_2 = input_element_2
-            else:
-                duct = input_element_1
-                branch_duct_1 = output_element_1
-                branch_duct_2 = output_element_2
+            duct = input_element_1 if is_supply_air else output_element_1
+
+            def get_branch_duct(element, input_element, output_element):
+                if element.Category.IsId(BuiltInCategory.OST_DuctTerminal):
+                    return element
+                return output_element if is_supply_air else input_element
+
+            branch_duct_1 = get_branch_duct(element_1, input_element_1, output_element_1)
+            branch_duct_2 = get_branch_duct(element_2, input_element_2, output_element_2)
 
             duct_connectors = self.get_connectors(duct)
             Lo_1 = max(self.get_element_sections_flows(branch_duct_1))
