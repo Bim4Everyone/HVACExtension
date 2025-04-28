@@ -259,51 +259,58 @@ def get_fittings_and_accessory(system_elements):
     elements = []
     for element in system_elements:
         editor_report.is_element_edited(element)
-        if (element.Category.IsId(BuiltInCategory.OST_DuctFitting)
-                or element.Category.IsId(BuiltInCategory.OST_DuctAccessory)):
+        if element.InAnyCategory([BuiltInCategory.OST_DuctFitting,
+                                  BuiltInCategory.OST_DuctAccessory,
+                                  BuiltInCategory.OST_DuctTerminal]):
             elements.append(element)
     return elements
 
-def calculate_local_coefficient(fitting):
+def calculate_local_coefficient(element):
     """
     Высчитывает локальный коэффициент для фитинга.
 
     Args:
-        fitting (Element): Фитинг для получения коэффициента.
+        element (Element): Фитинг для получения коэффициента.
         system (Element): Система, к которой принадлежит фитинг.
 
     Returns:
         float: Локальный коэффициент.
     """
 
-    part_type = fitting.MEPModel.PartType
-    if part_type == fitting.MEPModel.PartType.Elbow:
-        local_section_coefficient = transition_elbow_calculator.get_elbow_coefficient(fitting)
-    elif part_type == fitting.MEPModel.PartType.Transition:
-        local_section_coefficient = transition_elbow_calculator.get_transition_coefficient(fitting)
-    elif part_type == fitting.MEPModel.PartType.Tee:
-        local_section_coefficient = cross_tee_calculator.get_tee_coefficient(fitting)
-    elif part_type == fitting.MEPModel.PartType.TapAdjustable:
-        has_partner = cross_tee_calculator.get_tap_partner_if_exists(fitting)
+    if element.Category.IsId(BuiltInCategory.OST_DuctTerminal):
+        local_section_coefficient = cross_tee_calculator.get_side_hole_coefficient(element)
+        fitting_and_terminal_coefficient_cash[element.Id] = local_section_coefficient
+
+        return local_section_coefficient
+
+    part_type = element.MEPModel.PartType
+    if part_type == element.MEPModel.PartType.Elbow:
+        local_section_coefficient = transition_elbow_calculator.get_elbow_coefficient(element)
+    elif part_type == element.MEPModel.PartType.Transition:
+        local_section_coefficient = transition_elbow_calculator.get_transition_coefficient(element)
+    elif part_type == element.MEPModel.PartType.Tee:
+        local_section_coefficient = cross_tee_calculator.get_tee_coefficient(element)
+    elif part_type == element.MEPModel.PartType.TapAdjustable:
+        has_partner = cross_tee_calculator.get_tap_partner_if_exists(element)
 
         if has_partner:
             fitting_2, duct_element = has_partner
 
-            if transition_elbow_calculator.is_tap_elbow(fitting) or transition_elbow_calculator.is_tap_elbow(fitting_2):
-                local_section_coefficient = cross_tee_calculator.get_double_tap_tee_coefficient(fitting, fitting_2,
-                                                                                           duct_element)
+            if transition_elbow_calculator.is_tap_elbow(element) or transition_elbow_calculator.is_tap_elbow(fitting_2):
+                local_section_coefficient = cross_tee_calculator.get_double_tap_tee_coefficient(element, fitting_2,
+                                                                                                duct_element)
             else:
-                local_section_coefficient = cross_tee_calculator.get_tap_cross_coefficient(fitting, fitting_2,
+                local_section_coefficient = cross_tee_calculator.get_tap_cross_coefficient(element, fitting_2,
                                                                                            duct_element)
-        elif transition_elbow_calculator.is_tap_elbow(fitting):
-            local_section_coefficient = transition_elbow_calculator.get_elbow_coefficient(fitting)
+        elif transition_elbow_calculator.is_tap_elbow(element):
+            local_section_coefficient = transition_elbow_calculator.get_elbow_coefficient(element)
         else:
-            local_section_coefficient = cross_tee_calculator.get_tap_tee_coefficient(fitting)
-    elif part_type == fitting.MEPModel.PartType.Cross:
-        local_section_coefficient = cross_tee_calculator.get_cross_coefficient(fitting)
+            local_section_coefficient = cross_tee_calculator.get_tap_tee_coefficient(element)
+    elif part_type == element.MEPModel.PartType.Cross:
+        local_section_coefficient = cross_tee_calculator.get_cross_coefficient(element)
     else:
         local_section_coefficient = 0
-    fitting_coefficient_cash[fitting.Id.IntegerValue] = local_section_coefficient
+    fitting_and_terminal_coefficient_cash[element.Id] = local_section_coefficient
 
     return local_section_coefficient
 
@@ -319,6 +326,9 @@ def get_network_element_name(element):
     """
 
     def get_name_addon():
+        if element.Category.IsId(BuiltInCategory.OST_DuctFitting):
+            return ""
+
         mark = element.GetParamValueOrDefault("ADSK_Марка") \
                or element_type.GetParamValueOrDefault("ADSK_Марка", "")
         short_name = element.GetParamValueOrDefault("ADSK_Наименование краткое") \
@@ -330,19 +340,20 @@ def get_network_element_name(element):
     element_name = transition_elbow_calculator.element_names.get(element.Id)
     name_addon = get_name_addon()
     if element_name is None:
-        element_name = cross_tee_calculator.element_names.get(element.Id)
-    if name_addon == "":
 
+        element_name = cross_tee_calculator.element_names.get(element.Id)
+
+    if name_addon == "":
         name_addon = element_type.GetParamValueOrDefault("ADSK_Марка", "")
 
     if element_name is not None:
-        return element_name
+        return element_name + name_addon
     if element.Category.IsId(BuiltInCategory.OST_DuctCurves):
         return 'Воздуховод'
     if element.Category.IsId(BuiltInCategory.OST_FlexDuctCurves):
         return 'Гибкий воздуховод'
     if element.Category.IsId(BuiltInCategory.OST_DuctTerminal):
-        return 'Воздухораспределитель ' + name_addon
+        return 'Воздухораспределитель' + name_addon
     if element.Category.IsId(BuiltInCategory.OST_MechanicalEquipment):
         return 'Оборудование ' + name_addon
     if element.Category.IsId(BuiltInCategory.OST_DuctAccessory):
@@ -390,17 +401,22 @@ def get_network_element_coefficient(section, element):
         str: Коэффициент элемента.
     """
     coefficient = element.GetParamValueOrDefault(coefficient_param)
+
     if element.Category.IsId(BuiltInCategory.OST_DuctCurves):
         return '-'
     if coefficient is None and element.InAnyCategory([
         BuiltInCategory.OST_DuctAccessory,
-        BuiltInCategory.OST_MechanicalEquipment,
-        BuiltInCategory.OST_DuctTerminal]):
+        BuiltInCategory.OST_MechanicalEquipment]):
         return '0'
+
     if coefficient is None:
         coefficient = section.GetCoefficient(element.Id)
-    if element.Category.IsId(BuiltInCategory.OST_DuctFitting):
-        coefficient = fitting_coefficient_cash[element.Id.IntegerValue]
+
+    if (coefficient is None or coefficient == 0) and element.InAnyCategory([
+        BuiltInCategory.OST_DuctFitting,
+        BuiltInCategory.OST_DuctTerminal]):
+        coefficient = fitting_and_terminal_coefficient_cash.get(element.Id, 0)
+
     if isinstance(coefficient, (int, float)):
         return str(int(coefficient)) if coefficient == int(coefficient) else str(round(coefficient, 2))
     return str(coefficient)
@@ -421,7 +437,7 @@ def get_network_element_real_size(element, element_type):
 
     if element.Category.IsId(BuiltInCategory.OST_DuctFitting):
         if element.MEPModel.PartType in [PartType.TapAdjustable, PartType.Tee]:
-            tee_params = cross_tee_calculator.tee_params.get(element.Id)
+            tee_params = cross_tee_calculator.cross_tee_params.get(element.Id)
 
             if tee_params is not None:
                 if tee_params.name in [cross_tee_calculator.TEE_SUPPLY_PASS_NAME,
@@ -487,7 +503,7 @@ def get_network_element_flow(section, element):
     """
     if element.Category.IsId(BuiltInCategory.OST_DuctFitting):
         if element.MEPModel.PartType in [PartType.TapAdjustable, PartType.Tee]:
-            tee_params = cross_tee_calculator.tee_params.get(element.Id)
+            tee_params = cross_tee_calculator.cross_tee_params.get(element.Id)
             if tee_params is not None:
                 if tee_params.name in [cross_tee_calculator.TEE_SUPPLY_PASS_NAME,
                                        cross_tee_calculator.TEE_EXHAUST_PASS_ROUND_NAME,
@@ -499,7 +515,11 @@ def get_network_element_flow(section, element):
                     return int(tee_params.Lp)
                 return int(tee_params.Lo)
     if element.Category.IsId(BuiltInCategory.OST_DuctTerminal):
-        flow = element.GetParamValue(BuiltInParameter.RBS_DUCT_FLOW_PARAM)
+        terminal_flow = cross_tee_calculator.duct_terminals_flows.get(element.Id)
+        if terminal_flow is not None:
+            return int(terminal_flow) # Возвращаем сразу, он уже в метрах кубических
+        else:
+            flow = element.GetParamValue(BuiltInParameter.RBS_DUCT_FLOW_PARAM)
     else:
         flow = section.Flow
     flow = UnitUtils.ConvertFromInternalUnits(flow, UnitTypeId.CubicMetersPerHour)
@@ -558,6 +578,9 @@ def prepare_data_to_demonstration(data):
     Returns:
         list: Оптимизированные данные.
     """
+
+    data.sort(key=lambda row: float(row[4]) if isinstance(row, list) and len(row) > 4 else float('inf'))
+
     flow_ordered = OrderedDict()
 
     def find_similar_flow_key(flow):
@@ -565,6 +588,7 @@ def prepare_data_to_demonstration(data):
             if abs(key - flow) <= 5:
                 return key
         return None
+
 
     for row in data:
         if isinstance(row, list) and len(row) > 4:
@@ -806,13 +830,15 @@ def process_method_setup(selected_system):
             exitscript=True
         )
 
-    fittings_coefficients = {}
+    elements_coefficients = {}
     for element in network_elements:
-        if element.Category.IsId(BuiltInCategory.OST_DuctFitting):
-            fittings_coefficients[element.Id] = calculate_local_coefficient(element)
-    with revit.Transaction("BIM: Пересчет потерь напора"):
+        if element.InAnyCategory([BuiltInCategory.OST_DuctFitting, BuiltInCategory.OST_DuctTerminal]):
+            elements_coefficients[element.Id] = calculate_local_coefficient(element)
+
+    with revit.Transaction("BIM: Установка коэффициентов"):
         for element in network_elements:
-            set_coefficient_value(element, specific_coefficient_method, fittings_coefficients)
+            if element.Category.IsId(BuiltInCategory.OST_DuctFitting):
+                set_coefficient_value(element, specific_coefficient_method, elements_coefficients)
 
 doc = __revit__.ActiveUIDocument.Document
 uidoc = __revit__.ActiveUIDocument
@@ -825,7 +851,7 @@ calc_lib = CalculatorClassLib.AerodinamicCoefficientCalculator(doc, uidoc, view)
 cross_tee_calculator = CrossTeeCalculator.CrossTeeCoefficientCalculator(doc, uidoc, view)
 transition_elbow_calculator = TransitionElbowCalculator.TransitionElbowCoefficientCalculator(doc, uidoc, view)
 editor_report = EditorReport()
-fitting_coefficient_cash = {}
+fitting_and_terminal_coefficient_cash = {}
 passed_elements = []
 
 @notification()

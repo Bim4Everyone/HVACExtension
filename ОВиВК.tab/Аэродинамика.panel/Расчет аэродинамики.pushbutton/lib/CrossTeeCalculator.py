@@ -59,7 +59,13 @@ class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCal
     CROSS_EXHAUST_BRANCH_RECT_NAME = 'Крестовина на всасывании ответвление прямоугольная'
     CROSS_EXHAUST_BRANCH_ROUND_NAME = 'Крестовина на всасывании ответвление круглая'
 
+    HOLE_NAME = 'Боковое отверстие '
+    START_TERMINAL_NAME = 'Воздухораспределитель '
+    END_TERMINAL_NAME_SUPPLY = 'Воздухозабор '
+    END_TERMINAL_NAME_EXHAUST = 'Выброс '
+
     tap_crosses_filtered = []
+    duct_terminals_flows = {}
 
     def __calculate_coefficient(self, tee_type_name, Lo, Lp, Lc, fp, fo, fc):
         """
@@ -327,13 +333,13 @@ class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCal
 
         double_tap_tee_name, Lc, Lp, Lo, fc, fp, fo = get_double_tap_tee_variables()
 
-        self.tee_params[element_1.Id] =  CalculatorClassLib.MulticonElementCharacteristic(Lo,
-                                                                                          Lc,
-                                                                                          Lp,
-                                                                                          fo,
-                                                                                          fc,
-                                                                                          fp,
-                                                                                          double_tap_tee_name)
+        self.cross_tee_params[element_1.Id] =  CalculatorClassLib.MulticonElementCharacteristic(Lo,
+                                                                                                Lc,
+                                                                                                Lp,
+                                                                                                fo,
+                                                                                                fc,
+                                                                                                fp,
+                                                                                                double_tap_tee_name)
 
         self.remember_element_name(element_1, double_tap_tee_name, [connector_data_instances_1[0],
                                                              connector_data_instances_2[0],
@@ -452,7 +458,13 @@ class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCal
 
         tap_cross_name, Lc, Lp, Lo, fc, fp, fo = get_tap_cross_variables()
 
-        self.tee_params[element_1.Id] = CalculatorClassLib.MulticonElementCharacteristic(Lo, Lc, Lp, fo, fc, fp, tap_cross_name)
+        self.cross_tee_params[element_1.Id] = CalculatorClassLib.MulticonElementCharacteristic(Lo,
+                                                                                               Lc,
+                                                                                               Lp,
+                                                                                               fo,
+                                                                                               fc,
+                                                                                               fp,
+                                                                                               tap_cross_name)
         self.remember_element_name(element_1, tap_cross_name, [connector_data_instances_1[0],
                                                              connector_data_instances_2[0],
                                                              connector_data_instances_duct[0],
@@ -549,7 +561,7 @@ class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCal
 
         cross_name, Lc, Lp, Lo, fc, fp, fo = get_cross_variables()
 
-        self.tee_params[element.Id] = CalculatorClassLib.MulticonElementCharacteristic(Lo, Lc, Lp, fo, fc, fp, cross_name)
+        self.cross_tee_params[element.Id] = CalculatorClassLib.MulticonElementCharacteristic(Lo, Lc, Lp, fo, fc, fp, cross_name)
         self.remember_element_name(element, cross_name, connector_data_instances)
         return self.__calculate_coefficient(cross_name, Lo, Lp, Lc, fp, fo, fc)
 
@@ -627,7 +639,7 @@ class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCal
 
         tee_name, Lc, Lp, Lo, fc, fp, fo = get_tee_variables()
 
-        self.tee_params[element.Id] = CalculatorClassLib.MulticonElementCharacteristic(Lo, Lc, Lp, fo, fc, fp, tee_name)
+        self.cross_tee_params[element.Id] = CalculatorClassLib.MulticonElementCharacteristic(Lo, Lc, Lp, fo, fc, fp, tee_name)
 
         self.remember_element_name(element, tee_name, connector_data_instances)
 
@@ -722,11 +734,94 @@ class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCal
 
         connector_data_instances_duct = self.get_connector_data_instances(duct)
 
-        self.tee_params[element.Id] = CalculatorClassLib.MulticonElementCharacteristic(Lo, Lc, Lp, fo, fc, fp,
-                                                                                         tap_tee_name)
+        self.cross_tee_params[element.Id] = CalculatorClassLib.MulticonElementCharacteristic(Lo, Lc, Lp, fo, fc, fp,
+                                                                                             tap_tee_name)
 
         self.remember_element_name(element, tap_tee_name, [connector_data_instances[0],
                                                                connector_data_instances_duct[0],
                                                                connector_data_instances_duct[0]])
 
         return self.__calculate_coefficient(tap_tee_name, Lo, Lp, Lc, fp, fo, fc)
+
+    def get_side_hole_coefficient(self, terminal):
+        element_id = terminal.Id
+
+        terminal_critical = False
+        for number in self.critical_path_numbers:
+            section = self.system.GetSectionByNumber(number)
+            elements_ids = section.GetElementIds()
+            if element_id in elements_ids:
+                terminal_critical = True
+
+        first_section = self.system.GetSectionByNumber(self.critical_path_numbers[0])
+        last_section = self.system.GetSectionByNumber(self.critical_path_numbers[-1])
+
+
+        first_elements_ids = first_section.GetElementIds()
+        last_elements_ids = last_section.GetElementIds()
+
+        local_coefficient = terminal.GetParamValueOrDefault(SharedParamsConfig.Instance.VISLocalResistanceCoef, 0.0)
+
+        connector_element = self.get_connectors(terminal)[0]
+
+        if element_id in first_elements_ids or not terminal_critical:
+            # элемент есть в первом сечении
+            self.element_names[terminal.Id] =  self.START_TERMINAL_NAME
+            return local_coefficient
+
+        if element_id in last_elements_ids:
+            # элемент есть в последнем сечении
+            if self.system_is_supply:
+                name = self.END_TERMINAL_NAME_SUPPLY
+            else:
+                name = self.END_TERMINAL_NAME_EXHAUST
+
+            self.element_names[terminal.Id] = name
+            return local_coefficient
+
+        self.element_names[terminal.Id] = self.HOLE_NAME
+
+        duct = None
+        for reference in connector_element.AllRefs:
+            if reference.Owner.Category.IsId(BuiltInCategory.OST_DuctCurves):
+                duct = reference.Owner
+
+        duct_area = self.get_element_area(duct)
+        terminal_area = self.get_element_area(terminal)
+
+        duct_flow = max(self.get_element_sections_flows(terminal, return_terminal_flow=False))
+
+        terminal_flow = terminal.GetParamValue(BuiltInParameter.RBS_DUCT_FLOW_PARAM)
+        terminal_flow = UnitUtils.ConvertFromInternalUnits(terminal_flow, UnitTypeId.CubicMetersPerHour)
+
+
+
+        area_criteria = terminal_area / duct_area
+        flow_criteria = terminal_flow / duct_flow
+
+        table = [
+            # area_criteria <= 0.1
+            [(0.1, 0.1), (0.2, -0.1), (0.3, -0.8), (0.4, -2.6), (float('inf'), -6.6)],
+            # area_criteria <= 0.2
+            [(0.1, 0.1), (0.2, 0.2), (0.3, -0.01), (0.4, -0.6), (float('inf'), -2.1)],
+            # area_criteria <= 0.4
+            [(0.1, 0.2), (0.2, 0.3), (0.3, 0.3), (0.4, 0.2), (float('inf'), -0.2)],
+            # area_criteria > 0.4
+            [(0.1, 0.2), (0.2, 0.3), (0.3, 0.4), (0.4, 0.4), (float('inf'), 0.3)],
+        ]
+
+        if area_criteria <= 0.1:
+            row = table[0]
+        elif area_criteria <= 0.2:
+            row = table[1]
+        elif area_criteria <= 0.4:
+            row = table[2]
+        else:
+            row = table[3]
+
+
+
+        for limit, local_coefficient in row:
+            if flow_criteria <= limit:
+                self.duct_terminals_flows[terminal.Id] = duct_flow
+                return local_coefficient

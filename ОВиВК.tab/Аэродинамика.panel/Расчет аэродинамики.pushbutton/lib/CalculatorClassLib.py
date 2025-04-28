@@ -154,7 +154,7 @@ class AerodinamicCoefficientCalculator(object):
     all_sections_in_system = None
     section_indexes = None
     element_names = {}
-    tee_params = {}
+    cross_tee_params = {}
 
     def __init__(self, doc, uidoc, view):
         """
@@ -341,6 +341,7 @@ class AerodinamicCoefficientCalculator(object):
 
             base_name += ' {0}°'.format(angle_value)
 
+
         self.element_names[element.Id] = base_name + ' ' + size
 
     def get_connector_data_instances(self, element):
@@ -369,8 +370,6 @@ class AerodinamicCoefficientCalculator(object):
         Returns:
             tuple: Кортеж (входной коннектор, выходной коннектор).
         """
-
-
 
         connector_data_instances = self.get_connector_data_instances(element)
 
@@ -447,21 +446,14 @@ class AerodinamicCoefficientCalculator(object):
 
         return input_connector, output_connector
 
-    def get_element_sections_flows(self, element):
-        """
-        Получает расходы для всех секций элемента. Если элемент - воздухораспределитель, возвращает только его расход.
+    def get_element_sections_flows(self, element, return_terminal_flow = True):
 
-        Args:
-            element (Element): Элемент.
-
-        Returns:
-            list: Список из всех расходов которые связаны с секциями элемента.
-        """
 
         flows = []
 
-        if element.Category.IsId(BuiltInCategory.OST_DuctTerminal):
+        if element.Category.IsId(BuiltInCategory.OST_DuctTerminal) and return_terminal_flow:
             flow = element.GetParamValue(BuiltInParameter.RBS_DUCT_FLOW_PARAM)
+            flow = UnitUtils.ConvertFromInternalUnits(flow, UnitTypeId.CubicMetersPerHour)
             return [flow]
 
         for section_index in self.section_indexes:
