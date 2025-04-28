@@ -66,6 +66,7 @@ class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCal
 
     tap_crosses_filtered = []
     duct_terminals_flows = {}
+    duct_terminals_sizes = {}
 
     def __calculate_coefficient(self, tee_type_name, Lo, Lp, Lc, fp, fo, fc):
         """
@@ -824,4 +825,5 @@ class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCal
         for limit, local_coefficient in row:
             if flow_criteria <= limit:
                 self.duct_terminals_flows[terminal.Id] = duct_flow
+                self.duct_terminals_sizes[terminal.Id] = duct_area
                 return local_coefficient

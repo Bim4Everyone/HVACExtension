@@ -432,9 +432,10 @@ def get_network_element_real_size(element, element_type):
     Returns:
         float: Реальный размер элемента в квадратных метрах.
     """
-    def convert_to_meters(value):
-        return UnitUtils.ConvertFromInternalUnits(value, UnitTypeId.Meters)
 
+    if element.Category.IsId(BuiltInCategory.OST_DuctTerminal):
+        size = cross_tee_calculator.duct_terminals_sizes.get(element.Id, calc_lib.get_element_area(element))
+        return size
     if element.Category.IsId(BuiltInCategory.OST_DuctFitting):
         if element.MEPModel.PartType in [PartType.TapAdjustable, PartType.Tee]:
             tee_params = cross_tee_calculator.cross_tee_params.get(element.Id)
