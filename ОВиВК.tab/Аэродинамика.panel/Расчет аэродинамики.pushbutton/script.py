@@ -409,9 +409,6 @@ def get_network_element_coefficient(section, element):
         BuiltInCategory.OST_MechanicalEquipment]):
         return '0'
 
-    if coefficient is None:
-        coefficient = section.GetCoefficient(element.Id)
-
     if (coefficient is None or coefficient == 0) and element.InAnyCategory([
         BuiltInCategory.OST_DuctFitting,
         BuiltInCategory.OST_DuctTerminal]):

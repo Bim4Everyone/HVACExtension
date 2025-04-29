@@ -763,6 +763,7 @@ class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCal
 
         local_coefficient = terminal.GetParamValueOrDefault(SharedParamsConfig.Instance.VISLocalResistanceCoef, 0.0)
 
+
         connector_element = self.get_connectors(terminal)[0]
 
         if element_id in first_elements_ids or not terminal_critical:
