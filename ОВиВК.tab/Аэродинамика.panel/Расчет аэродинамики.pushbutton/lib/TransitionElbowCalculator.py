@@ -36,13 +36,7 @@ from dosymep.Bim4Everyone.SharedParams import SharedParamsConfig
 class TransitionElbowCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCalculator):
     def get_transition_coefficient(self, element):
         """
-        Вычисляет коэффициент для диффузора или конфузора.
-
-        Args:
-            element (Element): Элемент.
-
-        Returns:
-            float: КМС.
+        Вычисляет коэффициент для диффузора или конфузора..
         """
         def get_transition_variables():
             input_conn, output_conn = self.find_input_output_connector(element)
@@ -113,12 +107,6 @@ class TransitionElbowCoefficientCalculator(CalculatorClassLib.AerodinamicCoeffic
     def get_elbow_coefficient(self, element):
         """
         Вычисляет КМС отвода.
-
-        Args:
-            element (Element): Элемент.
-
-        Returns:
-            float: КМС.
         """
         connector_data = self.get_connector_data_instances(element)
         connector = connector_data[0]
@@ -172,13 +160,7 @@ class TransitionElbowCoefficientCalculator(CalculatorClassLib.AerodinamicCoeffic
 
     def is_tap_elbow(self, element):
         """
-        Проверяет, является ли элемент отводом.
-
-        Args:
-            element (Element): Элемент.
-
-        Returns:
-            bool: True, если элемент является отводом, иначе False.
+        Проверяет, является ли врезка отводом. Если среди расходов секций, в которых есть врезка имеется 0 - это отвод.
         """
 
         flows = self.get_element_sections_flows(element)

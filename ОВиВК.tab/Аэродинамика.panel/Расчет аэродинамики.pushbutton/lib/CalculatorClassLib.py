@@ -172,9 +172,6 @@ class AerodinamicCoefficientCalculator(object):
     def __get_all_sections_in_system(self):
         """
         Возвращает список всех секций, к которым относятся элементы системы MEP.
-
-        Returns:
-            list: Список индексов секций.
         """
         # Получаем все элементы системы
         elements = self.system.DuctNetwork
@@ -198,9 +195,6 @@ class AerodinamicCoefficientCalculator(object):
     def get_critical_path(self, system):
         """
         Получает критический путь системы.
-
-        Args:
-            system (System): Система.
         """
         self.system = system
 
@@ -215,6 +209,9 @@ class AerodinamicCoefficientCalculator(object):
         self.section_indexes = self.__get_all_sections_in_system()
 
     def is_rectangular(self, element):
+        """
+        Возвращает True, если элемент прямоугольный.
+        """
         if isinstance(element, Connector):
             return element.Shape == ConnectorProfileType.Rectangular
         if isinstance(element, ConnectorData):
@@ -226,12 +223,6 @@ class AerodinamicCoefficientCalculator(object):
     def get_element_area(self, element):
         """
         Поиск площади любого элемента.
-
-        Args:
-            element: Элемент.
-
-        Returns:
-            float: Площадь в м2
         """
         def get_connector_area(connector):
             area = None
@@ -274,12 +265,6 @@ class AerodinamicCoefficientCalculator(object):
     def get_connectors(self, element):
         """
         Получает коннекторы элемента. Если элемент воздуховод получит только его коннекторы, врезки будут игнорироваться.
-
-        Args:
-            element (Element): Элемент.
-
-        Returns:
-            list: Список коннекторов.
         """
         connectors = []
 
@@ -346,13 +331,8 @@ class AerodinamicCoefficientCalculator(object):
 
     def get_connector_data_instances(self, element):
         """
-        Получает экземпляры данных коннекторов для элемента.
+        Получает экземпляры ConnectorData для элемента.
 
-        Args:
-            element (Element): Элемент.
-
-        Returns:
-            list: Список экземпляров данных коннекторов.
         """
         connectors = self.get_connectors(element)
         connector_data_instances = []
@@ -363,12 +343,6 @@ class AerodinamicCoefficientCalculator(object):
     def find_input_output_connector(self, element):
         """
         Находит входной и выходной коннекторы элемента.
-
-        Args:
-            element (Element): Элемент.
-
-        Returns:
-            tuple: Кортеж (входной коннектор, выходной коннектор).
         """
 
         connector_data_instances = self.get_connector_data_instances(element)
@@ -447,7 +421,9 @@ class AerodinamicCoefficientCalculator(object):
         return input_connector, output_connector
 
     def get_element_sections_flows(self, element, return_terminal_flow = True):
-
+        """
+        Получает все расходы секций, связанных с элементом.
+        """
 
         flows = []
 
