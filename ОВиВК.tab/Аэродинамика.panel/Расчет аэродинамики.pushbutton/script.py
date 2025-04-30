@@ -238,6 +238,8 @@ def set_coefficient_value(element, method, element_coefficients):
     local_section_coefficient = 0
     if element.Category.IsId(BuiltInCategory.OST_DuctFitting):
         local_section_coefficient = element_coefficients[element.Id]
+    if element.Category.IsId(BuiltInCategory.OST_DuctAccessory):
+        local_section_coefficient = element.GetParamValueOrDefault(coefficient_param, 0.0)
     param = element.get_Parameter(BuiltInParameter.RBS_DUCT_FITTING_LOSS_METHOD_SERVER_PARAM)
     current_guid = param.AsString()
     if local_section_coefficient != 0 and current_guid != calc_lib.LOSS_GUID_CONST:
@@ -835,7 +837,7 @@ def process_method_setup(selected_system):
 
     with revit.Transaction("BIM: Установка коэффициентов"):
         for element in network_elements:
-            if element.Category.IsId(BuiltInCategory.OST_DuctFitting):
+            if element.InAnyCategory([BuiltInCategory.OST_DuctFitting, BuiltInCategory.OST_DuctAccessory]):
                 set_coefficient_value(element, specific_coefficient_method, elements_coefficients)
 
 doc = __revit__.ActiveUIDocument.Document
