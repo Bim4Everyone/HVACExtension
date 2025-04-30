@@ -766,11 +766,14 @@ class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCal
 
         connector_element = self.get_connectors(terminal)[0]
 
+        # Если терминал на первом участке или не является
+        # частью критического пути - не рассматриваем его и возвращаем КМС
         if element_id in first_elements_ids or not terminal_critical:
             # элемент есть в первом сечении
             self.element_names[terminal.Id] =  self.START_TERMINAL_NAME
             return local_coefficient
 
+        # Если терминал на последнем участке - это выбор или забор, а не боковое отверстие
         if element_id in last_elements_ids:
             # элемент есть в последнем сечении
             if self.system_is_supply:
