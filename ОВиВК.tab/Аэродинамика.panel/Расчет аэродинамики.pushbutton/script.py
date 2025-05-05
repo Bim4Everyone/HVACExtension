@@ -873,4 +873,6 @@ def script_execute(plugin_logger):
 
     show_network_report(data, selected_system, output, density)
 
+    print('Расчет окончен')
+
 script_execute()
