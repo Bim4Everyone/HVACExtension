@@ -846,6 +846,7 @@ view = doc.ActiveView
 
 coefficient_param = SharedParamsConfig.Instance.VISLocalResistanceCoef
 cross_section_param = SharedParamsConfig.Instance.VISCrossSection
+#pressure_loss_param = SharedParamsConfig.Instance.VISPressureLoss
 
 calc_lib = CalculatorClassLib.AerodinamicCoefficientCalculator(doc, uidoc, view)
 cross_tee_calculator = CrossTeeCalculator.CrossTeeCoefficientCalculator(doc, uidoc, view)
