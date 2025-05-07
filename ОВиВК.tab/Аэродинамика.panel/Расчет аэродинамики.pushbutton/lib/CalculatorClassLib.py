@@ -91,33 +91,8 @@ class ConnectorData:
                     reference.Owner.Category.IsId(BuiltInCategory.OST_MechanicalEquipment)):
                 self.connected_element = reference.Owner
 
-class TeeVariables:
-    """Класс для хранения характеристик тройника."""
-
-    def __init__(self,
-                 input_output_angle,
-                 input_branch_angle,
-                 input_connector_data,
-                 output_connector_data,
-                 branch_connector_data):
-        """
-        Инициализация объекта TeeCharacteristic.
-
-        Args:
-            input_output_angle (float): Угол между входным и выходным коннекторами.
-            input_branch_angle (float): Угол между входным и ответвляющимся коннекторами.
-            input_connector_data (ConnectorData): Данные входного коннектора.
-            output_connector_data (ConnectorData): Данные выходного коннектора.
-            branch_connector_data (ConnectorData): Данные ответвляющегося коннектора.
-        """
-        self.input_output_angle = input_output_angle
-        self.input_branch_angle = input_branch_angle
-        self.input_connector_data = input_connector_data
-        self.output_connector_data = output_connector_data
-        self.branch_connector_data = branch_connector_data
-
 class MulticonElementCharacteristic:
-    """Класс для хранения характеристик тройника с отводом."""
+    """Класс для хранения характеристик сложных фитингов."""
 
     def __init__(self, Lo, Lc, Lp, fo, fc, fp, name):
         """
@@ -157,21 +132,14 @@ class AerodinamicCoefficientCalculator(object):
     cross_tee_params = {}
 
     def __init__(self, doc, uidoc, view):
-        """
-        Инициализация объекта AerodinamicCoefficientCalculator.
-
-        Args:
-            doc (Document): Документ.
-            uidoc (UIDocument): Интерфейс пользователя документа.
-            view (View): Вид.
-        """
         self.doc = doc
         self.uidoc = uidoc
         self.view = view
 
     def __get_all_sections_in_system(self):
         """
-        Возвращает список всех секций, к которым относятся элементы системы MEP.
+        Возвращает список всех секций, к которым относятся элементы системы MEP. В стандартном API нет возможности
+        посмотреть все номера секций, перебираем их до max_possible_sections.
         """
         # Получаем все элементы системы
         elements = self.system.DuctNetwork
@@ -195,6 +163,9 @@ class AerodinamicCoefficientCalculator(object):
     def get_critical_path(self, system):
         """
         Получает критический путь системы.
+
+        Args:
+            system: Система воздуховодов
         """
         self.system = system
 
@@ -211,6 +182,11 @@ class AerodinamicCoefficientCalculator(object):
     def is_rectangular(self, element):
         """
         Возвращает True, если элемент прямоугольный.
+
+        Args:
+            element: Элемент системы воздуховодов
+        Returns:
+            True или False
         """
         if isinstance(element, Connector):
             return element.Shape == ConnectorProfileType.Rectangular
@@ -223,6 +199,11 @@ class AerodinamicCoefficientCalculator(object):
     def get_element_area(self, element):
         """
         Поиск площади любого элемента.
+
+        Args:
+            element: Элемент площадь которого нам нужна
+        Returns:
+            float: Площадь в м2
         """
         def get_connector_area(connector):
             area = None
@@ -333,6 +314,10 @@ class AerodinamicCoefficientCalculator(object):
         """
         Получает экземпляры ConnectorData для элемента.
 
+        Args:
+            element: Element у которого ищутся коннекторы
+        Returns:
+            Список коннекторов
         """
         connectors = self.get_connectors(element)
         connector_data_instances = []
@@ -343,6 +328,11 @@ class AerodinamicCoefficientCalculator(object):
     def find_input_output_connector(self, element):
         """
         Находит входной и выходной коннекторы элемента.
+
+        Args:
+            element: Элемент через который идет поток воздуха
+        Returns:
+            input_connector, output_connector - вход и выход
         """
 
         connector_data_instances = self.get_connector_data_instances(element)
@@ -423,6 +413,12 @@ class AerodinamicCoefficientCalculator(object):
     def get_element_sections_flows(self, element, return_terminal_flow = True):
         """
         Получает все расходы секций, связанных с элементом.
+
+        Args:
+            element: Элемент для которого нужен список расходов
+            return_terminal_flow: Если элемент терминал, то если не указано False - будет просто возвращен его расход
+        Returns:
+            Список расходов элемента
         """
 
         flows = []

@@ -167,9 +167,16 @@ class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCal
         return None  # Если тип тройника не найден
 
     def __get_angle_between_connectors(self, element, connector_1, connector_2):
-        '''
+        """
         Возвращает угол в градусах между линиями опущенными из коннекторов на точку вставки элемента
-        '''
+
+        Args:
+            element: Элемент точка вставки которого будет использована
+            connector_1: 1-ый коннектор
+            connector_2: 2-ой коннектор
+        Returns:
+            float: Угол в градусах
+        """
         # Получаем координаты центров соединений
         input_origin = connector_1.connector_element.Origin
         output_origin = connector_2.connector_element.Origin
@@ -199,14 +206,20 @@ class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCal
         return input_output_angle
 
     def get_tap_partner_if_exists(self, element):
-        '''
+        """
         Проверяется наличие "партнёрской" врезки. Если у воздуховода, к которому подключена текущая врезка, есть ещё
         одна врезка, и через её центр и центр исходной врезки можно провести прямую, образующую угол 90° с
         осью воздуховода, то эта врезка считается партнёрской. В этом случае возвращаются найденная врезка и
         соответствующий воздуховод.
         В противном случае возвращается None.
-        '''
 
+        Args:
+            element: Врезка
+
+        Returns:
+            None - если партнера нет;
+            Element, Element - врезка-партнер и воздуховод-владелец, если партнер есть
+        """
 
         def angle_between_vectors(v1, v2):
             dot = v1.DotProduct(v2)
@@ -269,11 +282,21 @@ class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCal
                 return owner, duct_element
 
     def get_double_tap_tee_coefficient(self, element_1, element_2, duct):
-        '''
+        """
         Определяем КМС тройника состоящего из воздуховода и двух врезок.
-        '''
+
+        Args:
+            element_1: Врезка
+            element_2: Врезка
+            duct: Воздуховод-хозяин обеих врезок
+
+        Returns:
+            float: Коэффициент местного сопротивления
+
+        """
+
         def get_double_tap_tee_variables():
-            '''
+            """
             Требуется определить расход во всех позициях, размеры воздуховодов и тип тройника.
 
             Ищем входной-выходной элемент для врезки. Если приток, то магистральный воздуховод на входе, отвод на выходе
@@ -290,9 +313,12 @@ class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCal
             Если отвод на критическом пути то это "на отвод"
             Если ни то ни то, проверяем где расход больше, на ответвлении или на проходе. Куда больше туда и принимаем поток.
 
-            Сам расход диктующиего ответвления берем или максимальный, если идем на проход
+            Сам расход диктующего ответвления берем или максимальный, если идем на проход
             или с того ответвления куда поворачиваем.
-            '''
+
+            Returns:
+                Имя тройника + все габаритные размеры и расходы
+            """
 
             input_connector_1, output_connector_1 = self.find_input_output_connector(element_1)
             input_connector_2, output_connector_2 = self.find_input_output_connector(element_2)
@@ -385,12 +411,22 @@ class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCal
         return self.__calculate_coefficient(double_tap_tee_name, Lo, Lp, Lc, fp, fo, fc)
 
     def get_tap_cross_coefficient(self, element_1, element_2, duct):
-        '''
-        Определеяем КМС для крестовины состоящей из воздуховода и двух врезок, или одной врезки и одного терминала.
-        '''
+        """
+        Определяем КМС для крестовины состоящей из воздуховода и двух врезок, или одной врезки и одного терминала.
+
+        Args:
+            element_1: Врезка или терминал
+            element_2: Врезка или терминал
+            duct: Воздуховод-хозяин обеих врезок
+
+        Returns:
+            float: Коэффициент местного сопротивления
+
+        """
+
         def get_tap_cross_variables():
-            '''
-            Требуется определить расход во всех позициях, размеры воздуховодов и тип тройника.
+            """
+            Требуется определить расход во всех позициях, размеры воздуховодов и тип крестовины.
 
             Ищем входной-выходной элемент для врезки. Если приток, то магистральный воздуховод на входе, отвод на выходе
             для вытяжки наоборот.
@@ -406,9 +442,12 @@ class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCal
             Если отвод на критическом пути то это "на отвод"
             Если ни то ни то, проверяем где расход больше, на ответвлении или на проходе. Куда больше туда и принимаем поток.
 
-            Сам расход диктующиего ответвления берем или максимальный, если идем на проход
+            Сам расход диктующего ответвления берем или максимальный, если идем на проход
             или с того ответвления куда поворачиваем.
-            '''
+
+            Returns:
+                Имя крестовины + все габаритные размеры и расходы
+            """
 
             input_connector_1, output_connector_1 = self.find_input_output_connector(element_1)
             input_connector_2, output_connector_2 = self.find_input_output_connector(element_2)
@@ -534,19 +573,29 @@ class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCal
         return self.__calculate_coefficient(tap_cross_name, Lo, Lp, Lc, fp, fo, fc)
 
     def get_cross_coefficient(self, element):
-        '''
-        Ищем КМС для тройника.
-        '''
+        """
+        Определяем КМС для крестовины.
+
+        Args:
+            element: Крестовина
+
+        Returns:
+            float: Коэффициент местного сопротивления
+
+        """
         def get_cross_variables():
-            '''
-            Требуется определить расход во всех позициях, размеры воздуховодов и тип тройника.
+            """
+            Требуется определить расход во всех позициях, размеры воздуховодов и тип крестовины.
 
             Коннектор, отвечающий за ствол - тот у которого максимальный коннектор. Проход - на 180 градусов от него.
             Ответвлениями назначаем два оставшихся коннектора.
 
             Проверяем откуда выходит воздух, если через проход - главное ответвление это с максимальным расходом.
             Если через отвод - главное ответвление это тот, через что выходим.
-            '''
+
+            Returns:
+                Имя крестовины + все габаритные размеры и расходы
+            """
 
             body_connector = max(connector_data_instances, key=lambda c: c.flow)
 
@@ -640,11 +689,18 @@ class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCal
         return self.__calculate_coefficient(cross_name, Lo, Lp, Lc, fp, fo, fc)
 
     def get_tee_coefficient(self, element):
-        '''
-        Ищем КМС для тройника.
-        '''
+        """
+        Определяем КМС для тройника.
+
+        Args:
+            element: Тройник
+
+        Returns:
+            float: Коэффициент местного сопротивления
+
+        """
         def get_tee_variables():
-            '''
+            """
             Требуется определить расход во всех позициях, размеры воздуховодов и тип тройника.
 
             Сразу же проверяем, есть ли среди расходов нулевые. Если один из трех концов идет на 0 - значит там заглушка.
@@ -664,7 +720,9 @@ class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCal
             Ищем вход-выход воздуха из тройника и сверяем все три коннектора. Если выход это проход - "на проход",
             если выход это отвод - "на отвод".
 
-            '''
+            Returns:
+                  Имя тройника + все габаритные размеры и расходы
+            """
 
             body_connector = branch_connector = pass_connector = None
             other_connectors = None
@@ -747,10 +805,17 @@ class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCal
     def get_tap_tee_coefficient(self, element):
         """
         Определение КМС тройника, состоящего из воздуховода и врезки.
+
+        Args:
+            element: Врезка.
+
+        Returns:
+            float: Коэффициент местного сопротивления
+
         """
 
         def get_tap_tee_variables():
-            '''
+            """
             Требуется определить расход во всех позициях, размеры воздуховодов и тип тройника.
 
             Ищем входной-выходной элемент для врезки. Если приток, то магистральный воздуховод на входе, отвод на выходе
@@ -766,7 +831,10 @@ class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCal
             Проверяем лежит ли магистраль на критическом пути. Если да это "на проход"
             Если отвод на критическом пути то это "на отвод"
             Если ни то ни то, проверяем где расход больше, на ответвлении или на проходе. Куда больше туда и принимаем поток.
-            '''
+
+            Returns:
+                  Имя тройника + все габаритные размеры и расходы
+            """
 
             input_connector_1, output_connector_1 = self.find_input_output_connector(element)
 
@@ -865,7 +933,7 @@ class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCal
         return self.__calculate_coefficient(tap_tee_name, Lo, Lp, Lc, fp, fo, fc)
 
     def get_side_hole_coefficient(self, terminal):
-        '''
+        """
         Требуется определить решетка это или среднее боковое отверстие.
 
         Если на первом участке или на последнем участке - решетка или забор-выброс. Тогда КМС берем из параметра при наличии
@@ -875,7 +943,13 @@ class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCal
 
         Иначе считаем как среднее отверстие.
 
-        '''
+        Args:
+            terminal: Воздухораспределитель.
+
+        Returns:
+            float: Коэффициент местного сопротивления
+
+        """
 
         element_id = terminal.Id
 

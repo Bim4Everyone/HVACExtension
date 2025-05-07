@@ -173,7 +173,7 @@ def get_system_elements():
 
 def setup_params():
     """Настраивает параметры проекта."""
-    revit_params = [cross_section_param, coefficient_param]
+    revit_params = [cross_section_param, coefficient_param, pressure_loss_param]
     project_parameters = ProjectParameters.Create(doc.Application)
     project_parameters.SetupRevitParams(doc, revit_params)
 
@@ -404,7 +404,7 @@ def get_network_element_coefficient(section, element):
     """
     coefficient = element.GetParamValueOrDefault(coefficient_param)
 
-    if element.Category.IsId(BuiltInCategory.OST_DuctCurves):
+    if element.InAnyCategory([BuiltInCategory.OST_DuctCurves, BuiltInCategory.OST_FlexDuctCurves]):
         return '-'
     if coefficient is None and element.InAnyCategory([
         BuiltInCategory.OST_DuctAccessory,
@@ -477,7 +477,7 @@ def get_network_element_pressure_drop(section, element, density, velocity, coeff
     if element.InAnyCategory([BuiltInCategory.OST_DuctCurves, BuiltInCategory.OST_FlexDuctCurves]):
         pressure_drop = section.GetPressureDrop(element.Id)
         return UnitUtils.ConvertFromInternalUnits(pressure_drop, UnitTypeId.Pascals)
-    pressure_drop = element.GetParamValueOrDefault("ФОП_ВИС_Потери давления")
+    pressure_drop = element.GetParamValueOrDefault(pressure_loss_param)
     if pressure_drop is not None:
         return pressure_drop
     if element.Category.Id.IntegerValue == int(BuiltInCategory.OST_DuctTerminal):
