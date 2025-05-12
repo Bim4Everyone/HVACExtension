@@ -144,25 +144,30 @@ class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCal
 
         if tee_type_name == self.TEE_EXHAUST_MERGER_NAME:
             if fo_normed <= 0.35:
-                return 1
+                result = (
+                        1 * (
+                        1 + (1 / fo_normed) ** 2 +
+                        3 * (1 / fo_normed) ** 2 * (Lo_normed ** 2 - Lo_normed)
+                )
+                )
             else:
                 if Lo_normed <= 0.4:
-                    # Формула из Excel для случая Lo_normed <= 0.4
                     result = (
                             0.9 * (1 - Lo_normed) *
-                            (1 + (Lo_normed / fo_normed) ** 2 - 2 * (
-                                    1 - Lo_normed) ** 2 - 2 * Lo_normed ** 2 * 6.1257422745431E-17 / fo_normed) /
-                            (Lo_normed / fo_normed) ** 2
+                            (
+                                    1 + (1 / fo_normed) ** 2 +
+                                    3 * (1 / fo_normed) ** 2 * (Lo_normed ** 2 - Lo_normed)
+                            )
                     )
                 else:
-                    # Формула из Excel для случая Lo_normed > 0.4
                     result = (
                             0.55 *
-                            (1 + (Lo_normed / fo_normed) ** 2 - 2 * (
-                                    1 - Lo_normed) ** 2 - 2 * Lo_normed ** 2 * 6.1257422745431E-17 / fo_normed) /
-                            (Lo_normed / fo_normed) ** 2
+                            (
+                                    1 + (1 / fo_normed) ** 2 +
+                                    3 * (1 / fo_normed) ** 2 * (Lo_normed ** 2 - Lo_normed)
+                            )
                     )
-                return result
+            return result
 
         return None  # Если тип тройника не найден
 
