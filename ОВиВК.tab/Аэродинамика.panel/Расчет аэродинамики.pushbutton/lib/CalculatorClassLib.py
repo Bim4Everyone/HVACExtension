@@ -105,7 +105,7 @@ class MulticonElementCharacteristic:
             fo (float): Площадь ответвления.
             fc (float): Площадь основного потока.
             fp (float): Площадь проходного потока.
-            name (str): Название типа тройника.
+            name (str): Название типа тройника-крестовины.
         """
         self.name = name
         self.Lo = Lo

@@ -35,6 +35,19 @@ from dosymep.Bim4Everyone.SharedParams import SharedParamsConfig
 
 class TransitionElbowCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCalculator):
     def __calculate_elbow_coefficient(self, connector, rounding = 150):
+        """
+        Расчет КМС отводов для врезок и собственно отводов
+
+        Args:
+            connector: Диктующий коннектор отвода
+            rounding: Закругление. По умолчанию принято 150, по ГОСТ.
+
+        Returns:
+            coefficient: КМС отвода
+            base_name: Базовое имя для запоминания
+
+        """
+
         if connector.shape == ConnectorProfileType.Rectangular:
             h, b = connector.height, connector.width
             coefficient = (0.25 * (b / h) ** 0.25) * (1.07 * math.exp(2 / (2 * (rounding + b / 2) / b + 1)) - 1) ** 2
@@ -51,7 +64,6 @@ class TransitionElbowCoefficientCalculator(CalculatorClassLib.AerodinamicCoeffic
             base_name = 'Неизвестная форма отвода'
 
         return coefficient, base_name
-
 
     def get_transition_coefficient(self, element):
         """
@@ -167,7 +179,6 @@ class TransitionElbowCoefficientCalculator(CalculatorClassLib.AerodinamicCoeffic
                                    angle=connector.angle)
 
         return coefficient
-
 
     def get_elbow_coefficient(self, element):
         """

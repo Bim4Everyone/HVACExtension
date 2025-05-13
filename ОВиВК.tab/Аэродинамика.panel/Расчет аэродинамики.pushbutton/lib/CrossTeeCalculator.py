@@ -859,11 +859,9 @@ class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCal
             Lo = max(self.get_element_sections_flows(branch_duct))
 
 
-            flows_1 = self.get_element_sections_flows(element)
-            all_flows = flows_1
+            all_flows = self.get_element_sections_flows(element)
             excluded = [Lo]
 
-            # Оставим только значения, которые не равны Lo_1 или Lo_2
             filtered_flows = [f for f in all_flows if f not in excluded]
 
             Lc = max(filtered_flows) if filtered_flows else None
