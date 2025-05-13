@@ -305,7 +305,7 @@ def calculate_local_coefficient(element):
                 local_section_coefficient = cross_tee_calculator.get_tap_cross_coefficient(element, fitting_2,
                                                                                            duct_element)
         elif transition_elbow_calculator.is_tap_elbow(element):
-            local_section_coefficient = transition_elbow_calculator.get_elbow_coefficient(element)
+            local_section_coefficient = transition_elbow_calculator.get_tap_elbow_coefficient(element)
         else:
             local_section_coefficient = cross_tee_calculator.get_tap_tee_coefficient(element)
     elif part_type == element.MEPModel.PartType.Cross:
@@ -449,6 +449,9 @@ def get_network_element_real_size(element, element_type):
                                        cross_tee_calculator.CROSS_EXHAUST_PASS_ROUND_NAME]:
                     return tee_params.fp
                 return tee_params.fo
+
+        size = calc_lib.get_element_area(element)
+        return size
     size = element.GetParamValueOrDefault(cross_section_param)
     if not size:
         size = element_type.GetParamValueOrDefault(cross_section_param)
@@ -512,8 +515,8 @@ def get_network_element_flow(section, element):
                                        cross_tee_calculator.CROSS_EXHAUST_PASS_RECT_NAME,
                                        cross_tee_calculator.CROSS_SUPPLY_PASS_ROUND_NAME,
                                        cross_tee_calculator.CROSS_EXHAUST_PASS_ROUND_NAME]:
-                    return int(tee_params.Lp)
-                return int(tee_params.Lo)
+                    return int(tee_params.Lc)
+                return int(tee_params.Lp)
     if element.Category.IsId(BuiltInCategory.OST_DuctTerminal):
         terminal_flow = cross_tee_calculator.duct_terminals_flows.get(element.Id)
         if terminal_flow is not None:
@@ -874,6 +877,8 @@ def script_execute(plugin_logger):
 
     show_network_report(data, selected_system, output, density)
 
-    print('Расчет окончен')
+    output.print_md('**<span style="color:red; text-decoration:underline;">'
+                    'РАСЧЕТ НАХОДИТСЯ НА СТАДИИ ТЕСТИРОВАНИЯ. '
+                    'ПЕРЕПРОВЕРЬТЕ РЕЗУЛЬТАТЫ.</span>**')
 
 script_execute()

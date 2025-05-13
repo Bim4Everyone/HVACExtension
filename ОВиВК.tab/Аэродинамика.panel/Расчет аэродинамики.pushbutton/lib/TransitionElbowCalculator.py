@@ -34,6 +34,25 @@ from dosymep.Bim4Everyone.Templates import ProjectParameters
 from dosymep.Bim4Everyone.SharedParams import SharedParamsConfig
 
 class TransitionElbowCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCalculator):
+    def __calculate_elbow_coefficient(self, connector, rounding = 150):
+        if connector.shape == ConnectorProfileType.Rectangular:
+            h, b = connector.height, connector.width
+            coefficient = (0.25 * (b / h) ** 0.25) * (1.07 * math.exp(2 / (2 * (rounding + b / 2) / b + 1)) - 1) ** 2
+            if connector.angle <= 60:
+                coefficient *= 0.708
+            base_name = 'Отвод прямоугольный'
+
+        elif connector.shape == ConnectorProfileType.Round:
+            coefficient = 0.33 if connector.angle > 85 else 0.18
+            base_name = 'Отвод круглый'
+
+        else:
+            coefficient = 0
+            base_name = 'Неизвестная форма отвода'
+
+        return coefficient, base_name
+
+
     def get_transition_coefficient(self, element):
         """
         Вычисляет коэффициент для диффузора или конфузора.
@@ -109,9 +128,9 @@ class TransitionElbowCoefficientCalculator(CalculatorClassLib.AerodinamicCoeffic
 
         return 0  # В случае равных сечений
 
-    def get_elbow_coefficient(self, element):
+    def get_tap_elbow_coefficient(self, element):
         """
-        Вычисляет коэффициент для диффузора или конфузора.
+        Вычисляет коэффициент для колена исполненного через врезку.
 
         Args:
             element: Отвод или врезка
@@ -121,28 +140,46 @@ class TransitionElbowCoefficientCalculator(CalculatorClassLib.AerodinamicCoeffic
         connector_data = self.get_connector_data_instances(element)
         connector = connector_data[0]
 
-        is_tap = element.MEPModel.PartType == PartType.TapAdjustable
+        input_connector, output_connector = self.find_input_output_connector(element)
+        input_element = input_connector.connected_element
+        output_element = output_connector.connected_element
 
-        if is_tap:
-            input_connector, output_connector = self.find_input_output_connector(element)
-            input_element = input_connector.connected_element
-            output_element = output_connector.connected_element
+        main_element = input_element if self.system.SystemType == DuctSystemType.SupplyAir else output_element
 
-            main_element = input_element if self.system.SystemType == DuctSystemType.SupplyAir else output_element
+        f = input_connector.area
+        F = self.get_element_area(main_element)
 
-            f = input_connector.area
-            F = self.get_element_area(main_element)
-
-            if f != F:
-                coefficient = ((f / F) ** 2 + 0.7 * (f / F) ** 2) if output_element == main_element else (
+        if f != F:
+            coefficient = ((f / F) ** 2 + 0.7 * (f / F) ** 2) if output_element == main_element else (
                     0.4 + 0.7 * (f / F) ** 2)
-                base_name = 'Колено прямоугольное с изменением сечения'
-                duct_input = self.find_input_output_connector(main_element)[0]
-                self.remember_element_name(element, base_name, [input_connector, duct_input])
-                return coefficient
+            base_name = 'Колено прямоугольное с изменением сечения'
+            duct_input = self.find_input_output_connector(main_element)[0]
+            self.remember_element_name(element, base_name, [input_connector, duct_input])
+            return coefficient
 
-            # Если площади равны — работаем как с обычным отводом
-            connector.angle = 90
+        # Если площади равны — работаем как с обычным отводом
+        connector.angle = 90
+
+        coefficient, base_name = self.__calculate_elbow_coefficient(connector)
+
+        self.remember_element_name(element, base_name,
+                                   [connector, connector],
+                                   angle=connector.angle)
+
+        return coefficient
+
+
+    def get_elbow_coefficient(self, element):
+        """
+        Вычисляет коэффициент для колена.
+
+        Args:
+            element: Отвод или врезка
+        Returns:
+            float: КМС
+        """
+        connector_data = self.get_connector_data_instances(element)
+        connector = connector_data[0]
 
         element_type = element.GetElementType()
         # В стандартных семействах шаблона этот параметр есть. Для других вычислить почти невозможно, принимаем по ГОСТ
@@ -150,22 +187,12 @@ class TransitionElbowCoefficientCalculator(CalculatorClassLib.AerodinamicCoeffic
         if rounding != 150:
             rounding = UnitUtils.ConvertFromInternalUnits(rounding, UnitTypeId.Millimeters)
 
-        if connector.shape == ConnectorProfileType.Rectangular:
-            h, b = connector.height, connector.width
-            coefficient = (0.25 * (b / h) ** 0.25) * (1.07 * math.exp(2 / (2 * (rounding + b / 2) / b + 1)) - 1) ** 2
-            if connector.angle <= 60:
-                coefficient *= 0.708
-            base_name = 'Отвод прямоугольный'
+        coefficient, base_name = self.__calculate_elbow_coefficient(connector)
 
-        elif connector.shape == ConnectorProfileType.Round:
-            coefficient = 0.33 if connector.angle > 85 else 0.18
-            base_name = 'Отвод круглый'
+        self.remember_element_name(element, base_name,
+                                   [connector, connector],
+                                   angle=connector.angle)
 
-        else:
-            coefficient = 0
-            base_name = 'Неизвестная форма отвода'
-
-        self.remember_element_name(element, base_name, [connector, connector], angle=connector.angle)
         return coefficient
 
     def is_tap_elbow(self, element):
