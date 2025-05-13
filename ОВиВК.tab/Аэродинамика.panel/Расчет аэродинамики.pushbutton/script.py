@@ -515,8 +515,8 @@ def get_network_element_flow(section, element):
                                        cross_tee_calculator.CROSS_EXHAUST_PASS_RECT_NAME,
                                        cross_tee_calculator.CROSS_SUPPLY_PASS_ROUND_NAME,
                                        cross_tee_calculator.CROSS_EXHAUST_PASS_ROUND_NAME]:
-                    return int(tee_params.Lc)
-                return int(tee_params.Lp)
+                    return int(tee_params.Lp)
+                return int(tee_params.Lo)
     if element.Category.IsId(BuiltInCategory.OST_DuctTerminal):
         terminal_flow = cross_tee_calculator.duct_terminals_flows.get(element.Id)
         if terminal_flow is not None:

@@ -357,7 +357,8 @@ class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCal
             filtered_flows = [f for f in all_flows if f not in excluded]
 
             Lc = max(filtered_flows) if filtered_flows else None
-            Lp = min(filtered_flows) if filtered_flows else None
+            Lp = 0 # Для подобных тройников проход не имеет значения, это всегда разветвление или слияние
+
 
             branch_1_critical = False
             branch_2_critical = False
@@ -387,7 +388,6 @@ class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCal
             else:
                 fo_result = fo_2
                 Lo_result = Lo_2
-
 
             return result_name, Lc, Lp, Lo_result, fc, fp, fo_result
 
