@@ -63,15 +63,15 @@ class AuditorEquipment:
 
     def __init__(self,
                  connection_type= "",
-                 x,
-                 y,
-                 z,
+                 x = 0.0,
+                 y = 0.0,
+                 z = 0.0,
                  len = 0,
                  code = "",
                  real_power = "",
                  nominal_power = "",
-                 setting,
-                 maker,
+                 setting = 0.0,
+                 maker = "",
                  full_name = ""):
         self.connection_type = connection_type
         self.x = x
@@ -254,7 +254,7 @@ def extract_heating_device_description(file_path):
             while j < len(lines) and lines[j].strip() != "":
                 data = lines[j].strip().split(';')
                 if data[reading_rules_valve.valve_type] == "ZAWTERM":
-                    valves.append(AuditorEquipment(maker=2, x=3, y=4, z=5, setting=29))
+                    valves.append(AuditorEquipment(maker="2", x=3, y=4, z=5, setting=29))
                     # valves.append(AuditorValves(
                     #     data[reading_rules.valve_type],
                     #     data[reading_rules.valve_mark],
