@@ -402,7 +402,7 @@ def script_execute(plugin_logger):
         sys.exit()
 
     ayditror_equipment_elements = extract_heating_device_description(filepath)
-    ayditror_valve_elements = extract_valve_description(filepath)
+    #ayditror_valve_elements = extract_valve_description(filepath)
 
     # собираем высоты цилиндров в которых будем искать данные
     level_cylinders = get_level_cylinders(ayditror_equipment_elements)
