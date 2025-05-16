@@ -52,7 +52,7 @@ uidoc = __revit__.ActiveUIDocument
 
 class CylinderZ:
     def __init__(self, z_min, z_max):
-        self.diameter = 2000
+        self.diameter = 1500
         self.z_min = z_min
         self.z_max = z_max
         self.len = z_max - z_min
@@ -62,17 +62,17 @@ class AuditorEquipment:
     level_cylinder = None
 
     def __init__(self,
-                 connection_type,
+                 connection_type= "",
                  x,
                  y,
                  z,
-                 len,
-                 code,
-                 real_power,
-                 nominal_power,
+                 len = 0,
+                 code = "",
+                 real_power = "",
+                 nominal_power = "",
                  setting,
                  maker,
-                 full_name):
+                 full_name = ""):
         self.connection_type = connection_type
         self.x = x
         self.y = y
@@ -147,6 +147,22 @@ class AuditorEquipment:
                 print('revit_equipment_z ' + str(revit_coords.z))
                 print('_________________________')
 
+# class AuditorValves:
+#     processed = False
+#     level_cylinder = None
+#
+#     def __init__(self,
+#                  valve_type,
+#                  x,
+#                  y,
+#                  z,
+#                  setting):
+#         self.valve_type = valve_type
+#         self.x = x
+#         self.y = y
+#         self.z = z
+#         self.len = len
+#         self.setting = setting
 
 class ReadingRules:
     connection_type_index = 2
@@ -160,6 +176,14 @@ class ReadingRules:
     setting_index = 28
     maker_index = 30
     full_name_index = 31
+
+class ReadingRulesForValve:
+    connection_type_index = 1
+    maker_index = 2
+    x_index = 3
+    y_index = 4
+    z_index = 5
+    setting_index = 29
 
 class RevitXYZmms:
     def __init__(self, x, y, z):
@@ -181,12 +205,13 @@ def get_setting_float_value(value):
 
 
 def extract_heating_device_description(file_path):
-    reading_rules = ReadingRules()
+    reading_rules_device = ReadingRules()
 
     with codecs.open(file_path, 'r', encoding='utf-8') as file:
         lines = file.readlines()
 
     equipment = []
+
     i = 0
 
     while i < len(lines):
@@ -196,18 +221,19 @@ def extract_heating_device_description(file_path):
 
             while i < len(lines) and lines[i].strip() != "":
                 data = lines[i].strip().split(';')
+
                 equipment.append(AuditorEquipment(
-                    data[reading_rules.connection_type_index],
-                    float(data[reading_rules.x_index].replace(',', '.')) * 1000,
-                    float(data[reading_rules.y_index].replace(',', '.')) * 1000,
-                    float(data[reading_rules.z_index].replace(',', '.')) * 1000,
-                    float(data[reading_rules.len_index].replace(',', '.')),
-                    data[reading_rules.code_index],
-                    float(data[reading_rules.real_power_index]),
-                    float(data[reading_rules.nominal_power_index]),
-                    get_setting_float_value(data[reading_rules.setting_index].replace(',', '.')),
-                    data[reading_rules.maker_index],
-                    data[reading_rules.full_name_index]
+                    data[reading_rules_device.connection_type_index],
+                    float(data[reading_rules_device.x_index].replace(',', '.')) * 1000,
+                    float(data[reading_rules_device.y_index].replace(',', '.')) * 1000,
+                    float(data[reading_rules_device.z_index].replace(',', '.')) * 1000,
+                    float(data[reading_rules_device.len_index].replace(',', '.')),
+                    data[reading_rules_device.code_index],
+                    float(data[reading_rules_device.real_power_index]),
+                    float(data[reading_rules_device.nominal_power_index]),
+                    get_setting_float_value(data[reading_rules_device.setting_index].replace(',', '.')),
+                    data[reading_rules_device.maker_index],
+                    data[reading_rules_device.full_name_index]
                 ))
                 i += 1
 
@@ -216,7 +242,72 @@ def extract_heating_device_description(file_path):
     if not equipment:
         forms.alert("Строка 'Отопительные приборы CO на плане' не найдена в файле.", "Ошибка", exitscript=True)
 
+    reading_rules_valve = ReadingRulesForValve()
+    valves = []
+    j = 0
+
+    while j < len(lines):
+        if "Арматура СО на плане" in lines[j]:
+            description_start_index = j + 3
+            j = description_start_index
+
+            while j < len(lines) and lines[j].strip() != "":
+                data = lines[j].strip().split(';')
+                if data[reading_rules_valve.valve_type] == "ZAWTERM":
+                    valves.append(AuditorEquipment(maker=2, x=3, y=4, z=5, setting=29))
+                    # valves.append(AuditorValves(
+                    #     data[reading_rules.valve_type],
+                    #     data[reading_rules.valve_mark],
+                    #     float(data[reading_rules.x_index].replace(',', '.')) * 1000,
+                    #     float(data[reading_rules.y_index].replace(',', '.')) * 1000,
+                    #     float(data[reading_rules.z_index].replace(',', '.')) * 1000,
+                    #     get_setting_float_value(data[reading_rules.valve_setting_index].replace(',', '.'))
+                    # ))
+                    j += 1
+        j += 1
+
+    if not valves:
+        forms.alert("Строка 'Арматура СО на плане' не найдена в файле.", "Ошибка", exitscript=True)
+
+    equipment = equipment.extend(valves)
+
     return equipment
+
+def extract_valve_description(file_path):
+    reading_rules = ReadingRulesForValve()
+
+    with codecs.open(file_path, 'r', encoding='utf-8') as file:
+        lines = file.readlines()
+
+    valves = []
+    i = 0
+
+    while i < len(lines):
+        if "Арматура СО на плане" in lines[i]:
+            description_start_index = i + 3
+            i = description_start_index
+
+            while i < len(lines) and lines[i].strip() != "":
+                data = lines[i].strip().split(';')
+                if data[reading_rules.valve_type] == "ZAWTERM":
+
+                    valves.append(AuditorEquipment(maker=2, x=3, y=4, z=5, setting=29))
+
+                    # valves.append(AuditorValves(
+                    #     data[reading_rules.valve_type],
+                    #     data[reading_rules.valve_mark],
+                    #     float(data[reading_rules.x_index].replace(',', '.')) * 1000,
+                    #     float(data[reading_rules.y_index].replace(',', '.')) * 1000,
+                    #     float(data[reading_rules.z_index].replace(',', '.')) * 1000,
+                    #     get_setting_float_value(data[reading_rules.valve_setting_index].replace(',', '.'))
+                    # ))
+                    i += 1
+        i += 1
+
+    if not valves:
+        forms.alert("Строка 'Арматура СО на плане' не найдена в файле.", "Ошибка", exitscript=True)
+
+    return valves
 
 def get_elements_by_category(category):
     """ Возвращает коллекцию элементов по категории """
@@ -283,19 +374,19 @@ def print_area_overflow_report(ayditor_equipment, equipment_in_area):
             print(x.Id)
 
 
-def print_not_found_report(ayditror_equipment_elements):
-    not_found_ayditor_reports = []
-    for ayditor_equipment in ayditror_equipment_elements:
-        if not ayditor_equipment.processed:
-            not_found_ayditor_reports.append(ayditor_equipment)
+def print_not_found_report(audytor_equipment_elements):
+    not_found_audytor_reports = []
+    for audytor_equipment in ayditror_equipment_elements:
+        if not audytor_equipment.processed:
+            not_found_audytor_reports.append(audytor_equipment)
 
-    if len(not_found_ayditor_reports) > 0:
+    if len(not_found_audytor_reports) > 0:
         print('Не найдено универсальное оборудование в областях:')
-        for ayditor_equipment in not_found_ayditor_reports:
+        for audytor_equipment in not_found_audytor_reports:
             print('Прибор х: {}, y: {}, z: {}'.format(
-                ayditor_equipment.x,
-                ayditor_equipment.y,
-                ayditor_equipment.z))
+                audytor_equipment.x,
+                audytor_equipment.y,
+                audytor_equipment.z))
 
 FAMILY_NAME_CONST = 'Обр_ОП_Универсальный'
 
@@ -311,6 +402,7 @@ def script_execute(plugin_logger):
         sys.exit()
 
     ayditror_equipment_elements = extract_heating_device_description(filepath)
+    ayditror_valve_elements = extract_valve_description(filepath)
 
     # собираем высоты цилиндров в которых будем искать данные
     level_cylinders = get_level_cylinders(ayditror_equipment_elements)
