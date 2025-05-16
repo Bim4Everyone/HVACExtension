@@ -253,7 +253,7 @@ def extract_heating_device_description(file_path):
 
             while j < len(lines) and lines[j].strip() != "":
                 data = lines[j].strip().split(';')
-                if data[reading_rules_valve.valve_type] == "ZAWTERM":
+                if data[reading_rules_valve.connection_type_index] == "ZAWTERM":
                     valves.append(AuditorEquipment(maker="2", x=3, y=4, z=5, setting=29))
                     # valves.append(AuditorValves(
                     #     data[reading_rules.valve_type],
