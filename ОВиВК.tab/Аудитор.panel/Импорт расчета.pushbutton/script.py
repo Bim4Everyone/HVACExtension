@@ -203,24 +203,18 @@ def get_setting_float_value(value):
     else:
         return float(value)
 
-
 def rotate_point_around_origin(x, y, z, angle_degrees):
     if angle_degrees == 0:
         return x, y, z
-
     # Угол в радианах
     angle_radians = math.radians(angle_degrees)
-
     # Матрица поворота вокруг оси Z (в плоскости XY)
     cos_theta = math.cos(angle_radians)
     sin_theta = math.sin(angle_radians)
-
     x_new = x * cos_theta - y * sin_theta
     y_new = x * sin_theta + y * cos_theta
     z_new = z
-
     return x_new, y_new, z_new
-
 
 def extract_heating_device_description(file_path, angle):
     reading_rules_device = ReadingRules()
@@ -236,16 +230,12 @@ def extract_heating_device_description(file_path, angle):
         if "Отопительные приборы CO на плане" in lines[i]:
             description_start_index = i + 3
             i = description_start_index
-
             while i < len(lines) and lines[i].strip() != "":
                 data = lines[i].strip().split(';')
-
                 x = float(data[reading_rules_device.x_index].replace(',', '.')) * 1000
                 y = float(data[reading_rules_device.y_index].replace(',', '.')) * 1000
                 z = float(data[reading_rules_device.z_index].replace(',', '.')) * 1000
-
                 x, y, z = rotate_point_around_origin(x, y, z, angle)
-
                 equipment.append(AuditorEquipment(
                     data[reading_rules_device.connection_type_index],
                     x,
@@ -260,7 +250,6 @@ def extract_heating_device_description(file_path, angle):
                     data[reading_rules_device.full_name_index]
                 ))
                 i += 1
-
         i += 1
 
     if not equipment:
@@ -270,28 +259,28 @@ def extract_heating_device_description(file_path, angle):
     valves = []
     j = 0
 
-    while j < len(lines):
-        if "Арматура СО на плане" in lines[j]:
-            description_start_index = j + 3
-            j = description_start_index
+    # while j < len(lines):
+    #     if "Арматура СО на плане" in lines[j]:
+    #         description_start_index = j + 3
+    #         j = description_start_index
+    #
+    #         while j < len(lines) and lines[j].strip() != "":
+    #             data = lines[j].strip().split(';')
+    #             if data[reading_rules_valve.connection_type_index] == "ZAWTERM":
+    #                 valves.append(AuditorEquipment(maker="2", x=3, y=4, z=5, setting=29))
+    #                 # valves.append(AuditorValves(
+    #                 #     data[reading_rules.valve_type],
+    #                 #     data[reading_rules.valve_mark],
+    #                 #     float(data[reading_rules.x_index].replace(',', '.')) * 1000,
+    #                 #     float(data[reading_rules.y_index].replace(',', '.')) * 1000,
+    #                 #     float(data[reading_rules.z_index].replace(',', '.')) * 1000,
+    #                 #     get_setting_float_value(data[reading_rules.valve_setting_index].replace(',', '.'))
+    #                 # ))
+    #                 j += 1
+    #     j += 1
 
-            while j < len(lines) and lines[j].strip() != "":
-                data = lines[j].strip().split(';')
-                if data[reading_rules_valve.connection_type_index] == "ZAWTERM":
-                    valves.append(AuditorEquipment(maker="2", x=3, y=4, z=5, setting=29))
-                    # valves.append(AuditorValves(
-                    #     data[reading_rules.valve_type],
-                    #     data[reading_rules.valve_mark],
-                    #     float(data[reading_rules.x_index].replace(',', '.')) * 1000,
-                    #     float(data[reading_rules.y_index].replace(',', '.')) * 1000,
-                    #     float(data[reading_rules.z_index].replace(',', '.')) * 1000,
-                    #     get_setting_float_value(data[reading_rules.valve_setting_index].replace(',', '.'))
-                    # ))
-                    j += 1
-        j += 1
-
-    if not valves:
-        forms.alert("Строка 'Арматура СО на плане' не найдена в файле.", "Ошибка", exitscript=True)
+    # if not valves:
+    #     forms.alert("Строка 'Арматура СО на плане' не найдена в файле.", "Ошибка", exitscript=True)
 
     equipment.extend(valves)
 
@@ -364,7 +353,7 @@ def print_area_overflow_report(ayditor_equipment, equipment_in_area):
 
 def print_not_found_report(audytor_equipment_elements):
     not_found_audytor_reports = []
-    for audytor_equipment in ayditror_equipment_elements:
+    for audytor_equipment in audytor_equipment_elements:
         if not audytor_equipment.processed:
             not_found_audytor_reports.append(audytor_equipment)
 
@@ -384,10 +373,10 @@ def script_execute(plugin_logger):
     if doc.IsFamilyDocument:
         forms.alert("Надстройка не предназначена для работы с семействами", "Ошибка", exitscript=True )
 
-    # filepath = select_file('Файл расчетов (*.txt)|*.txt')
-    #
-    # if filepath is None:
-    #     sys.exit()
+    filepath = select_file('Файл расчетов (*.txt)|*.txt')
+
+    if filepath is None:
+        sys.exit()
 
     angle = forms.ask_for_string(
         default='0',
@@ -404,8 +393,8 @@ def script_execute(plugin_logger):
             exitscript=True
         )
 
-
     ayditror_equipment_elements = extract_heating_device_description(filepath, angle)
+    #ayditror_valve_elements = extract_valve_description(filepath)
 
     # собираем высоты цилиндров в которых будем искать данные
     level_cylinders = get_level_cylinders(ayditror_equipment_elements)
