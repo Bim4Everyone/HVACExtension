@@ -50,6 +50,9 @@ uiapp = DocumentManager.Instance.CurrentUIApplication
 #app = uiapp.Application
 uidoc = __revit__.ActiveUIDocument
 
+EQUIPMENT_TYPE_NAME = "Оборудование"
+VALVE_TYPE_NAME = "Клапан"
+
 class CylinderZ:
     def __init__(self, z_min, z_max):
         self.diameter = 2000
@@ -60,6 +63,7 @@ class CylinderZ:
 class AuditorEquipment:
     processed = False
     level_cylinder = None
+    type_name = None
 
     def __init__(self,
                  connection_type= "",
@@ -72,7 +76,8 @@ class AuditorEquipment:
                  nominal_power = "",
                  setting = 0.0,
                  maker = "",
-                 full_name = ""):
+                 full_name = "",
+                 type_name = None):
         self.connection_type = connection_type
         self.x = x
         self.y = y
@@ -84,6 +89,7 @@ class AuditorEquipment:
         self.setting = setting
         self.maker = maker
         self.full_name = full_name
+        self.type_name = type_name
 
     def is_in_data_area(self, revit_equipment):
         xyz = revit_equipment.Location.Point
@@ -105,6 +111,7 @@ class AuditorEquipment:
         radius = self.level_cylinder.diameter / 2.0
 
         epsilon = 1e-9
+
         if ((abs(self.level_cylinder.z_min - revit_coords.z) <= epsilon or self.level_cylinder.z_min < revit_coords.z)
                 and (abs(revit_coords.z - self.level_cylinder.z_max) <= epsilon
                      or revit_coords.z < self.level_cylinder.z_max)):
@@ -113,8 +120,8 @@ class AuditorEquipment:
 
             distance = min(distance_to_bb_center, distance_to_location_center)
 
-            self.print_debug_info(revit_equipment, 1850772, distance,
-                                  distance_to_bb_center, distance_to_location_center, radius, revit_coords)
+            #self.print_debug_info(revit_equipment, 1850772, distance,
+            #                      distance_to_bb_center, distance_to_location_center, radius, revit_coords)
             return distance <= radius
         return False
 
@@ -152,22 +159,7 @@ class AuditorEquipment:
                 print('revit_equipment_z ' + str(revit_coords.z))
                 print('_________________________')
 
-# class AuditorValves:
-#     processed = False
-#     level_cylinder = None
-#
-#     def __init__(self,
-#                  valve_type,
-#                  x,
-#                  y,
-#                  z,
-#                  setting):
-#         self.valve_type = valve_type
-#         self.x = x
-#         self.y = y
-#         self.z = z
-#         self.len = len
-#         self.setting = setting
+
 
 class ReadingRules:
     connection_type_index = 2
@@ -252,7 +244,8 @@ def extract_heating_device_description(file_path, angle):
                     float(data[reading_rules_device.nominal_power_index]),
                     get_setting_float_value(data[reading_rules_device.setting_index].replace(',', '.')),
                     data[reading_rules_device.maker_index],
-                    data[reading_rules_device.full_name_index]
+                    data[reading_rules_device.full_name_index],
+                    EQUIPMENT_TYPE_NAME
                 ))
                 i += 1
         i += 1
@@ -272,13 +265,13 @@ def extract_heating_device_description(file_path, angle):
             while j < len(lines) and lines[j].strip() != "":
                 data = lines[j].strip().split(';')
                 if data[reading_rules_valve.connection_type_index] == "ZAWTERM":
-                    print get_setting_float_value(data[reading_rules_valve.setting_index].replace(',', '.'))
                     valves.append(AuditorEquipment(
                         data[reading_rules_valve.maker_index],
                         float(data[reading_rules_valve.x_index].replace(',', '.')) * 1000,
                         float(data[reading_rules_valve.y_index].replace(',', '.')) * 1000,
                         float(data[reading_rules_valve.z_index].replace(',', '.')) * 1000,
-                        setting=get_setting_float_value(data[reading_rules_valve.setting_index].replace(',', '.'))
+                        setting=get_setting_float_value(data[reading_rules_valve.setting_index].replace(',', '.')),
+                        type_name=VALVE_TYPE_NAME
                     ))
                     j += 1
         j += 1
@@ -299,14 +292,15 @@ def get_elements_by_category(category):
     return col
 
 def insert_data(element, auditor_data):
-    real_power_watts = UnitUtils.ConvertToInternalUnits(auditor_data.real_power, UnitTypeId.Watts)
-    len_meters = UnitUtils.ConvertToInternalUnits(auditor_data.len, UnitTypeId.Millimeters)
-    if element.Id.IntegerValue == 1850772:
-        print auditor_data.setting
-    element.SetParamValue('ADSK_Размер_Длина', len_meters)
-    element.SetParamValue('ADSK_Код изделия', auditor_data.code)
-    element.SetParamValue('ADSK_Настройка', auditor_data.setting)
-    element.SetParamValue('ADSK_Тепловая мощность', real_power_watts)
+    if auditor_data.type_name == EQUIPMENT_TYPE_NAME:
+        real_power_watts = UnitUtils.ConvertToInternalUnits(auditor_data.real_power, UnitTypeId.Watts)
+        len_meters = UnitUtils.ConvertToInternalUnits(auditor_data.len, UnitTypeId.Millimeters)
+        element.SetParamValue('ADSK_Размер_Длина', len_meters)
+        element.SetParamValue('ADSK_Код изделия', auditor_data.code)
+        element.SetParamValue('ADSK_Настройка', auditor_data.setting)
+        element.SetParamValue('ADSK_Тепловая мощность', real_power_watts)
+    else:
+        element.SetParamValue('ADSK_Настройка', auditor_data.setting)
 
 def get_bb_center(bb):
     minPoint = bb.Min
@@ -326,7 +320,8 @@ def get_level_cylinders(ayditror_equipment_elements):
     '''
     unique_z_values = set()
     for ayditor_equipment in ayditror_equipment_elements:
-        unique_z_values.add(ayditor_equipment.z)
+        if ayditor_equipment.type_name == EQUIPMENT_TYPE_NAME:
+            unique_z_values.add(ayditor_equipment.z)
 
     unique_z_values = sorted(unique_z_values)
 
@@ -335,8 +330,8 @@ def get_level_cylinders(ayditror_equipment_elements):
         z_min = unique_z_values[i] - 250
         if i < len(unique_z_values) - 1:
             z_max = unique_z_values[i + 1] - 250
-            if z_max - z_min < 850:
-                z_max = z_min+850
+            # if z_max - z_min < 850: #
+            #     z_max = z_min+850
         else:
             z_max = z_min + 2500
 
