@@ -52,7 +52,7 @@ uidoc = __revit__.ActiveUIDocument
 
 class CylinderZ:
     def __init__(self, z_min, z_max):
-        self.diameter = 1500
+        self.diameter = 2000
         self.z_min = z_min
         self.z_max = z_max
         self.len = z_max - z_min
@@ -113,6 +113,8 @@ class AuditorEquipment:
 
             distance = min(distance_to_bb_center, distance_to_location_center)
 
+            self.print_debug_info(revit_equipment, 1850772, distance,
+                                  distance_to_bb_center, distance_to_location_center, radius, revit_coords)
             return distance <= radius
         return False
 
@@ -141,6 +143,9 @@ class AuditorEquipment:
                 print('distance: ' + str(distance))
                 print('distance_to_bb_center: ' + str(distance_to_bb_center))
                 print('distance_to_location_center: ' + str(distance_to_location_center))
+                print('__Данные для расчета по xy__:')
+                print('revit_equipment_x ' + str(revit_coords.x))
+                print('revit_equipment_y ' + str(revit_coords.y))
                 print('__Данные для расчета по z__:')
                 print('level_cilinder_z_min ' + str(self.level_cylinder.z_min))
                 print('level_cilinder_z_max ' + str(self.level_cylinder.z_max))
@@ -183,7 +188,7 @@ class ReadingRulesForValve:
     x_index = 3
     y_index = 4
     z_index = 5
-    setting_index = 29
+    setting_index = 17
 
 class RevitXYZmms:
     def __init__(self, x, y, z):
@@ -259,28 +264,27 @@ def extract_heating_device_description(file_path, angle):
     valves = []
     j = 0
 
-    # while j < len(lines):
-    #     if "Арматура СО на плане" in lines[j]:
-    #         description_start_index = j + 3
-    #         j = description_start_index
-    #
-    #         while j < len(lines) and lines[j].strip() != "":
-    #             data = lines[j].strip().split(';')
-    #             if data[reading_rules_valve.connection_type_index] == "ZAWTERM":
-    #                 valves.append(AuditorEquipment(maker="2", x=3, y=4, z=5, setting=29))
-    #                 # valves.append(AuditorValves(
-    #                 #     data[reading_rules.valve_type],
-    #                 #     data[reading_rules.valve_mark],
-    #                 #     float(data[reading_rules.x_index].replace(',', '.')) * 1000,
-    #                 #     float(data[reading_rules.y_index].replace(',', '.')) * 1000,
-    #                 #     float(data[reading_rules.z_index].replace(',', '.')) * 1000,
-    #                 #     get_setting_float_value(data[reading_rules.valve_setting_index].replace(',', '.'))
-    #                 # ))
-    #                 j += 1
-    #     j += 1
+    while j < len(lines):
+        if "Арматура СО на плане" in lines[j]:
+            description_start_index = j + 3
+            j = description_start_index
 
-    # if not valves:
-    #     forms.alert("Строка 'Арматура СО на плане' не найдена в файле.", "Ошибка", exitscript=True)
+            while j < len(lines) and lines[j].strip() != "":
+                data = lines[j].strip().split(';')
+                if data[reading_rules_valve.connection_type_index] == "ZAWTERM":
+                    print get_setting_float_value(data[reading_rules_valve.setting_index].replace(',', '.'))
+                    valves.append(AuditorEquipment(
+                        data[reading_rules_valve.maker_index],
+                        float(data[reading_rules_valve.x_index].replace(',', '.')) * 1000,
+                        float(data[reading_rules_valve.y_index].replace(',', '.')) * 1000,
+                        float(data[reading_rules_valve.z_index].replace(',', '.')) * 1000,
+                        setting=get_setting_float_value(data[reading_rules_valve.setting_index].replace(',', '.'))
+                    ))
+                    j += 1
+        j += 1
+
+    if not valves:
+        forms.alert("Строка 'Арматура СО на плане' не найдена в файле.", "Ошибка", exitscript=True)
 
     equipment.extend(valves)
 
@@ -297,7 +301,8 @@ def get_elements_by_category(category):
 def insert_data(element, auditor_data):
     real_power_watts = UnitUtils.ConvertToInternalUnits(auditor_data.real_power, UnitTypeId.Watts)
     len_meters = UnitUtils.ConvertToInternalUnits(auditor_data.len, UnitTypeId.Millimeters)
-
+    if element.Id.IntegerValue == 1850772:
+        print auditor_data.setting
     element.SetParamValue('ADSK_Размер_Длина', len_meters)
     element.SetParamValue('ADSK_Код изделия', auditor_data.code)
     element.SetParamValue('ADSK_Настройка', auditor_data.setting)
@@ -330,6 +335,8 @@ def get_level_cylinders(ayditror_equipment_elements):
         z_min = unique_z_values[i] - 250
         if i < len(unique_z_values) - 1:
             z_max = unique_z_values[i + 1] - 250
+            if z_max - z_min < 850:
+                z_max = z_min+850
         else:
             z_max = z_min + 2500
 
