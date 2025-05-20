@@ -264,6 +264,7 @@ def extract_heating_device_description(file_path, angle):
 
             while j < len(lines) and lines[j].strip() != "":
                 data = lines[j].strip().split(';')
+
                 if data[reading_rules_valve.connection_type_index] == "ZAWTERM":
                     valves.append(AuditorEquipment(
                         data[reading_rules_valve.maker_index],
@@ -273,8 +274,10 @@ def extract_heating_device_description(file_path, angle):
                         setting=get_setting_float_value(data[reading_rules_valve.setting_index].replace(',', '.')),
                         type_name=VALVE_TYPE_NAME
                     ))
-                    j += 1
-        j += 1
+
+                j += 1  # Всегда увеличиваем счётчик
+        else:
+            j += 1
 
     if not valves:
         forms.alert("Строка 'Арматура СО на плане' не найдена в файле.", "Ошибка", exitscript=True)
@@ -406,17 +409,17 @@ def script_execute(plugin_logger):
 
     revit_equipment_elements = get_elements_by_category(BuiltInCategory.OST_MechanicalEquipment)
 
+    filtered_equipment = [
+        eq for eq in revit_equipment_elements
+        if FAMILY_NAME_CONST in eq.Symbol.Family.Name
+    ]
+
     with revit.Transaction("BIM: Импорт расчетов"):
         for ayditor_equipment in ayditror_equipment_elements:
-            equipment_in_area = [] # Список данных которые попадают в текущую область
-            for revit_equipment in revit_equipment_elements:
-                family_name = revit_equipment.Symbol.Family.Name
-                if FAMILY_NAME_CONST not in family_name:
-                    continue
-
-                if ayditor_equipment.is_in_data_area(revit_equipment):
-                    equipment_in_area.append(revit_equipment)
-
+            # Если есть spatial index, фильтровать по ней
+            equipment_in_area = [
+                eq for eq in filtered_equipment if ayditor_equipment.is_in_data_area(eq)
+            ]
             ayditor_equipment.processed = len(equipment_in_area) >= 1
             if len(equipment_in_area) == 1:
                 insert_data(equipment_in_area[0], ayditor_equipment)
