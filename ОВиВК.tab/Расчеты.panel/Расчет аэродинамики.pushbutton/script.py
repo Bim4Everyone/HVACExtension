@@ -167,6 +167,16 @@ def get_system_elements():
             exitscript=True
         )
     duct_elements = system.DuctNetwork
+
+    if any(connector.Shape == ConnectorProfileType.Oval
+           for element in duct_elements
+           for connector in calc_lib.get_connectors(element)):
+        forms.alert(
+            "Не предусмотрена обработка овальных коннекторов.",
+            title="Ошибка",
+            exitscript=True
+        )
+
     system_name = system.GetParamValue(BuiltInParameter.RBS_SYSTEM_NAME_PARAM)
     selected_system = SelectedSystem(system_name, duct_elements, system)
     return selected_system

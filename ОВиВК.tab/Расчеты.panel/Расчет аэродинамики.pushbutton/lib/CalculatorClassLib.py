@@ -60,15 +60,10 @@ class ConnectorData:
         if connector.Shape == ConnectorProfileType.Round:
             self.radius = UnitUtils.ConvertFromInternalUnits(connector.Radius, UnitTypeId.Millimeters)
             self.area = math.pi * ((self.radius / 1000) ** 2)
-        elif connector.Shape == ConnectorProfileType.Rectangular:
+        else:
             self.height = UnitUtils.ConvertFromInternalUnits(connector.Height, UnitTypeId.Millimeters)
             self.width = UnitUtils.ConvertFromInternalUnits(connector.Width, UnitTypeId.Millimeters)
             self.area = self.height / 1000 * self.width / 1000
-        else:
-            forms.alert(
-                "Не предусмотрена обработка овальных коннекторов.",
-                "Ошибка",
-                exitscript=True)
 
     def get_connector_angle(self):
         """
@@ -86,9 +81,9 @@ class ConnectorData:
         Определяет элемент, к которому подключен коннектор.
         """
         for reference in self.connector_element.AllRefs:
-            if ((reference.Owner.Category.IsId(BuiltInCategory.OST_DuctCurves) or
-                    reference.Owner.Category.IsId(BuiltInCategory.OST_DuctFitting)) or
-                    reference.Owner.Category.IsId(BuiltInCategory.OST_MechanicalEquipment)):
+            if reference.Owner.InAnyCategory([BuiltInCategory.OST_DuctCurves,
+                                              BuiltInCategory.OST_DuctFitting,
+                                              BuiltInCategory.OST_MechanicalEquipment]):
                 self.connected_element = reference.Owner
 
 class MulticonElementCharacteristic:
@@ -118,6 +113,7 @@ class MulticonElementCharacteristic:
 class AerodinamicCoefficientCalculator(object):
     """Класс для расчета аэродинамических коэффициентов."""
 
+    # GUIDы нужны для обращения в ExternalServiceRegistry, сверки с сервисом текущего элемента и его замены
     LOSS_GUID_CONST = "46245996-eebb-4536-ac17-9c1cd917d8cf"
     COEFF_GUID_CONST = "5a598293-1504-46cc-a9c0-de55c82848b9"
 
@@ -153,12 +149,25 @@ class AerodinamicCoefficientCalculator(object):
             try:
                 section = self.system.GetSectionByIndex(number)
             except:
-                section = None  # Это делается для
+                section = None
+            # Если нужной секции уже нет в текущей системе, а вариант еще остаются - вылетит ошибка. Продолжаем перебор
+            # чтоб исключить пропуск индекса.
+            # Сразу в эксепт continue включить не получится, ревит будет вылетать без отчета
             if section is None:
                 continue
             found_section_indexes.add(number)
 
         return sorted(found_section_indexes)
+
+    def _is_rectangular_connector(self, connector):
+        return connector.Shape == ConnectorProfileType.Rectangular
+
+    def _is_rectangular_connector_data(self, connector_data):
+        return connector_data.connector_element.Shape == ConnectorProfileType.Rectangular
+
+    def _is_rectangular_element(self, element):
+        connectors = self.get_connectors(element)
+        return connectors[0].Shape == ConnectorProfileType.Rectangular
 
     def get_critical_path(self, system):
         """
@@ -189,12 +198,11 @@ class AerodinamicCoefficientCalculator(object):
             True или False
         """
         if isinstance(element, Connector):
-            return element.Shape == ConnectorProfileType.Rectangular
-        if isinstance(element, ConnectorData):
-            return element.connector_element.Shape == ConnectorProfileType.Rectangular
+            return self._is_rectangular_connector(element)
+        elif isinstance(element, ConnectorData):
+            return self._is_rectangular_connector_data(element)
         else:
-            connectors = self.get_connectors(element)
-            return connectors[0].Shape == ConnectorProfileType.Rectangular
+            return self._is_rectangular_element(element)
 
     def get_element_area(self, element):
         """
@@ -207,11 +215,6 @@ class AerodinamicCoefficientCalculator(object):
         """
         def get_connector_area(connector):
             area = None
-            if connector.Shape == ConnectorProfileType.Oval:
-                forms.alert(
-                    "Не предусмотрена обработка овальных коннекторов.",
-                    "Ошибка",
-                    exitscript=True)
 
             if connector.Shape == ConnectorProfileType.Round:
                 radius = UnitUtils.ConvertFromInternalUnits(connector.Radius, UnitTypeId.Millimeters)
@@ -259,7 +262,7 @@ class AerodinamicCoefficientCalculator(object):
 
             # Если это воздуховод — фильтруем только не Curve-коннекторы. Это завязано на врезки которые тоже падают в список
             # но с нулевым расходом и двунаправленным потоком
-            if element.Category.Id.IntegerValue == int(BuiltInCategory.OST_DuctCurves):
+            if element.Category.IsId(BuiltInCategory.OST_DuctCurves):
                 for conn in element.ConnectorManager.Connectors:
                     if conn.ConnectorType != ConnectorType.Curve:
                         connectors.append(conn)
