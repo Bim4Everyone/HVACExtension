@@ -100,22 +100,26 @@ class TransitionElbowCoefficientCalculator(CalculatorClassLib.AerodinamicCoeffic
 
         if is_confuser:
             d = output_conn.radius * 2 if is_circular else (4.0 * output_conn.width * output_conn.height) / (
-                2 * (output_conn.width + output_conn.height))
+                2 * (output_conn.width + output_conn.height)) # Для прямоугольных сечений берем эквивалентный D
             l_d = length / float(d)
 
-            thresholds = [(1, [(10, 0.41), (20, 0.34), (30, 0.27), (180, 0.24)]),
-                          (0.15, [(10, 0.39), (20, 0.29), (30, 0.22), (180, 0.18)]),
-                          (float('inf'), [(10, 0.29), (20, 0.20), (30, 0.15), (180, 0.13)])]
+            if is_circular:
+                thresholds = [(0.1, [(10, 0.41), (20, 0.34), (30, 0.27), (180, 0.24)]),
+                              (0.15, [(10, 0.39), (20, 0.29), (30, 0.22), (180, 0.18)]),
+                              (float('inf'), [(10, 0.29), (20, 0.20), (30, 0.15), (180, 0.13)])]
 
-            for limit, table in thresholds:
-                if l_d <= limit:
-                    for angle_limit, coeff in table:
-                        if angle <= angle_limit:
-                            return coeff
+                for limit, table in thresholds:
+                    if l_d <= limit:
+                        for angle_limit, coeff in table:
+                            if angle <= angle_limit:
+                                return coeff
+
 
         else:
             F = input_conn.area / float(output_conn.area)
-            angle_limits = [(16, 0), (24, 0), (30 if is_circular else 32, 0), (180, 0)]
+            angle_limits = (
+                [16, 24, 30, 180] if is_circular else [20, 24, 32, 180]
+            )
 
             values_by_F = {
                 True: [  # Circular
@@ -134,7 +138,7 @@ class TransitionElbowCoefficientCalculator(CalculatorClassLib.AerodinamicCoeffic
 
             for f_limit, coeffs in values_by_F[is_circular]:
                 if F <= f_limit:
-                    for (a_limit, coeff) in zip([l[0] for l in angle_limits], coeffs):
+                    for a_limit, coeff in zip(angle_limits, coeffs):
                         if angle <= a_limit:
                             return coeff
 
