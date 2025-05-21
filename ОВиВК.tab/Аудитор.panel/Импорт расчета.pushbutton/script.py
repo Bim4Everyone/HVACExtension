@@ -279,8 +279,8 @@ def extract_heating_device_description(file_path, angle):
         else:
             j += 1
 
-    if not valves:
-        forms.alert("Строка 'Арматура СО на плане' не найдена в файле.", "Ошибка", exitscript=True)
+    # if not valves:
+    #     forms.alert("Строка 'Арматура СО на плане' не найдена в файле.", "Ошибка", exitscript=True)
 
     equipment.extend(valves)
 
