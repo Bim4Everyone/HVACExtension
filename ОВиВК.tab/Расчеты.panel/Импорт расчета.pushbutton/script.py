@@ -20,6 +20,7 @@ clr.ImportExtensions(Revit.Elements)
 clr.ImportExtensions(Revit.GeometryConversion)
 
 import System
+import JsonOperatorLib
 from System.Collections.Generic import *
 
 
@@ -383,8 +384,13 @@ def script_execute(plugin_logger):
     if filepath is None:
         sys.exit()
 
+    operator = JsonOperatorLib.JsonAngleOperator(doc, uidoc)
+
+    # Получаем данные из последнего по дате редактирования файла
+    old_angle = operator.get_json_data()
+
     angle = forms.ask_for_string(
-        default='0',
+        default=str(old_angle),
         prompt='Введите угол наклона модели в градусах:',
         title="Аудитор импорт"
     )
@@ -397,6 +403,11 @@ def script_execute(plugin_logger):
             "Ошибка",
             exitscript=True
         )
+
+    if angle is None:
+        sys.exit()
+
+    operator.send_json_data(angle)
 
     ayditror_equipment_elements = extract_heating_device_description(filepath, angle)
     #ayditror_valve_elements = extract_valve_description(filepath)
