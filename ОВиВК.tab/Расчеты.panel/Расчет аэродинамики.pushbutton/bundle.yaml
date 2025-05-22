@@ -1,0 +1,28 @@
+title:
+  ru: Расчет аэродинамики
+  en_us: Aerodynamics calculation
+
+tooltip:
+  ru: Расчет КМС для системы общеобменной вентиляции и вывод отчета.
+  
+    1. Заполните местные сопротивления/живые сечения/потери напора на элементах системы в которых это нужно.
+
+    2. Выделите систему воздуховодов, имеющую расчетный путь(красный пунктир в инспекторе систем).
+
+    3. Вызовите команду
+
+  en_us: Calculation of the coefficient for the ventilation system and report output.
+
+    1. Fill in the local resistances/live sections/pressure losses on the system elements where this is required.
+
+    2. Select the air duct system that has a calculated path (red dotted line in the system inspector).
+
+    3. Call the command
+
+
+author: Redomine
+help_url: "https://kb.a101.ru/pages/viewpage.action?pageId=67842877"
+
+min_revit_version: 2022
+max_revit_version: 2024
+
