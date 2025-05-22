@@ -150,11 +150,10 @@ class AerodinamicCoefficientCalculator(object):
                 section = self.system.GetSectionByIndex(number)
             except:
                 section = None
-            # Если нужной секции уже нет в текущей системе, а вариант еще остаются - вылетит ошибка. Продолжаем перебор
-            # чтоб исключить пропуск индекса.
-            # Сразу в эксепт continue включить не получится, ревит будет вылетать без отчета
+            # Если нужной секции уже нет в текущей системе, а вариант еще остаются - вылетит ошибка.
+            # Сразу в эксепт break включить не получится, ревит будет вылетать без отчета
             if section is None:
-                continue
+                break
             found_section_indexes.add(number)
 
         return sorted(found_section_indexes)
@@ -234,17 +233,22 @@ class AerodinamicCoefficientCalculator(object):
             return area
 
         else:
+            connector_areas = []
             connectors = self.get_connectors(element)
-            hvac_connector = next((conn for conn in connectors if conn.Domain == Domain.DomainHvac), None)
-            if hvac_connector is None:
+
+            # Фильтруем только HVAC-коннекторы
+            hvac_connectors = [conn for conn in connectors if conn.Domain == Domain.DomainHvac]
+
+            if not hvac_connectors:
                 forms.alert(
                     "Не удалось определить площадь одного из элементов. ID: " + str(element.Id),
                     "Ошибка",
                     exitscript=True
                 )
 
-            area = get_connector_area(hvac_connector)
-            return area
+            connector_areas = [get_connector_area(conn) for conn in hvac_connectors]
+            min_area = min(connector_areas)
+            return min_area
 
     def get_connectors(self, element):
         """

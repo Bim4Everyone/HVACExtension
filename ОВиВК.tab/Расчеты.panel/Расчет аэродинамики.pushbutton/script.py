@@ -459,7 +459,6 @@ def get_network_element_real_size(element, element_type):
                                        cross_tee_calculator.CROSS_EXHAUST_PASS_ROUND_NAME]:
                     return tee_params.fp
                 return tee_params.fo
-
         size = calc_lib.get_element_area(element)
         return size
     size = element.GetParamValueOrDefault(cross_section_param)
