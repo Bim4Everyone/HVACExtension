@@ -52,6 +52,7 @@ uidoc = __revit__.ActiveUIDocument
 
 EQUIPMENT_TYPE_NAME = "Оборудование"
 VALVE_TYPE_NAME = "Клапан"
+OUTER_VALVE_NAME = "ZAWTERM"
 
 class CylinderZ:
     def __init__(self, z_min, z_max):
@@ -162,8 +163,6 @@ class AuditorEquipment:
                 print('revit_equipment_z ' + str(revit_coords.z))
                 print('_________________________')
 
-
-
 class ReadingRules:
     connection_type_index = 2
     x_index = 3
@@ -217,74 +216,68 @@ def rotate_point_around_origin(x, y, z, angle_degrees):
     return x_new, y_new, z_new
 
 def extract_heating_device_description(file_path, angle):
-    reading_rules_device = ReadingRules()
-    reading_rules_valve = ReadingRulesForValve()
-
     def parse_float(value):
         return float(value.replace(',', '.'))
 
-    def parse_equipment_line(data, rules, is_valve=False):
-        x = parse_float(data[rules.x_index]) * 1000
-        y = parse_float(data[rules.y_index]) * 1000
-        z = parse_float(data[rules.z_index]) * 1000
+    def parse_equipment_section(lines, title, start_offset, parse_func):
+        result = []
+        i = 0
+        while i < len(lines):
+            if title in lines[i]:
+                i += start_offset
+                while i < len(lines) and lines[i].strip():
+                    parsed_item = parse_func(lines[i])
+                    if parsed_item is not None:
+                        result.append(parsed_item)
+                    i += 1
+            i += 1
+        return result
+
+    def parse_heating_device(line):
+        data = line.strip().split(';')
+        rr = reading_rules_device
+        x = parse_float(data[rr.x_index]) * 1000
+        y = parse_float(data[rr.y_index]) * 1000
+        z = parse_float(data[rr.z_index]) * 1000
         x, y, z = rotate_point_around_origin(x, y, z, angle)
 
-        if is_valve:
-            return AuditorEquipment(
-                maker=data[rules.maker_index],
-                x=x,
-                y=y,
-                z=z,
-                setting=get_setting_float_value(data[rules.setting_index].replace(',', '.')),
-                type_name=VALVE_TYPE_NAME
-            )
-        else:
-            return AuditorEquipment(
-                connection_type=data[rules.connection_type_index],
-                x=x,
-                y=y,
-                z=z,
-                length=parse_float(data[rules.len_index]),
-                code=data[rules.code_index],
-                real_power=parse_float(data[rules.real_power_index]),
-                nominal_power=parse_float(data[rules.nominal_power_index]),
-                setting=get_setting_float_value(data[rules.setting_index].replace(',', '.')),
-                maker=data[rules.maker_index],
-                full_name=data[rules.full_name_index],
-                type_name=EQUIPMENT_TYPE_NAME
-            )
+        return AuditorEquipment(
+            data[rr.connection_type_index],
+            x, y, z,
+            parse_float(data[rr.len_index]),
+            data[rr.code_index],
+            parse_float(data[rr.real_power_index]),
+            parse_float(data[rr.nominal_power_index]),
+            get_setting_float_value(data[rr.setting_index].replace(',', '.')),
+            data[rr.maker_index],
+            data[rr.full_name_index],
+            EQUIPMENT_TYPE_NAME
+        )
+
+    def parse_valve(line):
+        data = line.strip().split(';')
+        rr = reading_rules_valve
+        if data[rr.connection_type_index] != OUTER_VALVE_NAME:
+            return None
+        return AuditorEquipment(
+            data[rr.maker_index],
+            parse_float(data[rr.x_index]) * 1000,
+            parse_float(data[rr.y_index]) * 1000,
+            parse_float(data[rr.z_index]) * 1000,
+            setting=get_setting_float_value(data[rr.setting_index].replace(',', '.')),
+            type_name=VALVE_TYPE_NAME
+        )
 
     with codecs.open(file_path, 'r', encoding='utf-8') as file:
         lines = file.readlines()
 
-    equipment = []
+    reading_rules_device = ReadingRules()
+    reading_rules_valve = ReadingRulesForValve()
 
-    def extract_section(lines, section_title, rules, is_valve=False, filter_func=None):
-        extracted = []
-        i = 0
-        while i < len(lines):
-            if section_title in lines[i]:
-                i += 3  # Пропустить заголовки
-                while i < len(lines) and lines[i].strip():
-                    data = lines[i].strip().split(';')
-                    if filter_func and not filter_func(data):
-                        i += 1
-                        continue
-                    extracted.append(parse_equipment_line(data, rules, is_valve))
-                    i += 1
-            i += 1
-        return extracted
+    equipment = parse_equipment_section(lines, "Отопительные приборы CO на плане", 3, parse_heating_device)
+    valves = parse_equipment_section(lines, "Арматура СО на плане", 3, parse_valve)
 
-    # Извлекаем отопительные приборы
-    equipment.extend(extract_section(
-        lines, "Отопительные приборы CO на плане", reading_rules_device
-    ))
-
-    # Извлекаем клапаны
-    equipment.extend(extract_section(
-        lines, "Арматура СО на плане", reading_rules_valve, is_valve=True,
-        filter_func=lambda d: d[reading_rules_valve.connection_type_index] == "ZAWTERM"
-    ))
+    equipment.extend(valves)
 
     if not equipment:
         forms.alert("Не найдено оборудование в импортируемом файле.", "Ошибка", exitscript=True)
@@ -293,11 +286,16 @@ def extract_heating_device_description(file_path, angle):
 
 def get_elements_by_category(category):
     """ Возвращает коллекцию элементов по категории """
-    col = FilteredElementCollector(doc)\
+    revit_equipment_elements = FilteredElementCollector(doc)\
                             .OfCategory(category)\
                             .WhereElementIsNotElementType()\
                             .ToElements()
-    return col
+
+    filtered_equipment = [
+        eq for eq in revit_equipment_elements
+        if FAMILY_NAME_CONST in eq.Symbol.Family.Name
+    ]
+    return filtered_equipment
 
 def insert_data(element, auditor_data):
     if auditor_data.type_name == EQUIPMENT_TYPE_NAME:
@@ -374,11 +372,7 @@ def print_not_found_report(audytor_equipment_elements):
                 audytor_equipment.base_y,
                 audytor_equipment.base_z))
 
-FAMILY_NAME_CONST = 'Обр_ОП_Универсальный'
-
-@notification()
-@log_plugin(EXEC_PARAMS.command_name)
-def script_execute(plugin_logger):
+def process_start_up():
     if doc.IsFamilyDocument:
         forms.alert("Надстройка не предназначена для работы с семействами", "Ошибка", exitscript=True )
 
@@ -412,6 +406,30 @@ def script_execute(plugin_logger):
 
     operator.send_json_data(angle)
 
+    return angle, filepath
+
+def process_audytor_revit_matching(ayditror_equipment_elements, filtered_equipment):
+    for ayditor_equipment in ayditror_equipment_elements:
+        # Если есть spatial index, фильтровать по ней
+        equipment_in_area = [
+            eq for eq in filtered_equipment if ayditor_equipment.is_in_data_area(eq)
+        ]
+        ayditor_equipment.processed = len(equipment_in_area) >= 1
+        if len(equipment_in_area) == 1:
+            insert_data(equipment_in_area[0], ayditor_equipment)
+
+        print_area_overflow_report(ayditor_equipment, equipment_in_area)
+
+    print_not_found_report(ayditror_equipment_elements)
+
+
+FAMILY_NAME_CONST = 'Обр_ОП_Универсальный'
+
+@notification()
+@log_plugin(EXEC_PARAMS.command_name)
+def script_execute(plugin_logger):
+    angle, filepath = process_start_up()
+
     ayditror_equipment_elements = extract_heating_device_description(filepath, angle)
 
     # собираем высоты цилиндров в которых будем искать данные
@@ -420,26 +438,10 @@ def script_execute(plugin_logger):
     for ayditor_equipment in ayditror_equipment_elements:
         ayditor_equipment.set_level_cylinder(level_cylinders)
 
-    revit_equipment_elements = get_elements_by_category(BuiltInCategory.OST_MechanicalEquipment)
-
-    filtered_equipment = [
-        eq for eq in revit_equipment_elements
-        if FAMILY_NAME_CONST in eq.Symbol.Family.Name
-    ]
+    filtered_equipment = get_elements_by_category(BuiltInCategory.OST_MechanicalEquipment)
 
     with revit.Transaction("BIM: Импорт расчетов"):
-        for ayditor_equipment in ayditror_equipment_elements:
-            # Если есть spatial index, фильтровать по ней
-            equipment_in_area = [
-                eq for eq in filtered_equipment if ayditor_equipment.is_in_data_area(eq)
-            ]
-            ayditor_equipment.processed = len(equipment_in_area) >= 1
-            if len(equipment_in_area) == 1:
-                insert_data(equipment_in_area[0], ayditor_equipment)
-
-            print_area_overflow_report(ayditor_equipment, equipment_in_area)
-
-        print_not_found_report(ayditror_equipment_elements)
+        process_audytor_revit_matching(ayditror_equipment_elements, filtered_equipment)
 
 
 script_execute()
