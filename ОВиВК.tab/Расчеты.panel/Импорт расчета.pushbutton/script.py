@@ -82,6 +82,9 @@ class AuditorEquipment:
         self.x = x
         self.y = y
         self.z = z
+        self.base_x = x
+        self.base_y = y
+        self.base_z = z
         self.len = len
         self.code = code
         self.real_power = real_power
@@ -215,74 +218,76 @@ def rotate_point_around_origin(x, y, z, angle_degrees):
 
 def extract_heating_device_description(file_path, angle):
     reading_rules_device = ReadingRules()
+    reading_rules_valve = ReadingRulesForValve()
+
+    def parse_float(value):
+        return float(value.replace(',', '.'))
+
+    def parse_equipment_line(data, rules, is_valve=False):
+        x = parse_float(data[rules.x_index]) * 1000
+        y = parse_float(data[rules.y_index]) * 1000
+        z = parse_float(data[rules.z_index]) * 1000
+        x, y, z = rotate_point_around_origin(x, y, z, angle)
+
+        if is_valve:
+            return AuditorEquipment(
+                maker=data[rules.maker_index],
+                x=x,
+                y=y,
+                z=z,
+                setting=get_setting_float_value(data[rules.setting_index].replace(',', '.')),
+                type_name=VALVE_TYPE_NAME
+            )
+        else:
+            return AuditorEquipment(
+                connection_type=data[rules.connection_type_index],
+                x=x,
+                y=y,
+                z=z,
+                length=parse_float(data[rules.len_index]),
+                code=data[rules.code_index],
+                real_power=parse_float(data[rules.real_power_index]),
+                nominal_power=parse_float(data[rules.nominal_power_index]),
+                setting=get_setting_float_value(data[rules.setting_index].replace(',', '.')),
+                maker=data[rules.maker_index],
+                full_name=data[rules.full_name_index],
+                type_name=EQUIPMENT_TYPE_NAME
+            )
 
     with codecs.open(file_path, 'r', encoding='utf-8') as file:
         lines = file.readlines()
 
     equipment = []
 
-    i = 0
+    def extract_section(lines, section_title, rules, is_valve=False, filter_func=None):
+        extracted = []
+        i = 0
+        while i < len(lines):
+            if section_title in lines[i]:
+                i += 3  # Пропустить заголовки
+                while i < len(lines) and lines[i].strip():
+                    data = lines[i].strip().split(';')
+                    if filter_func and not filter_func(data):
+                        i += 1
+                        continue
+                    extracted.append(parse_equipment_line(data, rules, is_valve))
+                    i += 1
+            i += 1
+        return extracted
 
-    while i < len(lines):
-        if "Отопительные приборы CO на плане" in lines[i]:
-            description_start_index = i + 3
-            i = description_start_index
-            while i < len(lines) and lines[i].strip() != "":
-                data = lines[i].strip().split(';')
-                x = float(data[reading_rules_device.x_index].replace(',', '.')) * 1000
-                y = float(data[reading_rules_device.y_index].replace(',', '.')) * 1000
-                z = float(data[reading_rules_device.z_index].replace(',', '.')) * 1000
-                x, y, z = rotate_point_around_origin(x, y, z, angle)
-                equipment.append(AuditorEquipment(
-                    data[reading_rules_device.connection_type_index],
-                    x,
-                    y,
-                    z,
-                    float(data[reading_rules_device.len_index].replace(',', '.')),
-                    data[reading_rules_device.code_index],
-                    float(data[reading_rules_device.real_power_index]),
-                    float(data[reading_rules_device.nominal_power_index]),
-                    get_setting_float_value(data[reading_rules_device.setting_index].replace(',', '.')),
-                    data[reading_rules_device.maker_index],
-                    data[reading_rules_device.full_name_index],
-                    EQUIPMENT_TYPE_NAME
-                ))
-                i += 1
-        i += 1
+    # Извлекаем отопительные приборы
+    equipment.extend(extract_section(
+        lines, "Отопительные приборы CO на плане", reading_rules_device
+    ))
+
+    # Извлекаем клапаны
+    equipment.extend(extract_section(
+        lines, "Арматура СО на плане", reading_rules_valve, is_valve=True,
+        filter_func=lambda d: d[reading_rules_valve.connection_type_index] == "ZAWTERM"
+    ))
 
     if not equipment:
-        forms.alert("Строка 'Отопительные приборы CO на плане' не найдена в файле.", "Ошибка", exitscript=True)
-
-    reading_rules_valve = ReadingRulesForValve()
-    valves = []
-    j = 0
-
-    while j < len(lines):
-        if "Арматура СО на плане" in lines[j]:
-            description_start_index = j + 3
-            j = description_start_index
-
-            while j < len(lines) and lines[j].strip() != "":
-                data = lines[j].strip().split(';')
-
-                if data[reading_rules_valve.connection_type_index] == "ZAWTERM":
-                    valves.append(AuditorEquipment(
-                        data[reading_rules_valve.maker_index],
-                        float(data[reading_rules_valve.x_index].replace(',', '.')) * 1000,
-                        float(data[reading_rules_valve.y_index].replace(',', '.')) * 1000,
-                        float(data[reading_rules_valve.z_index].replace(',', '.')) * 1000,
-                        setting=get_setting_float_value(data[reading_rules_valve.setting_index].replace(',', '.')),
-                        type_name=VALVE_TYPE_NAME
-                    ))
-
-                j += 1  # Всегда увеличиваем счётчик
-        else:
-            j += 1
-
-    # if not valves:
-    #     forms.alert("Строка 'Арматура СО на плане' не найдена в файле.", "Ошибка", exitscript=True)
-
-    equipment.extend(valves)
+        forms.alert("Не найдено оборудование в импортируемом файле.", "Ошибка", exitscript=True)
 
     return equipment
 
@@ -347,9 +352,9 @@ def print_area_overflow_report(ayditor_equipment, equipment_in_area):
         # аудитора могут перенестись идентично в несколько разных приборов
         print('В данные области попадает больше одного прибора:')
         print('Прибор х: {}, y: {}, z: {}'.format(
-            ayditor_equipment.x,
-            ayditor_equipment.y,
-            ayditor_equipment.z))
+            ayditor_equipment.base_x,
+            ayditor_equipment.base_y,
+            ayditor_equipment.base_z))
 
         print('ID приборов:')
         for x in equipment_in_area:
@@ -365,9 +370,9 @@ def print_not_found_report(audytor_equipment_elements):
         print('Не найдено универсальное оборудование в областях:')
         for audytor_equipment in not_found_audytor_reports:
             print('Прибор х: {}, y: {}, z: {}'.format(
-                audytor_equipment.x,
-                audytor_equipment.y,
-                audytor_equipment.z))
+                audytor_equipment.base_x,
+                audytor_equipment.base_y,
+                audytor_equipment.base_z))
 
 FAMILY_NAME_CONST = 'Обр_ОП_Универсальный'
 
@@ -408,7 +413,6 @@ def script_execute(plugin_logger):
     operator.send_json_data(angle)
 
     ayditror_equipment_elements = extract_heating_device_description(filepath, angle)
-    #ayditror_valve_elements = extract_valve_description(filepath)
 
     # собираем высоты цилиндров в которых будем искать данные
     level_cylinders = get_level_cylinders(ayditror_equipment_elements)
