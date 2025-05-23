@@ -47,8 +47,7 @@ from dosymep_libs.bim4everyone import *
 
 
 doc = __revit__.ActiveUIDocument.Document  # type: Document
-uiapp = DocumentManager.Instance.CurrentUIApplication
-#app = uiapp.Application
+uiapp = __revit__.Application
 uidoc = __revit__.ActiveUIDocument
 
 EQUIPMENT_TYPE_NAME = "Оборудование"
@@ -356,7 +355,6 @@ def print_area_overflow_report(ayditor_equipment, equipment_in_area):
         for x in equipment_in_area:
             print(x.Id)
 
-
 def print_not_found_report(audytor_equipment_elements):
     not_found_audytor_reports = []
     for audytor_equipment in audytor_equipment_elements:
@@ -384,7 +382,7 @@ def script_execute(plugin_logger):
     if filepath is None:
         sys.exit()
 
-    operator = JsonOperatorLib.JsonAngleOperator(doc, uidoc)
+    operator = JsonOperatorLib.JsonAngleOperator(doc, uiapp)
 
     # Получаем данные из последнего по дате редактирования файла
     old_angle = operator.get_json_data()

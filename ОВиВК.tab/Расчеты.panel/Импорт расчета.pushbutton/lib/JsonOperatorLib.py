@@ -38,24 +38,34 @@ class JsonAngleOperator:
 
     def get_document_path(self):
         """
-        Возвращает путь к документу.
+        Возвращает путь к config.json в директории проекта.
+        Создаёт директорию и файл при необходимости.
 
         Returns:
-            str: Путь к документу.
+            str: Полный путь к файлу config.json.
         """
-
         plugin_name = 'Импорт из Audytor'
         version_number = self.uiapp.VersionNumber
         project_name = self.get_project_name()
-        base_root = os.path.join(version_number, plugin_name, project_name, 'config.json')
 
+        # Путь до папки
+        base_dir = os.path.join(version_number, plugin_name, project_name)
         my_documents_path = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments)
-        path = os.path.join(my_documents_path, 'dosymep', base_root)
+        full_dir_path = os.path.join(my_documents_path, 'dosymep', base_dir)
 
-        if not os.path.exists(path):
-            os.makedirs(path)
+        # Создаём директорию при необходимости
+        if not os.path.exists(full_dir_path):
+            os.makedirs(full_dir_path)
 
-        return path
+        # Путь к config.json
+        config_path = os.path.join(full_dir_path, 'config.json')
+
+        # Создаём файл, если его нет
+        if not os.path.isfile(config_path):
+            with codecs.open(config_path, 'w', encoding='utf-8') as f:
+                json.dump(0.0, f, ensure_ascii=False)
+
+        return config_path
 
     def send_json_data(self, data):
         """
