@@ -89,6 +89,9 @@ def script_execute(plugin_logger):
     number_column = find_column(worksheet, 'Число')
     mass_column = find_column(worksheet, 'Масса')
     note_column = find_column(worksheet, 'Примечание')
+    block_column = find_column(worksheet, 'Блок СМР')
+    section_column = find_column(worksheet, 'Секция СМР')
+    floor_column = find_column(worksheet, 'Этаж СМР')
 
     elements_to_generate = []
 
@@ -107,6 +110,9 @@ def script_execute(plugin_logger):
         number = worksheet.Cells(row, number_column).value2
         mass = worksheet.Cells(row, mass_column).value2
         note = worksheet.Cells(row, note_column).value2
+        block = worksheet.Cells(row, block_column).value2
+        section = worksheet.Cells(row, section_column).value2
+        floor = worksheet.Cells(row, floor_column).value2
 
         if name is None:
             break
@@ -146,7 +152,10 @@ def script_execute(plugin_logger):
                 unmodeling_factory.IMPORT_DESCRIPTION,
                 number,
                 mass,
-                note
+                note,
+                block,
+                section,
+                floor
             )
         )
 

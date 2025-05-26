@@ -27,6 +27,7 @@ from dosymep.Bim4Everyone.Templates import ProjectParameters
 from dosymep_libs.bim4everyone import *
 from dosymep.Revit import *
 
+
 class ElementStocks:
     """ Класс для вычисления запасов на элемент """
     types_cash = {}
@@ -160,7 +161,10 @@ class RowOfSpecification:
                  local_description = '',
                  number = 0,
                  mass = '',
-                 note = ''):
+                 note = '',
+                 smr_block = '',
+                 smr_section = '',
+                 smr_floor = ''):
 
         """
         Инициализация класса строки спецификации
@@ -192,6 +196,9 @@ class RowOfSpecification:
         self.number = number
         self.mass = mass
         self.note = note
+        self.smr_block = smr_block
+        self.smr_section = smr_section
+        self.smr_floor = smr_floor
 
         self.local_description = local_description
         self.diameter = 0
@@ -296,7 +303,14 @@ class UnmodelingFactory:
         return (FilteredElementCollector(self.doc).WherePasses(multicategory_filter)
                 .WhereElementIsElementType().ToElements())
 
-    def create_consumable_row_class_instance(self, system, function, consumable, consumable_description):
+    def create_consumable_row_class_instance(self,
+                                             system,
+                                             function,
+                                             block,
+                                             section,
+                                             floor,
+                                             consumable,
+                                             consumable_description):
         """
         Создает экземпляр класса расходника изоляции для генерации строки.
 
@@ -310,18 +324,28 @@ class UnmodelingFactory:
             RowOfSpecification: Экземпляр класса строки спецификации.
         """
         return RowOfSpecification(
-            system,
-            function,
-            self.CONSUMABLE_GROUP,
-            consumable.name,
-            consumable.mark,
-            '',  # У расходников не будет кода изделия
-            consumable.maker,
-            consumable.unit,
-            consumable_description
+            system=system,
+            function=function,
+            group=self.CONSUMABLE_GROUP,
+            name=consumable.name,
+            mark=consumable.mark,
+            code='',  # У расходников не будет кода изделия
+            maker=consumable.maker,
+            unit=consumable.unit,
+            local_description=consumable_description,
+            smr_block=block,
+            smr_section=section,
+            smr_floor=floor
         )
 
-    def create_material_row_class_instance(self, system, function, rule_set, material_description):
+    def create_material_row_class_instance(self,
+                                           system,
+                                           function,
+                                           block,
+                                           section,
+                                           floor,
+                                           rule_set,
+                                           material_description):
         """
         Создает экземпляр класса материала для генерации строки.
 
@@ -335,32 +359,38 @@ class UnmodelingFactory:
             RowOfSpecification: Экземпляр класса строки спецификации.
         """
         return RowOfSpecification(
-            system,
-            function,
-            rule_set.group,
-            rule_set.name,
-            rule_set.mark,
-            rule_set.code,
-            rule_set.maker,
-            rule_set.unit,
-            material_description
+            system= system,
+            function=function,
+            group=rule_set.group,
+            name=rule_set.name,
+            mark=rule_set.mark,
+            code=rule_set.code,
+            maker=rule_set.maker,
+            unit=rule_set.unit,
+            local_description=material_description,
+            smr_block=block,
+            smr_section=section,
+            smr_floor=floor
         )
 
-    def get_system_function(self, element):
+    def get_element_charactristic(self, element):
         """
-        Получает значения параметров функции и системы из элемента.
+        Получает значения параметров функции, системы, блока, секции и этажа из элемента.
 
         Args:
             element: Элемент Revit.
 
         Returns:
-            Tuple[str, str]: Кортеж из значений системы и функции.
+            Tuple[str, str, str, str, str]: Кортеж из значений функции, системы, блока, секции и этажа.
         """
         system = element.GetParamValueOrDefault(SharedParamsConfig.Instance.VISSystemName,
                                                 self.OUT_OF_SYSTEM_VALUE)
         function = element.GetParamValueOrDefault(SharedParamsConfig.Instance.EconomicFunction,
                                                   self.OUT_OF_FUNCTION_VALUE)
-        return system, function
+        block = element.GetParamValueOrDefault(SharedParamsConfig.Instance.BuildingWorksBlock, '')
+        section = element.GetParamValueOrDefault(SharedParamsConfig.Instance.BuildingWorksSection, '')
+        floor = element.GetParamValueOrDefault(SharedParamsConfig.Instance.BuildingWorksLevel, '')
+        return system, function, block, section, floor
 
     def get_base_location(self):
         """
@@ -658,6 +688,9 @@ class UnmodelingFactory:
         set_param_value(SharedParamsConfig.Instance.VISMass, new_row_data.mass)
         set_param_value(SharedParamsConfig.Instance.VISNote, new_row_data.note)
         set_param_value(SharedParamsConfig.Instance.EconomicFunction, new_row_data.function)
+        set_param_value(SharedParamsConfig.Instance.BuildingWorksBlock, new_row_data.smr_block)
+        set_param_value(SharedParamsConfig.Instance.BuildingWorksSection, new_row_data.smr_section)
+        set_param_value(SharedParamsConfig.Instance.BuildingWorksLevel, new_row_data.smr_floor)
         description_param = family_inst.GetParam(self.DESCRIPTION_PARAM_NAME)
         description_param.Set(description)
 
@@ -681,15 +714,31 @@ class UnmodelingFactory:
 
         self.check_family(family_symbol)
         self.check_worksets()
-
         # На всякий случай выполняем настройку параметров - в теории уже должны быть на месте, но лучше продублировать
         revit_params = [SharedParamsConfig.Instance.EconomicFunction,
-                        SharedParamsConfig.Instance.VISSystemName]
+                        SharedParamsConfig.Instance.VISSystemName,
+                        SharedParamsConfig.Instance.BuildingWorksBlock,
+                        SharedParamsConfig.Instance.BuildingWorksSection,
+                        SharedParamsConfig.Instance.BuildingWorksLevel]
+
+        with revit.Transaction("BIM: Настройка групп"):
+            for param in revit_params:
+                self.sort_parameter_to_group(param.Name, GroupTypeId.Data)
 
         project_parameters = ProjectParameters.Create(self.doc.Application)
         project_parameters.SetupRevitParams(self.doc, revit_params)
 
         return family_symbol
+
+    def sort_parameter_to_group(self, paraname, group):
+        # Получаем параметр по имени
+        param = self.doc.GetSharedParam(paraname)
+
+        if param is None:
+            return
+
+        definition = param.GetDefinition()
+        definition.ReInsertToGroup(self.doc, group)
 
     def check_worksets(self):
         """
@@ -697,7 +746,7 @@ class UnmodelingFactory:
 
         """
         if WorksetTable.IsWorksetNameUnique(self.doc, '99_Немоделируемые элементы'):
-            with revit.Transaction("Добавление рабочего набора"):
+            with revit.Transaction("BIM: Добавление рабочего набора"):
                 new_ws = Workset.Create(self.doc, '99_Немоделируемые элементы')
                 forms.alert('Был создан рабочий набор "99_Немоделируемые элементы". '
                             'Откройте диспетчер рабочих наборов и снимите галочку с параметра "Видимый на всех видах". '
@@ -742,7 +791,10 @@ class UnmodelingFactory:
             SharedParamsConfig.Instance.VISMarkNumber.Name,
             SharedParamsConfig.Instance.VISItemCode.Name,
             SharedParamsConfig.Instance.VISUnit.Name,
-            SharedParamsConfig.Instance.VISManufacturer.Name
+            SharedParamsConfig.Instance.VISManufacturer.Name,
+            SharedParamsConfig.Instance.BuildingWorksBlock.Name,
+            SharedParamsConfig.Instance.BuildingWorksSection.Name,
+            SharedParamsConfig.Instance.BuildingWorksLevel.Name
             ]
 
         family = family_symbol.Family
