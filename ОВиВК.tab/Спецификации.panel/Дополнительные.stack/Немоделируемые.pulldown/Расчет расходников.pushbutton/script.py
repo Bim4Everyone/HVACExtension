@@ -194,15 +194,6 @@ def process_materials(family_symbol, material_description):
             full_diameter = UnitUtils.ConvertFromInternalUnits(
                 pipe.GetParamValue(BuiltInParameter.RBS_PIPE_OUTER_DIAMETER),
                 UnitTypeId.Millimeters)
-            pipe_insulation_filter = ElementCategoryFilter(BuiltInCategory.OST_PipeInsulations)
-            dependent_elements = pipe.GetDependentElements(pipe_insulation_filter)
-
-            if len(dependent_elements) > 0:
-                insulation = doc.GetElement(dependent_elements[0])
-                insulation_thikness = UnitUtils.ConvertFromInternalUnits(
-                    insulation.Thickness,
-                    UnitTypeId.Millimeters)
-                full_diameter += insulation_thikness
 
             if full_diameter not in pipe_dict:
                 pipe_dict[full_diameter] = []
