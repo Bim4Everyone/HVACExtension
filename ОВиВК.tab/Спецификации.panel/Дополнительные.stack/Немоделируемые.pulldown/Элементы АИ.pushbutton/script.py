@@ -244,18 +244,19 @@ def get_dn(ai_element):
 def create_new_row(element, variant, number):
     """Создание нового элемента RowOfSpecification на базе Element из модели для последующей генерации якоря"""
 
-    shared_function = element.GetParamValueOrDefault(
-        SharedParamsConfig.Instance.EconomicFunction, unmodeling_factory.OUT_OF_FUNCTION_VALUE)
-    shared_system = element.GetParamValueOrDefault(
-        SharedParamsConfig.Instance.VISSystemName, unmodeling_factory.OUT_OF_SYSTEM_VALUE)
+    (shared_system,
+     shared_function,
+     shared_block,
+     shared_section,
+     shared_floor) = unmodeling_factory.get_element_charactristic(element)
     unit = 'шт.'  # В этом плагине мы бьем элементы поштучно, поэтому блокируем это значение
     note = element.GetParamValueOrDefault(SharedParamsConfig.Instance.VISNote)
     group = '8. Трубопроводы'
 
     new_row = RowOfSpecification(
-        shared_system,
-        shared_function,
-        group,
+        system=shared_system,
+        function=shared_function,
+        group=group,
         name=variant.name,
         mark=variant.mark,
         code=variant.code,
@@ -263,7 +264,10 @@ def create_new_row(element, variant, number):
         unit=unit,
         local_description=unmodeling_factory.AI_DESCRIPTION,
         number=number,
-        note=note
+        note=note,
+        smr_block=shared_block,
+        smr_section=shared_section,
+        smr_floor=shared_floor
     )
 
     return new_row
@@ -415,8 +419,20 @@ def optimize_generation_list(new_rows):
     unique_rows = {}
 
     for new_row in new_rows:
-        key = (new_row.system, new_row.function, new_row.group, new_row.name, new_row.mark,
-               new_row.code, new_row.maker, new_row.unit, new_row.local_description, new_row.mass, new_row.note)
+        key = (new_row.system,
+               new_row.function,
+               new_row.group,
+               new_row.name,
+               new_row.mark,
+               new_row.code,
+               new_row.maker,
+               new_row.unit,
+               new_row.local_description,
+               new_row.mass,
+               new_row.note,
+               new_row.smr_block,
+               new_row.smr_section,
+               new_row.smr_floor)
         if key in unique_rows:
             unique_rows[key].number += new_row.number
         else:
@@ -432,7 +448,10 @@ def optimize_generation_list(new_rows):
                 local_description=new_row.local_description,
                 number=new_row.number,
                 mass=new_row.mass,
-                note=new_row.note
+                note=new_row.note,
+                smr_block=new_row.smr_block,
+                smr_section=new_row.smr_section,
+                smr_floor=new_row.smr_floor
             )
 
     result.extend(unique_rows.values())

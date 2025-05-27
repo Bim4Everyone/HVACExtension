@@ -45,16 +45,23 @@ def process_new_position(family_symbol, rows_number):
     element = doc.GetElement(selected_ids[0])
     location = unmodeling_factory.get_base_location()
 
-    parent_system, parent_function = unmodeling_factory.get_system_function(element)
+    (parent_system,
+     parent_function,
+     parent_block,
+     parent_section,
+     parent_floor) = unmodeling_factory.get_element_charactristic(element)
     parent_group = element.GetParamValueOrDefault(SharedParamsConfig.Instance.VISGrouping, '')
 
     for count in range(1, rows_number + 1):
         new_group = "{}{}".format(parent_group, '_' + str(count))
 
         new_position = RowOfSpecification(
-            parent_system,
-            parent_function,
-            new_group
+            system=parent_system,
+            function=parent_function,
+            group=new_group,
+            smr_block=parent_block,
+            smr_section=parent_section,
+            smr_floor=parent_floor
         )
 
         location = unmodeling_factory.update_location(location)
