@@ -704,6 +704,21 @@ class UnmodelingFactory:
         if self.doc.IsFamilyDocument:
             forms.alert("Надстройка не предназначена для работы с семействами", "Ошибка", exitscript=True)
 
+        # На всякий случай выполняем настройку параметров - в теории уже должны быть на месте, но лучше продублировать
+        revit_params = [SharedParamsConfig.Instance.EconomicFunction,
+                        SharedParamsConfig.Instance.VISSystemName,
+                        SharedParamsConfig.Instance.BuildingWorksBlock,
+                        SharedParamsConfig.Instance.BuildingWorksSection,
+                        SharedParamsConfig.Instance.BuildingWorksLevel]
+
+
+        with revit.Transaction("BIM: Настройка групп"):
+            for param in revit_params:
+                self.sort_parameter_to_group(param.Name, GroupTypeId.Data)
+
+        project_parameters = ProjectParameters.Create(self.doc.Application)
+        project_parameters.SetupRevitParams(self.doc, revit_params)
+
         family_symbol = self.is_family_in()
 
         if family_symbol is None:
@@ -714,19 +729,8 @@ class UnmodelingFactory:
 
         self.check_family(family_symbol)
         self.check_worksets()
-        # На всякий случай выполняем настройку параметров - в теории уже должны быть на месте, но лучше продублировать
-        revit_params = [SharedParamsConfig.Instance.EconomicFunction,
-                        SharedParamsConfig.Instance.VISSystemName,
-                        SharedParamsConfig.Instance.BuildingWorksBlock,
-                        SharedParamsConfig.Instance.BuildingWorksSection,
-                        SharedParamsConfig.Instance.BuildingWorksLevel]
 
-        with revit.Transaction("BIM: Настройка групп"):
-            for param in revit_params:
-                self.sort_parameter_to_group(param.Name, GroupTypeId.Data)
 
-        project_parameters = ProjectParameters.Create(self.doc.Application)
-        project_parameters.SetupRevitParams(self.doc, revit_params)
 
         return family_symbol
 
