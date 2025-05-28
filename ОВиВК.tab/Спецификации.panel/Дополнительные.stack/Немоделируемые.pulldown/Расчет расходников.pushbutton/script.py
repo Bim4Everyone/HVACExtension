@@ -53,7 +53,8 @@ def get_material_hosts(element_types, calculation_name, builtin_category):
     return result_list
 
 def split_calculation_elements_list(elements):
-    """ Разделяем список элементов на подсписки из тех элементов, у которых одинаковая функция и система
+    """ Разделяем список элементов на подсписки из тех элементов, у которых одинаковая функция, система,
+    блок, секция и этаж
 
     Args:
         elements: Список элементов которые нужно поделить по функции-системе
@@ -70,10 +71,18 @@ def split_calculation_elements_list(elements):
             SharedParamsConfig.Instance.EconomicFunction.Name, unmodeling_factory.OUT_OF_FUNCTION_VALUE)
         shared_system = element.GetSharedParamValueOrDefault(
             SharedParamsConfig.Instance.VISSystemName.Name, unmodeling_factory.OUT_OF_SYSTEM_VALUE)
-        function_system_key = shared_function + "_" + shared_system
+        shared_block = element.GetParamValueOrDefault(SharedParamsConfig.Instance.BuildingWorksBlock, '')
+        shared_section = element.GetParamValueOrDefault(SharedParamsConfig.Instance.BuildingWorksSection, '')
+        shared_floor = element.GetParamValueOrDefault(SharedParamsConfig.Instance.BuildingWorksLevel, '')
+
+        uniq_group_key = (shared_function + "_" +
+                               shared_system + "_" +
+                               shared_block + "_" +
+                               shared_section + "_" +
+                               shared_floor)
 
         # Добавляем элемент в соответствующий список в словаре
-        grouped_elements[function_system_key].append(element)
+        grouped_elements[uniq_group_key].append(element)
 
     # Преобразуем значения словаря в список списков
     lists = list(grouped_elements.values())
@@ -165,7 +174,15 @@ def process_materials(family_symbol, material_description):
         material_description: Описание расходника с которым он будет создан и по которому будет удален
     """
 
-    def process_pipe_clamps(elements, system, function, rule_set, material_description, family_symbol):
+    def process_pipe_clamps(elements,
+                            system,
+                            function,
+                            block,
+                            section,
+                            floor,
+                            rule_set,
+                            material_description,
+                            family_symbol):
         pipes = []
         pipe_dict = {}
 
@@ -194,7 +211,7 @@ def process_materials(family_symbol, material_description):
         material_location = unmodeling_factory.get_base_location()
         for pipe_row in pipe_dict:
             new_row = unmodeling_factory.create_material_row_class_instance(
-                system, function, rule_set, material_description)
+                system, function, block, section, floor, rule_set, material_description)
             new_row.name = new_row.name + " D=" + str(pipe_row)
 
             material_location = unmodeling_factory.update_location(material_location)
@@ -204,9 +221,22 @@ def process_materials(family_symbol, material_description):
                 new_row.number += value.number
             unmodeling_factory.create_new_position(new_row, family_symbol, material_description, material_location)
 
-    def process_other_rules(elements, system, function, rule_set, material_description,
-                            material_location, family_symbol):
-        new_row = unmodeling_factory.create_material_row_class_instance(system, function, rule_set,
+    def process_other_rules(elements,
+                            system,
+                            function,
+                            block,
+                            section,
+                            floor,
+                            rule_set,
+                            material_description,
+                            material_location,
+                            family_symbol):
+        new_row = unmodeling_factory.create_material_row_class_instance(system,
+                                                                        function,
+                                                                        block,
+                                                                        section,
+                                                                        floor,
+                                                                        rule_set,
                                                                         material_description)
         area = 0
         for element in elements:
@@ -230,15 +260,35 @@ def process_materials(family_symbol, material_description):
         split_lists = split_calculation_elements_list(calculation_elements)
 
         for elements in split_lists:
-            system, function = unmodeling_factory.get_system_function(elements[0])
+            (system,
+             function,
+             block,
+             section,
+             floor) = unmodeling_factory.get_element_charactristic(elements[0])
             if rule_set.name == "Хомут трубный под шпильку М8":
-                process_pipe_clamps(elements, system, function, rule_set, material_description, family_symbol)
+                process_pipe_clamps(elements,
+                                    system,
+                                    function,
+                                    block,
+                                    section,
+                                    floor,
+                                    rule_set,
+                                    material_description,
+                                    family_symbol)
                 material_location = unmodeling_factory.get_base_location()
             else:
                 material_location = unmodeling_factory.update_location(material_location)
 
-                process_other_rules(elements, system, function, rule_set, material_description,
-                                    material_location, family_symbol)
+                process_other_rules(elements,
+                                    system,
+                                    function,
+                                    block,
+                                    section,
+                                    floor,
+                                    rule_set,
+                                    material_description,
+                                    material_location,
+                                    family_symbol)
 
 def process_insulation_consumables(family_symbol, consumable_description):
     """ Обработка расходников изоляции
@@ -263,7 +313,7 @@ def process_insulation_consumables(family_symbol, consumable_description):
 
     # Разбили изоляцию по системе-функции и дробим по типам чтоб их сопоставить
     for insulation_elements in split_insulation_lists:
-        system, function = unmodeling_factory.get_system_function(insulation_elements[0])
+        system, function, block, section, floor = unmodeling_factory.get_element_charactristic(insulation_elements[0])
 
         insulation_elements_by_type = {}
 
@@ -287,6 +337,9 @@ def process_insulation_consumables(family_symbol, consumable_description):
                     new_consumable_row = unmodeling_factory.create_consumable_row_class_instance(
                         system,
                         function,
+                        block,
+                        section,
+                        floor,
                         consumable,
                         consumable_description)
 
