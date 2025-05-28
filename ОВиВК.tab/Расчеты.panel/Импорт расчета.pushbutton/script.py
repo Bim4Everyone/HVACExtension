@@ -21,10 +21,12 @@ clr.ImportExtensions(Revit.GeometryConversion)
 
 import System
 import JsonOperatorLib
+import DebugPlacerLib
 from System.Collections.Generic import *
 
 
 from Autodesk.Revit.DB import *
+from Autodesk.Revit.DB import InternalOrigin
 from Autodesk.Revit.UI.Selection import Selection
 from Autodesk.DesignScript.Geometry import *
 
@@ -79,6 +81,13 @@ class AuditorEquipment:
                  maker = "",
                  full_name = "",
                  type_name = None):
+        base_point = FilteredElementCollector(doc) \
+            .OfCategory(BuiltInCategory.OST_ProjectBasePoint) \
+            .WhereElementIsNotElementType() \
+            .FirstElement()
+
+        self.base_point_z = base_point.GetParamValue(BuiltInParameter.BASEPOINT_ELEVATION_PARAM)
+
         self.connection_type = connection_type
         self.x = x
         self.y = y
@@ -94,6 +103,10 @@ class AuditorEquipment:
         self.maker = maker
         self.full_name = full_name
         self.type_name = type_name
+
+
+
+        self.debug_placer = DebugPlacerLib.DebugPlacer(doc, diameter=2000)
 
     def is_in_data_area(self, revit_equipment):
         xyz = revit_equipment.Location.Point
@@ -116,6 +129,7 @@ class AuditorEquipment:
 
         epsilon = 1e-9
 
+
         if ((abs(self.level_cylinder.z_min - revit_coords.z) <= epsilon or self.level_cylinder.z_min < revit_coords.z)
                 and (abs(revit_coords.z - self.level_cylinder.z_max) <= epsilon
                      or revit_coords.z < self.level_cylinder.z_max)):
@@ -133,6 +147,17 @@ class AuditorEquipment:
         for level_cylinder in level_cylinders:
             if level_cylinder.z_min <= self.z <= level_cylinder.z_max:
                 self.level_cylinder = level_cylinder
+
+                # self.level_cylinder.z_min += convert_to_mms(self.base_point_z)
+                # self.level_cylinder.z_max += convert_to_mms(self.base_point_z)
+                # self.level_cylinder.len = self.level_cylinder.z_max - self.level_cylinder.z_min
+
+                self.debug_placer.place_symbol(
+                    self.x,
+                    self.y,
+                    self.z,
+                    self.level_cylinder.z_max - self.level_cylinder.z_min
+                )
 
     def print_debug_info(self, revit_equipment,
                          integer_id,
@@ -162,6 +187,7 @@ class AuditorEquipment:
                 print('level_cilinder_z_max ' + str(self.level_cylinder.z_max))
                 print('revit_equipment_z ' + str(revit_coords.z))
                 print('_________________________')
+
 
 class ReadingRules:
     connection_type_index = 2
@@ -239,6 +265,8 @@ def extract_heating_device_description(file_path, angle):
         x = parse_float(data[rr.x_index]) * 1000
         y = parse_float(data[rr.y_index]) * 1000
         z = parse_float(data[rr.z_index]) * 1000
+
+        z = z + z_correction
         x, y, z = rotate_point_around_origin(x, y, z, angle)
 
         return AuditorEquipment(
@@ -257,19 +285,36 @@ def extract_heating_device_description(file_path, angle):
     def parse_valve(line):
         data = line.strip().split(';')
         rr = reading_rules_valve
+        x = parse_float(data[rr.x_index]) * 1000
+        y = parse_float(data[rr.y_index]) * 1000
+        z = parse_float(data[rr.z_index]) * 1000
+        z = z + z_correction
+
         if data[rr.connection_type_index] != OUTER_VALVE_NAME:
             return None
         return AuditorEquipment(
             data[rr.maker_index],
-            parse_float(data[rr.x_index]) * 1000,
-            parse_float(data[rr.y_index]) * 1000,
-            parse_float(data[rr.z_index]) * 1000,
+            x,
+            y,
+            z,
             setting=get_setting_float_value(data[rr.setting_index].replace(',', '.')),
             type_name=VALVE_TYPE_NAME
         )
 
     with codecs.open(file_path, 'r', encoding='utf-8') as file:
         lines = file.readlines()
+
+    internal_origin = InternalOrigin.Get(doc)
+
+    base_point = FilteredElementCollector(doc) \
+        .OfCategory(BuiltInCategory.OST_ProjectBasePoint) \
+        .WhereElementIsNotElementType() \
+        .FirstElement()
+
+    base_point_z = base_point.GetParamValue(BuiltInParameter.BASEPOINT_ELEVATION_PARAM)
+    print internal_origin
+    internal_origin_z = internal_origin.SharedPosition.Z
+    z_correction = (base_point_z - internal_origin_z) * 304.8
 
     reading_rules_device = ReadingRules()
     reading_rules_valve = ReadingRulesForValve()
@@ -410,7 +455,6 @@ def process_start_up():
 
 def process_audytor_revit_matching(ayditror_equipment_elements, filtered_equipment):
     for ayditor_equipment in ayditror_equipment_elements:
-        # Если есть spatial index, фильтровать по ней
         equipment_in_area = [
             eq for eq in filtered_equipment if ayditor_equipment.is_in_data_area(eq)
         ]
@@ -435,12 +479,12 @@ def script_execute(plugin_logger):
     # собираем высоты цилиндров в которых будем искать данные
     level_cylinders = get_level_cylinders(ayditror_equipment_elements)
 
-    for ayditor_equipment in ayditror_equipment_elements:
-        ayditor_equipment.set_level_cylinder(level_cylinders)
-
-    filtered_equipment = get_elements_by_category(BuiltInCategory.OST_MechanicalEquipment)
-
     with revit.Transaction("BIM: Импорт расчетов"):
+        for ayditor_equipment in ayditror_equipment_elements:
+            ayditor_equipment.set_level_cylinder(level_cylinders)
+
+        filtered_equipment = get_elements_by_category(BuiltInCategory.OST_MechanicalEquipment)
+
         process_audytor_revit_matching(ayditror_equipment_elements, filtered_equipment)
 
 
