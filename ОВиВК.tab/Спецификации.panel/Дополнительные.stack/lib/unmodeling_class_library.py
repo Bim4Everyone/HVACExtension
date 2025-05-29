@@ -249,6 +249,7 @@ class UnmodelingFactory:
     COLOR_RULE_NAME = 'Краска антикоррозионная, покрытие в два слоя. Расход - 0.2 кг на м²'
     GRUNT_RULE_NAME = 'Грунтовка для стальных труб, покрытие в один слой. Расход - 0.1 кг на м²'
     CLAMPS_RULE_NAME = 'Хомут трубный под шпильку М8'
+    RAPID_CLAMPS_RULE_NAME = 'Хомут соединительный Rapid'
     PIN_RULE_NAME = 'Шпилька М8 1м/1шт'
 
     FAMILY_NAME = '_Якорный элемент'
@@ -364,7 +365,7 @@ class UnmodelingFactory:
             group=rule_set.group,
             name=rule_set.name,
             mark=rule_set.mark,
-            code=rule_set.code,
+            code = rule_set.code,
             maker=rule_set.maker,
             unit=rule_set.unit,
             local_description=material_description,
@@ -499,6 +500,15 @@ class UnmodelingFactory:
                 unit="шт.",
                 maker="",
                 method_name=SharedParamsConfig.Instance.VISIsClampsCalculation.Name,
+                category=BuiltInCategory.OST_PipeCurves),
+            GenerationRuleSet(
+                group=self.MATERIAL_GROUP,
+                name=self.RAPID_CLAMPS_RULE_NAME,
+                mark="",
+                code="",
+                unit="шт.",
+                maker="",
+                method_name="ФОП_ВИС_Расчет хомутов Rapid",
                 category=BuiltInCategory.OST_PipeCurves)
         ]
         return gen_list
@@ -1000,6 +1010,25 @@ class MaterialCalculator:
         if number < 1:
             number = 1
         return int(number)
+
+    def get_rapid_collars_number(self, pipe_diameter, pipe_length):
+        """Возвращает число хомутов Rapid на трубу. Если размер трубы не подходит - возвращает 0 и хомут не создается
+        Args:
+            pipe_diameter: Диаметр трубы.
+            pipe_length: Длина трубы.
+
+        Returns:
+            int: Количество хомутов.
+        """
+        if pipe_length <= 3:
+            return 0
+
+        d_variants = [50, 70, 80, 100, 125, 150, 200]
+
+        if pipe_diameter not in d_variants:
+            return 0
+
+        return int(pipe_length/3) - 1
 
     def get_collars_and_pins_number(self, pipe, pipe_diameter, pipe_length):
         """

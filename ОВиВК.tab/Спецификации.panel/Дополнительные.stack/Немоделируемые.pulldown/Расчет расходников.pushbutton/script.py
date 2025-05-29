@@ -158,6 +158,10 @@ def get_material_number_value(element, operation_name):
             and element.Category.IsId(BuiltInCategory.OST_PipeCurves)):
         result = CalculationResult(material_calculator.get_collars_and_pins_number(element, diameter, length), area)
         return result
+    if (operation_name == unmodeling_factory.RAPID_CLAMPS_RULE_NAME
+            and element.Category.IsId(BuiltInCategory.OST_PipeCurves)):
+        result = CalculationResult(material_calculator.get_rapid_collars_number(diameter, length), area)
+        return result
 
     return CalculationResult(0, 0)
 
@@ -195,19 +199,39 @@ def process_materials(family_symbol, material_description):
                 pipe.GetParamValue(BuiltInParameter.RBS_PIPE_OUTER_DIAMETER),
                 UnitTypeId.Millimeters)
 
-            if full_diameter not in pipe_dict:
-                pipe_dict[full_diameter] = []
-            pipe_dict[full_diameter].append(pipe)
+            pipe_nominal_diameter = UnitUtils.ConvertFromInternalUnits(
+                pipe.GetParamValue(BuiltInParameter.RBS_CALCULATED_SIZE),
+                UnitTypeId.Millimeters)
+
+            key = (full_diameter, pipe_nominal_diameter)
+
+            if key not in pipe_dict:
+                pipe_dict[key] = []
+
+            pipe_dict[key].append(pipe)
 
         material_location = unmodeling_factory.get_base_location()
-        for pipe_row in pipe_dict:
+
+        for (pipe_outer_diameter, pipe_nominal_diameter) in pipe_dict:
             new_row = unmodeling_factory.create_material_row_class_instance(
-                system, function, block, section, floor, rule_set, material_description)
-            new_row.name = new_row.name + " D=" + str(pipe_row)
+                system,
+                function,
+                block,
+                section,
+                floor,
+                rule_set,
+                material_description)
+
+            if rule_set.name == unmodeling_factory.RAPID_CLAMPS_RULE_NAME:
+                name_d = " DN" + "{:.15g}".format(pipe_nominal_diameter)
+            else:
+                name_d = " D=" + "{:.15g}".format(pipe_outer_diameter)
+
+            new_row.name = new_row.name + name_d
 
             material_location = unmodeling_factory.update_location(material_location)
 
-            for element in pipe_dict[pipe_row]:
+            for element in pipe_dict[pipe_outer_diameter, pipe_nominal_diameter]:
                 value = get_material_number_value(element, rule_set.name)
                 new_row.number += value.number
             unmodeling_factory.create_new_position(new_row, family_symbol, material_description, material_location)
@@ -256,7 +280,8 @@ def process_materials(family_symbol, material_description):
              block,
              section,
              floor) = unmodeling_factory.get_element_charactristic(elements[0])
-            if rule_set.name == "Хомут трубный под шпильку М8":
+
+            if rule_set.name in [unmodeling_factory.RAPID_CLAMPS_RULE_NAME, unmodeling_factory.CLAMPS_RULE_NAME]:
                 process_pipe_clamps(elements,
                                     system,
                                     function,
