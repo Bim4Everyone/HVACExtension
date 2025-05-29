@@ -249,6 +249,8 @@ def extract_heating_device_description(file_path, angle):
         result = []
         i = 0
         while i < len(lines):
+            if len(result) == 10:
+                return result
             if title in lines[i]:
                 i += start_offset
                 while i < len(lines) and lines[i].strip():
@@ -461,6 +463,9 @@ def process_audytor_revit_matching(ayditror_equipment_elements, filtered_equipme
         ayditor_equipment.processed = len(equipment_in_area) >= 1
         if len(equipment_in_area) == 1:
             insert_data(equipment_in_area[0], ayditor_equipment)
+        # if len(equipment_in_area) == 2:
+        #     print equipment_in_area[0].type_name
+        #     print equipment_in_area[1].type_name
 
         print_area_overflow_report(ayditor_equipment, equipment_in_area)
 
