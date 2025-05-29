@@ -200,7 +200,7 @@ def process_materials(family_symbol, material_description):
                 UnitTypeId.Millimeters)
 
             pipe_nominal_diameter = UnitUtils.ConvertFromInternalUnits(
-                pipe.GetParamValue(BuiltInParameter.RBS_CALCULATED_SIZE),
+                pipe.GetParamValue(BuiltInParameter.RBS_PIPE_INNER_DIAM_PARAM),
                 UnitTypeId.Millimeters)
 
             key = (full_diameter, pipe_nominal_diameter)

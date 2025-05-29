@@ -1027,8 +1027,9 @@ class MaterialCalculator:
 
         if pipe_diameter not in d_variants:
             return 0
+        collars_count = int(math.ceil(pipe_length / 3.0)) - 1
 
-        return int(pipe_length/3) - 1
+        return collars_count
 
     def get_collars_and_pins_number(self, pipe, pipe_diameter, pipe_length):
         """
