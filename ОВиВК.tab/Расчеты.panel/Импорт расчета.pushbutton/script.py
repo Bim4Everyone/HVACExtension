@@ -104,10 +104,6 @@ class AuditorEquipment:
         self.full_name = full_name
         self.type_name = type_name
 
-
-
-
-
     def is_in_data_area(self, revit_equipment):
         xyz = revit_equipment.Location.Point
         bb = revit_equipment.GetBoundingBox()
@@ -129,7 +125,6 @@ class AuditorEquipment:
 
         epsilon = 1e-9
 
-
         if ((abs(self.level_cylinder.z_min - revit_coords.z) <= epsilon or self.level_cylinder.z_min < revit_coords.z)
                 and (abs(revit_coords.z - self.level_cylinder.z_max) <= epsilon
                      or revit_coords.z < self.level_cylinder.z_max)):
@@ -138,8 +133,6 @@ class AuditorEquipment:
 
             distance = min(distance_to_bb_center, distance_to_location_center)
 
-            #self.print_debug_info(revit_equipment, 1850772, distance,
-            #                      distance_to_bb_center, distance_to_location_center, radius, revit_coords)
             return distance <= radius
         return False
 
@@ -148,9 +141,6 @@ class AuditorEquipment:
             if level_cylinder.z_min <= self.z <= level_cylinder.z_max:
                 self.level_cylinder = level_cylinder
 
-                # self.level_cylinder.z_min += convert_to_mms(self.base_point_z)
-                # self.level_cylinder.z_max += convert_to_mms(self.base_point_z)
-                # self.level_cylinder.len = self.level_cylinder.z_max - self.level_cylinder.z_min
                 comment = self.type_name + ";" + str(self.x) + ";" + str(self.y) + ";" + str(self.z)
                 debug_placer.place_symbol(
                     self.x,
@@ -159,6 +149,7 @@ class AuditorEquipment:
                     self.level_cylinder.z_max - self.level_cylinder.z_min,
                     comment
                 )
+                break
 
     def print_debug_info(self, revit_equipment,
                          integer_id,
@@ -189,6 +180,40 @@ class AuditorEquipment:
                 print('revit_equipment_z ' + str(revit_coords.z))
                 print('_________________________')
 
+class EquipmentDataCache:
+    def __init__(self):
+        self._cache = {}
+
+    def collect_data(self, element, auditor_data):
+        """Собирает данные в кэш. Запись в Revit произойдёт позже."""
+        if element.Id not in self._cache:
+            self._cache[element.Id] = {
+                "element": element,
+                "data": auditor_data,
+                "setting": auditor_data.setting or None
+            }
+        else:
+            # Если это клапан, и есть новая настройка — обновим
+            if auditor_data.setting:
+                self._cache[element.Id]["setting"] = auditor_data.setting
+
+    def write_all(self):
+        """Пишет все данные в Revit — один раз для каждого элемента"""
+        for item in self._cache.values():
+            element = item["element"]
+            data = item["data"]
+            setting = item["setting"]
+
+            if data.type_name == EQUIPMENT_TYPE_NAME:
+                real_power_watts = UnitUtils.ConvertToInternalUnits(data.real_power, UnitTypeId.Watts)
+                len_meters = UnitUtils.ConvertToInternalUnits(data.len, UnitTypeId.Millimeters)
+                element.SetParamValue('ADSK_Размер_Длина', len_meters)
+                element.SetParamValue('ADSK_Код изделия', data.code)
+                element.SetParamValue('ADSK_Тепловая мощность', real_power_watts)
+
+            # В любом случае, если есть настройка — записываем
+            if setting:
+                element.SetParamValue('ADSK_Настройка', setting)
 
 class ReadingRules:
     connection_type_index = 2
@@ -345,16 +370,9 @@ def get_elements_by_category(category):
     ]
     return filtered_equipment
 
-def insert_data(element, auditor_data):
-    if auditor_data.type_name == EQUIPMENT_TYPE_NAME:
-        real_power_watts = UnitUtils.ConvertToInternalUnits(auditor_data.real_power, UnitTypeId.Watts)
-        len_meters = UnitUtils.ConvertToInternalUnits(auditor_data.len, UnitTypeId.Millimeters)
-        element.SetParamValue('ADSK_Размер_Длина', len_meters)
-        element.SetParamValue('ADSK_Код изделия', auditor_data.code)
-        element.SetParamValue('ADSK_Настройка', auditor_data.setting)
-        element.SetParamValue('ADSK_Тепловая мощность', real_power_watts)
-    else:
-        element.SetParamValue('ADSK_Настройка', auditor_data.setting)
+def insert_data(element, auditor_data, data_cache):
+    data_cache.collect_data(element, auditor_data)
+
 
 def get_bb_center(bb):
     minPoint = bb.Min
@@ -458,18 +476,20 @@ def process_start_up():
     return angle, filepath
 
 def process_audytor_revit_matching(ayditror_equipment_elements, filtered_equipment):
+    data_cache = EquipmentDataCache()
+
     for ayditor_equipment in ayditror_equipment_elements:
         equipment_in_area = [
             eq for eq in filtered_equipment if ayditor_equipment.is_in_data_area(eq)
         ]
         ayditor_equipment.processed = len(equipment_in_area) >= 1
         if len(equipment_in_area) == 1:
-            insert_data(equipment_in_area[0], ayditor_equipment)
-        # if len(equipment_in_area) == 2:
-        #     print equipment_in_area[0].type_name
-        #     print equipment_in_area[1].type_name
+            insert_data(equipment_in_area[0], ayditor_equipment, data_cache)
 
         print_area_overflow_report(ayditor_equipment, equipment_in_area)
+
+    # Финальный проход — запись параметров в Revit
+    data_cache.write_all()
 
     print_not_found_report(ayditror_equipment_elements)
 
@@ -487,14 +507,12 @@ def script_execute(plugin_logger):
     # собираем высоты цилиндров в которых будем искать данные
     level_cylinders = get_level_cylinders(ayditror_equipment_elements)
 
-    with revit.Transaction("BIM: Импорт расчетов"):
+    with revit.Transaction("BIM: Импорт приборов"):
         debug_placer.remove_models()
         for ayditor_equipment in ayditror_equipment_elements:
             ayditor_equipment.set_level_cylinder(level_cylinders)
 
-        filtered_equipment = get_elements_by_category(BuiltInCategory.OST_MechanicalEquipment)
-
-        process_audytor_revit_matching(ayditror_equipment_elements, filtered_equipment)
-
+        equipment = get_elements_by_category(BuiltInCategory.OST_MechanicalEquipment)
+        process_audytor_revit_matching(ayditror_equipment_elements, equipment)
 
 script_execute()
