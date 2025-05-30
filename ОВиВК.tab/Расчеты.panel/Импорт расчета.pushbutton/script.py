@@ -477,7 +477,7 @@ EQUIPMENT_TYPE_NAME = "Оборудование"
 VALVE_TYPE_NAME = "Клапан"
 OUTER_VALVE_NAME = "ZAWTERM"
 FAMILY_NAME_CONST = 'Обр_ОП_Универсальный'
-DEBUG_MODE = True
+DEBUG_MODE = False
 
 if DEBUG_MODE:
     debug_placer = DebugPlacerLib.DebugPlacer(doc, diameter=2000)
