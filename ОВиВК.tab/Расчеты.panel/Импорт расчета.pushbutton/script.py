@@ -181,7 +181,7 @@ class EquipmentDataCache:
 
             if data.type_name == EQUIPMENT_TYPE_NAME:
                 real_power_watts = UnitUtils.ConvertToInternalUnits(data.real_power, UnitTypeId.Watts)
-                len_meters = UnitUtils.ConvertToInternalUnits(data.len, UnitTypeId.Millimeters)
+                len_meters = convert_to_mms(data.len)
                 element.SetParamValue('ADSK_Размер_Длина', len_meters)
                 element.SetParamValue('ADSK_Код изделия', data.code)
                 element.SetParamValue('ADSK_Тепловая мощность', real_power_watts)
@@ -350,23 +350,29 @@ def get_level_cylinders(ayditror_equipment_elements):
     Формирование цилиндров идет по низу аудитор-оборудования, которое выше отметок уровней в ревите. Соответственно,
     для попадания отметок элементов ревита в эти цилиндры мы понижаем низ и верх цилиндров на небольшую величину
     '''
-    unique_z_values = set()
-    for ayditor_equipment in ayditror_equipment_elements:
-        if ayditor_equipment.type_name == EQUIPMENT_TYPE_NAME:
-            unique_z_values.add(ayditor_equipment.z)
+
+    max_z_offset = 2500 # Значение предельного смещения для Z-прибора. Обусловлено тем, что 2200 - предельная высота
+    # установки приборов на лестничных клетках
+    z_stock = 250 # Значение для понижения низа цилиндра, позволяющее проектировщику имет ьпогрешность по высоте
+
+    unique_z_values = {
+        eq.z for eq in ayditror_equipment_elements
+        if eq.type_name == EQUIPMENT_TYPE_NAME
+    }
 
     unique_z_values = sorted(unique_z_values)
 
     cylinder_list = []
-    for i in range(len(unique_z_values)):
-        z_min = unique_z_values[i] - 250
-        if i < len(unique_z_values) - 1:
-            z_max = unique_z_values[i + 1] - 250
-            cylinder_h = z_max - z_min
-            if cylinder_h > 2500:
-                z_max = z_min + 2500
+    for i, z in enumerate(unique_z_values):
+        z_min = z - z_stock
+
+        if i + 1 < len(unique_z_values):
+            next_z = unique_z_values[i + 1] - z_stock
+            z_max = min(z_min + max_z_offset, next_z)
         else:
-            z_max = z_min + 2500
+            z_max = z_min + max_z_offset
+
+        cylinder_list.append(CylinderZ(z_min, z_max))
 
         cylinder = CylinderZ(z_min, z_max)
         cylinder_list.append(cylinder)
@@ -471,7 +477,7 @@ EQUIPMENT_TYPE_NAME = "Оборудование"
 VALVE_TYPE_NAME = "Клапан"
 OUTER_VALVE_NAME = "ZAWTERM"
 FAMILY_NAME_CONST = 'Обр_ОП_Универсальный'
-DEBUG_MODE = False
+DEBUG_MODE = True
 
 if DEBUG_MODE:
     debug_placer = DebugPlacerLib.DebugPlacer(doc, diameter=2000)
