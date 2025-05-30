@@ -106,7 +106,7 @@ class AuditorEquipment:
 
 
 
-        self.debug_placer = DebugPlacerLib.DebugPlacer(doc, diameter=2000)
+
 
     def is_in_data_area(self, revit_equipment):
         xyz = revit_equipment.Location.Point
@@ -151,12 +151,13 @@ class AuditorEquipment:
                 # self.level_cylinder.z_min += convert_to_mms(self.base_point_z)
                 # self.level_cylinder.z_max += convert_to_mms(self.base_point_z)
                 # self.level_cylinder.len = self.level_cylinder.z_max - self.level_cylinder.z_min
-
-                self.debug_placer.place_symbol(
+                comment = self.type_name + ";" + str(self.x) + ";" + str(self.y) + ";" + str(self.z)
+                debug_placer.place_symbol(
                     self.x,
                     self.y,
                     self.z,
-                    self.level_cylinder.z_max - self.level_cylinder.z_min
+                    self.level_cylinder.z_max - self.level_cylinder.z_min,
+                    comment
                 )
 
     def print_debug_info(self, revit_equipment,
@@ -314,7 +315,7 @@ def extract_heating_device_description(file_path, angle):
         .FirstElement()
 
     base_point_z = base_point.GetParamValue(BuiltInParameter.BASEPOINT_ELEVATION_PARAM)
-    print internal_origin
+
     internal_origin_z = internal_origin.SharedPosition.Z
     z_correction = (base_point_z - internal_origin_z) * 304.8
 
@@ -383,8 +384,9 @@ def get_level_cylinders(ayditror_equipment_elements):
         z_min = unique_z_values[i] - 250
         if i < len(unique_z_values) - 1:
             z_max = unique_z_values[i + 1] - 250
-            # if z_max - z_min < 850: #
-            #     z_max = z_min+850
+            cylinder_h = z_max - z_min
+            if cylinder_h > 2500:
+                z_max = z_min + 2500
         else:
             z_max = z_min + 2500
 
@@ -473,6 +475,7 @@ def process_audytor_revit_matching(ayditror_equipment_elements, filtered_equipme
 
 
 FAMILY_NAME_CONST = 'Обр_ОП_Универсальный'
+debug_placer = DebugPlacerLib.DebugPlacer(doc, diameter=2000)
 
 @notification()
 @log_plugin(EXEC_PARAMS.command_name)
@@ -485,6 +488,7 @@ def script_execute(plugin_logger):
     level_cylinders = get_level_cylinders(ayditror_equipment_elements)
 
     with revit.Transaction("BIM: Импорт расчетов"):
+        debug_placer.remove_models()
         for ayditor_equipment in ayditror_equipment_elements:
             ayditor_equipment.set_level_cylinder(level_cylinders)
 

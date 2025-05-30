@@ -93,6 +93,8 @@ class DebugPlacer:
             description: Описание элемента.
         """
         # Фильтруем элементы, чтобы получить только те, у которых имя семейства равно "_Якорный элемент"
+
+
         generic_model_collection = \
             [elem for elem in self.__get_elements_by_category(BuiltInCategory.OST_GenericModel) if elem.GetElementType()
             .GetParamValue(BuiltInParameter.ALL_MODEL_FAMILY_NAME) == self.FAMILY_NAME]
@@ -100,7 +102,8 @@ class DebugPlacer:
         for element in generic_model_collection:
             self.doc.Delete(element.Id)
 
-    def place_symbol(self, x, y, z, height):
+
+    def place_symbol(self, x, y, z, height, comment):
         self.symbol.Activate()
 
         # Конвертация из миллиметров в внутренние единицы (футы)
@@ -118,3 +121,4 @@ class DebugPlacer:
 
         instance.SetParamValue("Диаметр", self.diameter)
         instance.SetParamValue("Высота", height)
+        instance.SetParamValue("Комментарии", comment)
