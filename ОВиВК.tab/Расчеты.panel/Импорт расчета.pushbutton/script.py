@@ -2,7 +2,6 @@
 import sys
 import clr
 
-
 clr.AddReference('ProtoGeometry')
 clr.AddReference("RevitNodes")
 clr.AddReference("RevitServices")
@@ -24,7 +23,6 @@ import JsonOperatorLib
 import DebugPlacerLib
 from System.Collections.Generic import *
 
-
 from Autodesk.Revit.DB import *
 from Autodesk.Revit.DB import InternalOrigin
 from Autodesk.Revit.UI.Selection import Selection
@@ -41,20 +39,14 @@ from pyrevit import HOST_APP
 from pyrevit import EXEC_PARAMS
 from rpw.ui.forms import select_file
 
-
 clr.ImportExtensions(dosymep.Revit)
 clr.ImportExtensions(dosymep.Bim4Everyone)
 from dosymep.Bim4Everyone.Templates import ProjectParameters
 from dosymep_libs.bim4everyone import *
 
-
 doc = __revit__.ActiveUIDocument.Document  # type: Document
 uiapp = __revit__.Application
 uidoc = __revit__.ActiveUIDocument
-
-EQUIPMENT_TYPE_NAME = "Оборудование"
-VALVE_TYPE_NAME = "Клапан"
-OUTER_VALVE_NAME = "ZAWTERM"
 
 class CylinderZ:
     def __init__(self, z_min, z_max):
@@ -105,9 +97,20 @@ class AuditorEquipment:
         self.type_name = type_name
 
     def is_in_data_area(self, revit_equipment):
+        def get_bb_center():
+            minPoint = bb.Min
+            maxPoint = bb.Max
+
+            centroid = XYZ(
+                (minPoint.X + maxPoint.X) / 2,
+                (minPoint.Y + maxPoint.Y) / 2,
+                (minPoint.Z + maxPoint.Z) / 2
+            )
+            return centroid
+
         xyz = revit_equipment.Location.Point
         bb = revit_equipment.GetBoundingBox()
-        bb_center = get_bb_center(bb)
+        bb_center = get_bb_center()
 
         revit_coords = RevitXYZmms(
             convert_to_mms(xyz.X),
@@ -141,44 +144,16 @@ class AuditorEquipment:
             if level_cylinder.z_min <= self.z <= level_cylinder.z_max:
                 self.level_cylinder = level_cylinder
 
-                comment = self.type_name + ";" + str(self.x) + ";" + str(self.y) + ";" + str(self.z)
-                debug_placer.place_symbol(
-                    self.x,
-                    self.y,
-                    self.z,
-                    self.level_cylinder.z_max - self.level_cylinder.z_min,
-                    comment
-                )
+                if DEBUG_MODE:
+                    comment = self.type_name + ";" + str(self.x) + ";" + str(self.y) + ";" + str(self.z)
+                    debug_placer.place_symbol(
+                        self.x,
+                        self.y,
+                        self.z,
+                        self.level_cylinder.z_max - self.level_cylinder.z_min,
+                        comment
+                    )
                 break
-
-    def print_debug_info(self, revit_equipment,
-                         integer_id,
-                         distance,
-                         distance_to_bb_center,
-                         distance_to_location_center,
-                         radius,
-                         revit_coords
-                         ):
-        '''
-        self.print_debug_info(revit_equipment, 2335627, distance,
-        distance_to_bb_center, distance_to_location_center, radius, revit_coords) - шпаргалка для вызова дебага
-        в расчете, вставлять перед return distance <= radius
-        '''
-        if revit_equipment.Id.IntegerValue == integer_id:
-            if distance <= radius:
-                print('__Характеристика элемента__:')
-                print('element_id: ' + str(revit_equipment.Id))
-                print('distance: ' + str(distance))
-                print('distance_to_bb_center: ' + str(distance_to_bb_center))
-                print('distance_to_location_center: ' + str(distance_to_location_center))
-                print('__Данные для расчета по xy__:')
-                print('revit_equipment_x ' + str(revit_coords.x))
-                print('revit_equipment_y ' + str(revit_coords.y))
-                print('__Данные для расчета по z__:')
-                print('level_cilinder_z_min ' + str(self.level_cylinder.z_min))
-                print('level_cilinder_z_max ' + str(self.level_cylinder.z_max))
-                print('revit_equipment_z ' + str(revit_coords.z))
-                print('_________________________')
 
 class EquipmentDataCache:
     def __init__(self):
@@ -254,19 +229,6 @@ def get_setting_float_value(value):
     else:
         return float(value)
 
-def rotate_point_around_origin(x, y, z, angle_degrees):
-    if angle_degrees == 0:
-        return x, y, z
-    # Угол в радианах
-    angle_radians = math.radians(angle_degrees)
-    # Матрица поворота вокруг оси Z (в плоскости XY)
-    cos_theta = math.cos(angle_radians)
-    sin_theta = math.sin(angle_radians)
-    x_new = x * cos_theta - y * sin_theta
-    y_new = x * sin_theta + y * cos_theta
-    z_new = z
-    return x_new, y_new, z_new
-
 def extract_heating_device_description(file_path, angle):
     def parse_float(value):
         return float(value.replace(',', '.'))
@@ -288,6 +250,19 @@ def extract_heating_device_description(file_path, angle):
         return result
 
     def parse_heating_device(line):
+        def rotate_point_around_origin():
+            if angle == 0:
+                return x, y, z
+            # Угол в радианах
+            angle_radians = math.radians(angle)
+            # Матрица поворота вокруг оси Z (в плоскости XY)
+            cos_theta = math.cos(angle_radians)
+            sin_theta = math.sin(angle_radians)
+            x_new = x * cos_theta - y * sin_theta
+            y_new = x * sin_theta + y * cos_theta
+            z_new = z
+            return x_new, y_new, z_new
+
         data = line.strip().split(';')
         rr = reading_rules_device
         x = parse_float(data[rr.x_index]) * 1000
@@ -295,7 +270,7 @@ def extract_heating_device_description(file_path, angle):
         z = parse_float(data[rr.z_index]) * 1000
 
         z = z + z_correction
-        x, y, z = rotate_point_around_origin(x, y, z, angle)
+        x, y, z = rotate_point_around_origin()
 
         return AuditorEquipment(
             data[rr.connection_type_index],
@@ -370,21 +345,6 @@ def get_elements_by_category(category):
     ]
     return filtered_equipment
 
-def insert_data(element, auditor_data, data_cache):
-    data_cache.collect_data(element, auditor_data)
-
-
-def get_bb_center(bb):
-    minPoint = bb.Min
-    maxPoint = bb.Max
-
-    centroid = XYZ(
-        (minPoint.X + maxPoint.X) / 2,
-        (minPoint.Y + maxPoint.Y) / 2,
-        (minPoint.Z + maxPoint.Z) / 2
-    )
-    return centroid
-
 def get_level_cylinders(ayditror_equipment_elements):
     '''
     Формирование цилиндров идет по низу аудитор-оборудования, которое выше отметок уровней в ревите. Соответственно,
@@ -411,33 +371,6 @@ def get_level_cylinders(ayditror_equipment_elements):
         cylinder = CylinderZ(z_min, z_max)
         cylinder_list.append(cylinder)
     return  cylinder_list
-
-def print_area_overflow_report(ayditor_equipment, equipment_in_area):
-    if len(equipment_in_area) > 1:  # Если в области данных дублирование элементов - данные из
-        # аудитора могут перенестись идентично в несколько разных приборов
-        print('В данные области попадает больше одного прибора:')
-        print('Прибор х: {}, y: {}, z: {}'.format(
-            ayditor_equipment.base_x,
-            ayditor_equipment.base_y,
-            ayditor_equipment.base_z))
-
-        print('ID приборов:')
-        for x in equipment_in_area:
-            print(x.Id)
-
-def print_not_found_report(audytor_equipment_elements):
-    not_found_audytor_reports = []
-    for audytor_equipment in audytor_equipment_elements:
-        if not audytor_equipment.processed:
-            not_found_audytor_reports.append(audytor_equipment)
-
-    if len(not_found_audytor_reports) > 0:
-        print('Не найдено универсальное оборудование в областях:')
-        for audytor_equipment in not_found_audytor_reports:
-            print('Прибор х: {}, y: {}, z: {}'.format(
-                audytor_equipment.base_x,
-                audytor_equipment.base_y,
-                audytor_equipment.base_z))
 
 def process_start_up():
     if doc.IsFamilyDocument:
@@ -476,6 +409,46 @@ def process_start_up():
     return angle, filepath
 
 def process_audytor_revit_matching(ayditror_equipment_elements, filtered_equipment):
+    def print_area_overflow_report(all_ayditor_equipment, all_equipment):
+        from collections import defaultdict
+
+        # Словарь: ключ — ID прибора, значение — список координат областей, в которые он попал
+        equipment_to_areas = defaultdict(list)
+
+        for ayditor_equipment in all_ayditor_equipment:
+            equipment_in_area = [
+                eq for eq in all_equipment if ayditor_equipment.is_in_data_area(eq)
+            ]
+            if len(equipment_in_area) > 1:
+                for eq in equipment_in_area:
+                    area_coords = (ayditor_equipment.base_x,
+                                   ayditor_equipment.base_y,
+                                   ayditor_equipment.base_z)
+                    equipment_to_areas[eq.Id].append(area_coords)
+
+        if equipment_to_areas:
+            print('Обнаружено переполнение данных областей:')
+            for eq_id, areas in equipment_to_areas.iteritems():  # .iteritems() для Python 2
+                print('\nID элемента: {}'.format(eq_id))
+                print('Элемент попал в области:')
+                for coords in areas:
+                    print('  х: {}, y: {}, z: {}'.format(coords[0], coords[1], coords[2]))
+            print '\n '
+
+    def print_not_found_report(audytor_equipment_elements):
+        not_found_audytor_reports = []
+        for audytor_equipment in audytor_equipment_elements:
+            if not audytor_equipment.processed:
+                not_found_audytor_reports.append(audytor_equipment)
+
+        if len(not_found_audytor_reports) > 0:
+            print('Не найдено универсальное оборудование в областях:')
+            for audytor_equipment in not_found_audytor_reports:
+                print('Прибор х: {}, y: {}, z: {}'.format(
+                    audytor_equipment.base_x,
+                    audytor_equipment.base_y,
+                    audytor_equipment.base_z))
+
     data_cache = EquipmentDataCache()
 
     for ayditor_equipment in ayditror_equipment_elements:
@@ -484,18 +457,24 @@ def process_audytor_revit_matching(ayditror_equipment_elements, filtered_equipme
         ]
         ayditor_equipment.processed = len(equipment_in_area) >= 1
         if len(equipment_in_area) == 1:
-            insert_data(equipment_in_area[0], ayditor_equipment, data_cache)
+            data_cache.collect_data(equipment_in_area[0], ayditor_equipment)
 
-        print_area_overflow_report(ayditor_equipment, equipment_in_area)
+    # Новый группированный отчет
+    print_area_overflow_report(ayditror_equipment_elements, filtered_equipment)
 
     # Финальный проход — запись параметров в Revit
     data_cache.write_all()
 
     print_not_found_report(ayditror_equipment_elements)
 
-
+EQUIPMENT_TYPE_NAME = "Оборудование"
+VALVE_TYPE_NAME = "Клапан"
+OUTER_VALVE_NAME = "ZAWTERM"
 FAMILY_NAME_CONST = 'Обр_ОП_Универсальный'
-debug_placer = DebugPlacerLib.DebugPlacer(doc, diameter=2000)
+DEBUG_MODE = False
+
+if DEBUG_MODE:
+    debug_placer = DebugPlacerLib.DebugPlacer(doc, diameter=2000)
 
 @notification()
 @log_plugin(EXEC_PARAMS.command_name)
@@ -508,7 +487,6 @@ def script_execute(plugin_logger):
     level_cylinders = get_level_cylinders(ayditror_equipment_elements)
 
     with revit.Transaction("BIM: Импорт приборов"):
-        debug_placer.remove_models()
         for ayditor_equipment in ayditror_equipment_elements:
             ayditor_equipment.set_level_cylinder(level_cylinders)
 

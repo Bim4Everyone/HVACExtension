@@ -62,6 +62,9 @@ class DebugPlacer:
         self.symbol = self.__find_family_symbol(self.FAMILY_NAME)
         self.diameter = UnitUtils.ConvertToInternalUnits(diameter, UnitTypeId.Millimeters)
 
+        with revit.Transaction("BIM: Импорт приборов"):
+            self.__remove_models()
+
     def __find_family_symbol(self, family_name):
         family_symbols = FilteredElementCollector(self.doc).OfClass(FamilySymbol).ToElements()
         family_symbol = next((fs for fs in family_symbols if fs.Family.Name == family_name), None)
@@ -85,7 +88,7 @@ class DebugPlacer:
             .WhereElementIsNotElementType() \
             .ToElements()
 
-    def remove_models(self):
+    def __remove_models(self):
         """
         Удаляет элементы с переданным описанием.
 
@@ -122,3 +125,33 @@ class DebugPlacer:
         instance.SetParamValue("Диаметр", self.diameter)
         instance.SetParamValue("Высота", height)
         instance.SetParamValue("Комментарии", comment)
+
+    def print_debug_info(self, revit_equipment,
+                         integer_id,
+                         distance,
+                         distance_to_bb_center,
+                         distance_to_location_center,
+                         radius,
+                         revit_coords,
+                         level_cylinder
+                         ):
+        '''
+        self.print_debug_info(revit_equipment, 2335627, distance,
+        distance_to_bb_center, distance_to_location_center, radius, revit_coords) - шпаргалка для вызова дебага
+        в расчете, вставлять перед return distance <= radius
+        '''
+        if revit_equipment.Id.IntegerValue == integer_id:
+            if distance <= radius:
+                print('__Характеристика элемента__:')
+                print('element_id: ' + str(revit_equipment.Id))
+                print('distance: ' + str(distance))
+                print('distance_to_bb_center: ' + str(distance_to_bb_center))
+                print('distance_to_location_center: ' + str(distance_to_location_center))
+                print('__Данные для расчета по xy__:')
+                print('revit_equipment_x ' + str(revit_coords.x))
+                print('revit_equipment_y ' + str(revit_coords.y))
+                print('__Данные для расчета по z__:')
+                print('level_cilinder_z_min ' + str(level_cylinder.z_min))
+                print('level_cilinder_z_max ' + str(level_cylinder.z_max))
+                print('revit_equipment_z ' + str(revit_coords.z))
+                print('_________________________')
