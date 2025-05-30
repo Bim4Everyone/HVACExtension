@@ -345,7 +345,7 @@ def get_elements_by_category(category):
     ]
     return filtered_equipment
 
-def get_level_cylinders(ayditror_equipment_elements):
+def create_level_cylinders(ayditror_equipment_elements):
     '''
     Формирование цилиндров идет по низу аудитор-оборудования, которое выше отметок уровней в ревите. Соответственно,
     для попадания отметок элементов ревита в эти цилиндры мы понижаем низ и верх цилиндров на небольшую величину
@@ -490,7 +490,7 @@ def script_execute(plugin_logger):
     ayditror_equipment_elements = extract_heating_device_description(filepath, angle)
 
     # собираем высоты цилиндров в которых будем искать данные
-    level_cylinders = get_level_cylinders(ayditror_equipment_elements)
+    level_cylinders = create_level_cylinders(ayditror_equipment_elements)
 
     with revit.Transaction("BIM: Импорт приборов"):
         for ayditor_equipment in ayditror_equipment_elements:
