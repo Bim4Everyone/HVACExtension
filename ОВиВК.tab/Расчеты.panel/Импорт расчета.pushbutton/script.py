@@ -181,7 +181,7 @@ class EquipmentDataCache:
 
             if data.type_name == EQUIPMENT_TYPE_NAME:
                 real_power_watts = UnitUtils.ConvertToInternalUnits(data.real_power, UnitTypeId.Watts)
-                len_meters = convert_to_mms(data.len)
+                len_meters = convert_to_ms(data.len)
                 element.SetParamValue('ADSK_Размер_Длина', len_meters)
                 element.SetParamValue('ADSK_Код изделия', data.code)
                 element.SetParamValue('ADSK_Тепловая мощность', real_power_watts)
@@ -221,6 +221,11 @@ def convert_to_mms(value):
     """Конвертирует из внутренних значений ревита в миллиметры"""
     result = UnitUtils.ConvertFromInternalUnits(value,
                                                UnitTypeId.Millimeters)
+    return result
+def convert_to_ms(value):
+    """Конвертирует из внутренних значений ревита в миллиметры"""
+    result = UnitUtils.ConvertToInternalUnits(value,
+                                               UnitTypeId.Meters)/1000
     return result
 
 def get_setting_float_value(value):
@@ -288,13 +293,14 @@ def extract_heating_device_description(file_path, angle):
     def parse_valve(line):
         data = line.strip().split(';')
         rr = reading_rules_valve
+        if data[rr.connection_type_index] != OUTER_VALVE_NAME:
+            return None
+
         x = parse_float(data[rr.x_index]) * 1000
         y = parse_float(data[rr.y_index]) * 1000
         z = parse_float(data[rr.z_index]) * 1000
         z = z + z_correction
 
-        if data[rr.connection_type_index] != OUTER_VALVE_NAME:
-            return None
         return AuditorEquipment(
             data[rr.maker_index],
             x,
@@ -338,11 +344,17 @@ def get_elements_by_category(category):
                             .OfCategory(category)\
                             .WhereElementIsNotElementType()\
                             .ToElements()
+    if ISOLATE_FLAG:
+        filtered_equipment = [
+            eq for eq in revit_equipment_elements
+            if eq.Id.IntegerValue == TARGET_ID
+        ]
+    else:
+        filtered_equipment = [
+            eq for eq in revit_equipment_elements
+            if FAMILY_NAME_CONST in eq.Symbol.Family.Name
+        ]
 
-    filtered_equipment = [
-        eq for eq in revit_equipment_elements
-        if FAMILY_NAME_CONST in eq.Symbol.Family.Name
-    ]
     return filtered_equipment
 
 def create_level_cylinders(ayditror_equipment_elements):
@@ -478,6 +490,8 @@ VALVE_TYPE_NAME = "Клапан"
 OUTER_VALVE_NAME = "ZAWTERM"
 FAMILY_NAME_CONST = 'Обр_ОП_Универсальный'
 DEBUG_MODE = False
+ISOLATE_FLAG = False
+TARGET_ID = 2427768
 
 if DEBUG_MODE:
     debug_placer = DebugPlacerLib.DebugPlacer(doc, diameter=2000)
