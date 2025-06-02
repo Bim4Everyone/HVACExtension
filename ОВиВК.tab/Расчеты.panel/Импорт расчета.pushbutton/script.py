@@ -62,9 +62,12 @@ class AuditorEquipment:
 
     def __init__(self,
                  connection_type= "",
-                 x = 0.0,
-                 y = 0.0,
-                 z = 0.0,
+                 x_new = 0.0,
+                 y_new = 0.0,
+                 z_new = 0.0,
+                 x =0.0,
+                 y=0.0,
+                 z=0.0,
                  len = 0,
                  code = "",
                  real_power = "",
@@ -79,14 +82,13 @@ class AuditorEquipment:
             .FirstElement()
 
         self.base_point_z = base_point.GetParamValue(BuiltInParameter.BASEPOINT_ELEVATION_PARAM)
-
         self.connection_type = connection_type
+        self.x_new = x_new
+        self.y_new = y_new
+        self.z_new = z_new
         self.x = x
         self.y = y
         self.z = z
-        self.base_x = x
-        self.base_y = y
-        self.base_z = z
         self.len = len
         self.code = code
         self.real_power = real_power
@@ -276,11 +278,12 @@ def extract_heating_device_description(file_path, angle):
         z = parse_float(data[rr.z_index]) * 1000
 
         z = z + z_correction
-        x, y, z = rotate_point_around_origin(angle, x, y, z)
+        x_new, y_new, z_new = rotate_point_around_origin(angle, x, y, z)
 
         return AuditorEquipment(
             data[rr.connection_type_index],
             x, y, z,
+            x_new, y_new, z_new,
             parse_float(data[rr.len_index]),
             data[rr.code_index],
             parse_float(data[rr.real_power_index]),
@@ -302,13 +305,12 @@ def extract_heating_device_description(file_path, angle):
         z = parse_float(data[rr.z_index]) * 1000
         z = z + z_correction
 
-        x, y, z = rotate_point_around_origin(angle, x, y, z)
+        x_new, y_new, z_new = rotate_point_around_origin(angle, x, y, z)
 
         return AuditorEquipment(
             data[rr.maker_index],
-            x,
-            y,
-            z,
+            x, y, z,
+            x_new, y_new, z_new,
             setting=get_setting_float_value(data[rr.setting_index].replace(',', '.')),
             type_name=VALVE_TYPE_NAME
         )
@@ -437,9 +439,9 @@ def process_audytor_revit_matching(ayditror_equipment_elements, filtered_equipme
             ]
             if len(equipment_in_area) > 1:
                 for eq in equipment_in_area:
-                    area_coords = (ayditor_equipment.base_x,
-                                   ayditor_equipment.base_y,
-                                   ayditor_equipment.base_z)
+                    area_coords = (ayditor_equipment.x_new,
+                                   ayditor_equipment.y_new,
+                                   ayditor_equipment.z_new)
                     equipment_to_areas[eq.Id].append(area_coords)
 
         if equipment_to_areas:
@@ -461,9 +463,9 @@ def process_audytor_revit_matching(ayditror_equipment_elements, filtered_equipme
             print('Не найдено универсальное оборудование в областях:')
             for audytor_equipment in not_found_audytor_reports:
                 print('Прибор х: {}, y: {}, z: {}'.format(
-                    audytor_equipment.base_x,
-                    audytor_equipment.base_y,
-                    audytor_equipment.base_z))
+                    audytor_equipment.x_new,
+                    audytor_equipment.y_new,
+                    audytor_equipment.z_new))
 
     data_cache = EquipmentDataCache()
 
