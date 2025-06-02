@@ -103,16 +103,15 @@ class TransitionElbowCoefficientCalculator(CalculatorClassLib.AerodinamicCoeffic
                 2 * (output_conn.width + output_conn.height)) # Для прямоугольных сечений берем эквивалентный D
             l_d = length / float(d)
 
-            if is_circular:
-                thresholds = [(0.1, [(10, 0.41), (20, 0.34), (30, 0.27), (180, 0.24)]),
-                              (0.15, [(10, 0.39), (20, 0.29), (30, 0.22), (180, 0.18)]),
-                              (float('inf'), [(10, 0.29), (20, 0.20), (30, 0.15), (180, 0.13)])]
+            thresholds = [(0.1, [(10, 0.41), (20, 0.34), (30, 0.27), (180, 0.24)]),
+                          (0.15, [(10, 0.39), (20, 0.29), (30, 0.22), (180, 0.18)]),
+                          (float('inf'), [(10, 0.29), (20, 0.20), (30, 0.15), (180, 0.13)])]
 
-                for limit, table in thresholds:
-                    if l_d <= limit:
-                        for angle_limit, coeff in table:
-                            if angle <= angle_limit:
-                                return coeff
+            for limit, table in thresholds:
+                if l_d <= limit:
+                    for angle_limit, coeff in table:
+                        if angle <= angle_limit:
+                            return coeff
 
 
         else:
