@@ -254,19 +254,20 @@ def extract_heating_device_description(file_path, angle):
             i += 1
         return result
 
+    def rotate_point_around_origin(angle, x, y, z):
+        if angle == 0:
+            return x, y, z
+        # Угол в радианах
+        angle_radians = math.radians(angle)
+        # Матрица поворота вокруг оси Z (в плоскости XY)
+        cos_theta = math.cos(angle_radians)
+        sin_theta = math.sin(angle_radians)
+        x_new = x * cos_theta - y * sin_theta
+        y_new = x * sin_theta + y * cos_theta
+        z_new = z
+        return x_new, y_new, z_new
+
     def parse_heating_device(line):
-        def rotate_point_around_origin():
-            if angle == 0:
-                return x, y, z
-            # Угол в радианах
-            angle_radians = math.radians(angle)
-            # Матрица поворота вокруг оси Z (в плоскости XY)
-            cos_theta = math.cos(angle_radians)
-            sin_theta = math.sin(angle_radians)
-            x_new = x * cos_theta - y * sin_theta
-            y_new = x * sin_theta + y * cos_theta
-            z_new = z
-            return x_new, y_new, z_new
 
         data = line.strip().split(';')
         rr = reading_rules_device
@@ -275,7 +276,7 @@ def extract_heating_device_description(file_path, angle):
         z = parse_float(data[rr.z_index]) * 1000
 
         z = z + z_correction
-        x, y, z = rotate_point_around_origin()
+        x, y, z = rotate_point_around_origin(angle, x, y, z)
 
         return AuditorEquipment(
             data[rr.connection_type_index],
@@ -300,6 +301,8 @@ def extract_heating_device_description(file_path, angle):
         y = parse_float(data[rr.y_index]) * 1000
         z = parse_float(data[rr.z_index]) * 1000
         z = z + z_correction
+
+        x, y, z = rotate_point_around_origin(angle, x, y, z)
 
         return AuditorEquipment(
             data[rr.maker_index],
