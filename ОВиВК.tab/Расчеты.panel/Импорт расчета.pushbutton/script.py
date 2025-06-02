@@ -344,16 +344,11 @@ def get_elements_by_category(category):
                             .OfCategory(category)\
                             .WhereElementIsNotElementType()\
                             .ToElements()
-    if ISOLATE_FLAG:
-        filtered_equipment = [
-            eq for eq in revit_equipment_elements
-            if eq.Id.IntegerValue == TARGET_ID
-        ]
-    else:
-        filtered_equipment = [
-            eq for eq in revit_equipment_elements
-            if FAMILY_NAME_CONST in eq.Symbol.Family.Name
-        ]
+
+    filtered_equipment = [
+        eq for eq in revit_equipment_elements
+        if FAMILY_NAME_CONST in eq.Symbol.Family.Name
+    ]
 
     return filtered_equipment
 
@@ -490,8 +485,6 @@ VALVE_TYPE_NAME = "Клапан"
 OUTER_VALVE_NAME = "ZAWTERM"
 FAMILY_NAME_CONST = 'Обр_ОП_Универсальный'
 DEBUG_MODE = False
-ISOLATE_FLAG = False
-TARGET_ID = 2427768
 
 if DEBUG_MODE:
     debug_placer = DebugPlacerLib.DebugPlacer(doc, diameter=2000)
