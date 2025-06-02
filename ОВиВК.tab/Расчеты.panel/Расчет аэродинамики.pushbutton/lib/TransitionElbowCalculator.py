@@ -160,8 +160,9 @@ class TransitionElbowCoefficientCalculator(CalculatorClassLib.AerodinamicCoeffic
         output_element = output_connector.connected_element
 
         main_element = input_element if self.system.SystemType == DuctSystemType.SupplyAir else output_element
+        second_element = output_element if main_element == input_element else input_element
 
-        f = input_connector.area
+        f = self.get_element_area(second_element)
         F = self.get_element_area(main_element)
 
         if f != F:
@@ -169,7 +170,8 @@ class TransitionElbowCoefficientCalculator(CalculatorClassLib.AerodinamicCoeffic
                     0.4 + 0.7 * (f / F) ** 2)
             base_name = 'Колено прямоугольное с изменением сечения'
             duct_input = self.find_input_output_connector(main_element)[0]
-            self.remember_element_name(element, base_name, [input_connector, duct_input])
+            duct_output = self.find_input_output_connector(second_element)[0]
+            self.remember_element_name(element, base_name, [duct_output, duct_input])
             return coefficient
 
         # Если площади равны — работаем как с обычным отводом
