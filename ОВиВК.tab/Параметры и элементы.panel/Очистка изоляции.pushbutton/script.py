@@ -131,10 +131,10 @@ def script_execute(plugin_logger):
                 if not editor_report.is_element_edited(element):
                     insulation_to_delete.append(element)
 
-    # Нужно вынести удаление в отдельный цикл от проверки занятости,
-    # иначе при необходимости синхрона будет сбрасывать транзакцию с сообщением о устаревшей версии
     insulation_number = len(insulation_to_delete)
 
+    # Нужно вынести удаление в отдельный цикл от проверки занятости,
+    # иначе при необходимости синхрона будет сбрасывать транзакцию с сообщением о устаревшей версии
     with revit.Transaction("BIM: Удаление изоляции"):
         for element in insulation_to_delete:
             doc.Delete(element.Id)
