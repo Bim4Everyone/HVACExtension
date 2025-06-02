@@ -202,7 +202,7 @@ class TransitionElbowCoefficientCalculator(CalculatorClassLib.AerodinamicCoeffic
         if rounding != 150:
             rounding = UnitUtils.ConvertFromInternalUnits(rounding, UnitTypeId.Millimeters)
 
-        coefficient, base_name = self.__calculate_elbow_coefficient(connector)
+        coefficient, base_name = self.__calculate_elbow_coefficient(connector, rounding)
 
         self.remember_element_name(element, base_name,
                                    [connector, connector],
