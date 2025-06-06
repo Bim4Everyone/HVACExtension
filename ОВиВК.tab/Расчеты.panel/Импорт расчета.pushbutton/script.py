@@ -56,9 +56,20 @@ class CylinderZ:
         self.len = z_max - z_min
 
 class AuditorEquipment:
+    """
+    Класс используется для хранения и обратки информации об элементах из Аудитора.
+
+    ---
+    processed : Bool
+        Булева переменная предназначенная для недопущения дублирования элементов из Аудитор в циклах обработки
+
+    level_cylinder : list
+        Список, который содержит пары Z min и Z max для каждого элемента из Аудитор
+
+    """
     processed = False
     level_cylinder = None
-    type_name = None
+
 
     def __init__(self,
                  connection_type= "",
@@ -76,10 +87,23 @@ class AuditorEquipment:
                  maker = "",
                  full_name = "",
                  type_name = None):
+        """
+        Parametrs
+        --------
+        connection_type : str
+            Тип обрабатываемого элемента в Аудиторе
+        x_new, y_new, z_new : float
+            Координаты после поворота
+        x, y, z : float
+            Координаты исходные
+
+        """
         base_point = FilteredElementCollector(doc) \
             .OfCategory(BuiltInCategory.OST_ProjectBasePoint) \
             .WhereElementIsNotElementType() \
             .FirstElement()
+
+        # base_point - Возвращает базовую точку проекта
 
         self.base_point_z = base_point.GetParamValue(BuiltInParameter.BASEPOINT_ELEVATION_PARAM)
         self.connection_type = connection_type
@@ -99,7 +123,24 @@ class AuditorEquipment:
         self.type_name = type_name
 
     def is_in_data_area(self, revit_equipment):
+        """
+        Определяет, пересекаются ли области положений элемента в ревите и в аудиторе
+        """
         def get_bb_center():
+            """
+            Получить центр Bounding Box
+
+            Parametrs
+            -------
+            revit_coords : float
+                Координаты центра вставки элемента в Ревите
+
+            revit_bb_coords : float
+                Координаты цента ВВ элемента в Ревите
+
+            epsilon : float
+                Погрешность
+            """
             minPoint = bb.Min
             maxPoint = bb.Max
 
@@ -142,6 +183,10 @@ class AuditorEquipment:
         return False
 
     def set_level_cylinder(self, level_cylinders):
+        """
+        Вписывает в список свойств элемента из Аудитора минимальную и максимальную отметку проверочного цилиндра.
+        При активации DEBUG_MODE создает в модели экземпляр Цилиндра по координатам элемента в Аудиторе.
+        """
         for level_cylinder in level_cylinders:
             if level_cylinder.z_min <= self.z <= level_cylinder.z_max:
                 self.level_cylinder = level_cylinder
@@ -183,7 +228,8 @@ class EquipmentDataCache:
 
             if data.type_name == EQUIPMENT_TYPE_NAME:
                 real_power_watts = UnitUtils.ConvertToInternalUnits(data.real_power, UnitTypeId.Watts)
-                len_meters = convert_to_ms(data.len)
+                len_meters = UnitUtils.ConvertToInternalUnits(data.len,
+                                                 UnitTypeId.Meters) / 1000
                 element.SetParamValue('ADSK_Размер_Длина', len_meters)
                 element.SetParamValue('ADSK_Код изделия', data.code)
                 element.SetParamValue('ADSK_Тепловая мощность', real_power_watts)
@@ -192,7 +238,10 @@ class EquipmentDataCache:
             if setting:
                 element.SetParamValue('ADSK_Настройка', setting)
 
-class ReadingRules:
+class ReadingRulesForEquipment:
+    """
+    Класс используется для интерпретиции данных по Приборам
+    """
     connection_type_index = 2
     x_index = 3
     y_index = 4
@@ -206,6 +255,9 @@ class ReadingRules:
     full_name_index = 31
 
 class ReadingRulesForValve:
+    """
+    Класс используется для интерпретиции данных по Клапанам
+    """
     connection_type_index = 1
     maker_index = 2
     x_index = 3
@@ -224,23 +276,32 @@ def convert_to_mms(value):
     result = UnitUtils.ConvertFromInternalUnits(value,
                                                UnitTypeId.Millimeters)
     return result
-def convert_to_ms(value):
-    """Конвертирует из внутренних значений ревита в миллиметры"""
-    result = UnitUtils.ConvertToInternalUnits(value,
-                                               UnitTypeId.Meters)/1000
-    return result
 
 def get_setting_float_value(value):
+    """
+    Корректировка настройки в исходных данных
+    """
     if value == 'N' or value == '' or value == 'Kvs':
         return 0
     else:
         return float(value)
 
 def extract_heating_device_description(file_path, angle):
+    """
+    Получение и обработка информации об элементов из исходных данных
+
+    Parametrs
+    ------
+    equipment: list
+        Список элементов и их свойств из Аудитора
+    """
     def parse_float(value):
         return float(value.replace(',', '.'))
 
     def parse_equipment_section(lines, title, start_offset, parse_func):
+        """
+        Разбивка исходных данных на строки и отсечение лишней информации
+        """
         result = []
         i = 0
         while i < len(lines):
@@ -257,6 +318,9 @@ def extract_heating_device_description(file_path, angle):
         return result
 
     def rotate_point_around_origin(angle, x, y, z):
+        """
+        Поворот координат из исходных данных на указанный угол вокруг начала координат из Аудитора
+        """
         if angle == 0:
             return x, y, z
         # Угол в радианах
@@ -271,6 +335,10 @@ def extract_heating_device_description(file_path, angle):
 
     def parse_heating_device(line):
 
+        """
+        Чтение исходных данных для оборудования по указанными правилам, поворот координат на указанный угол
+        и запись в параметры экземпляра класса
+        """
         data = line.strip().split(';')
         rr = reading_rules_device
         x = parse_float(data[rr.x_index]) * 1000
@@ -295,6 +363,10 @@ def extract_heating_device_description(file_path, angle):
         )
 
     def parse_valve(line):
+        """
+        Чтение исходных данных для клапанов по указанными правилам, поворот координат на указанный угол
+        и запись в параметры экземпляра класса
+        """
         data = line.strip().split(';')
         rr = reading_rules_valve
         if data[rr.connection_type_index] != OUTER_VALVE_NAME:
@@ -330,7 +402,7 @@ def extract_heating_device_description(file_path, angle):
     internal_origin_z = internal_origin.SharedPosition.Z
     z_correction = (base_point_z - internal_origin_z) * 304.8
 
-    reading_rules_device = ReadingRules()
+    reading_rules_device = ReadingRulesForEquipment()
     reading_rules_valve = ReadingRulesForValve()
 
     equipment = parse_equipment_section(lines, "Отопительные приборы CO на плане", 3, parse_heating_device)
@@ -365,7 +437,7 @@ def create_level_cylinders(ayditror_equipment_elements):
 
     max_z_offset = 2500 # Значение предельного смещения для Z-прибора. Обусловлено тем, что 2200 - предельная высота
     # установки приборов на лестничных клетках
-    z_stock = 250 # Значение для понижения низа цилиндра, позволяющее проектировщику имет ьпогрешность по высоте
+    z_stock = 250 # Значение для понижения низа цилиндра, позволяющее проектировщику иметь погрешность по высоте
 
     unique_z_values = {
         eq.z for eq in ayditror_equipment_elements
