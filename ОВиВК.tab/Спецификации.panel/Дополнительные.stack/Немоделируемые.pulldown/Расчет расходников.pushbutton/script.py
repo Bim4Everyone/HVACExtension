@@ -53,41 +53,31 @@ def get_material_hosts(element_types, calculation_name, builtin_category):
     return result_list
 
 def split_calculation_elements_list(elements):
-    """ Разделяем список элементов на подсписки из тех элементов, у которых одинаковая функция, система,
-    блок, секция и этаж
+    """ Разделяем список элементов на подсписки по уникальным характеристикам """
 
-    Args:
-        elements: Список элементов которые нужно поделить по функции-системе
-
-    Returns:
-        Массив из списков с уникальным значение функции-системы
-    """
-
-    # Создаем словарь для группировки элементов по ключу
     grouped_elements = defaultdict(list)
 
-    for element in elements:
-        shared_function = element.GetSharedParamValueOrDefault(
-            SharedParamsConfig.Instance.EconomicFunction.Name, unmodeling_factory.OUT_OF_FUNCTION_VALUE)
-        shared_system = element.GetSharedParamValueOrDefault(
-            SharedParamsConfig.Instance.VISSystemName.Name, unmodeling_factory.OUT_OF_SYSTEM_VALUE)
-        shared_block = element.GetParamValueOrDefault(SharedParamsConfig.Instance.BuildingWorksBlock, '')
-        shared_section = element.GetParamValueOrDefault(SharedParamsConfig.Instance.BuildingWorksSection, '')
-        shared_floor = element.GetParamValueOrDefault(SharedParamsConfig.Instance.BuildingWorksLevel, '')
+    shared_config = SharedParamsConfig.Instance
+    func_param = shared_config.EconomicFunction
+    sys_param = shared_config.VISSystemName
+    block_param = shared_config.BuildingWorksBlock
+    section_param = shared_config.BuildingWorksSection
+    level_param = shared_config.BuildingWorksLevel
 
-        uniq_group_key = (shared_function + "_" +
-                               shared_system + "_" +
-                               shared_block + "_" +
-                               shared_section + "_" +
-                               shared_floor)
+    OUT_OF_FUNC = unmodeling_factory.OUT_OF_FUNCTION_VALUE
+    OUT_OF_SYS = unmodeling_factory.OUT_OF_SYSTEM_VALUE
 
-        # Добавляем элемент в соответствующий список в словаре
-        grouped_elements[uniq_group_key].append(element)
+    for el in elements:
+        func = el.GetParamValueOrDefault(func_param, OUT_OF_FUNC)
+        sys = el.GetParamValueOrDefault(sys_param, OUT_OF_SYS)
+        blk = el.GetParamValueOrDefault(block_param, '')
+        sec = el.GetParamValueOrDefault(section_param, '')
+        flr = el.GetParamValueOrDefault(level_param, '')
 
-    # Преобразуем значения словаря в список списков
-    lists = list(grouped_elements.values())
+        key = func + "_" + sys + "_" + blk + "_" + sec + "_" + flr
+        grouped_elements[key].append(el)
 
-    return lists
+    return grouped_elements.values()
 
 def get_material_number_value(element, operation_name):
     """Вычисление количественного значения расходника

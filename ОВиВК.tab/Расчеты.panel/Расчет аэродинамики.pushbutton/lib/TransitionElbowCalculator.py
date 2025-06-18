@@ -103,16 +103,15 @@ class TransitionElbowCoefficientCalculator(CalculatorClassLib.AerodinamicCoeffic
                 2 * (output_conn.width + output_conn.height)) # Для прямоугольных сечений берем эквивалентный D
             l_d = length / float(d)
 
-            if is_circular:
-                thresholds = [(0.1, [(10, 0.41), (20, 0.34), (30, 0.27), (180, 0.24)]),
-                              (0.15, [(10, 0.39), (20, 0.29), (30, 0.22), (180, 0.18)]),
-                              (float('inf'), [(10, 0.29), (20, 0.20), (30, 0.15), (180, 0.13)])]
+            thresholds = [(0.1, [(10, 0.41), (20, 0.34), (30, 0.27), (180, 0.24)]),
+                          (0.15, [(10, 0.39), (20, 0.29), (30, 0.22), (180, 0.18)]),
+                          (float('inf'), [(10, 0.29), (20, 0.20), (30, 0.15), (180, 0.13)])]
 
-                for limit, table in thresholds:
-                    if l_d <= limit:
-                        for angle_limit, coeff in table:
-                            if angle <= angle_limit:
-                                return coeff
+            for limit, table in thresholds:
+                if l_d <= limit:
+                    for angle_limit, coeff in table:
+                        if angle <= angle_limit:
+                            return coeff
 
 
         else:
@@ -161,8 +160,9 @@ class TransitionElbowCoefficientCalculator(CalculatorClassLib.AerodinamicCoeffic
         output_element = output_connector.connected_element
 
         main_element = input_element if self.system.SystemType == DuctSystemType.SupplyAir else output_element
+        second_element = output_element if main_element == input_element else input_element
 
-        f = input_connector.area
+        f = self.get_element_area(second_element)
         F = self.get_element_area(main_element)
 
         if f != F:
@@ -170,7 +170,8 @@ class TransitionElbowCoefficientCalculator(CalculatorClassLib.AerodinamicCoeffic
                     0.4 + 0.7 * (f / F) ** 2)
             base_name = 'Колено прямоугольное с изменением сечения'
             duct_input = self.find_input_output_connector(main_element)[0]
-            self.remember_element_name(element, base_name, [input_connector, duct_input])
+            duct_output = self.find_input_output_connector(second_element)[0]
+            self.remember_element_name(element, base_name, [duct_output, duct_input])
             return coefficient
 
         # Если площади равны — работаем как с обычным отводом
@@ -202,7 +203,7 @@ class TransitionElbowCoefficientCalculator(CalculatorClassLib.AerodinamicCoeffic
         if rounding != 150:
             rounding = UnitUtils.ConvertFromInternalUnits(rounding, UnitTypeId.Millimeters)
 
-        coefficient, base_name = self.__calculate_elbow_coefficient(connector)
+        coefficient, base_name = self.__calculate_elbow_coefficient(connector, rounding)
 
         self.remember_element_name(element, base_name,
                                    [connector, connector],

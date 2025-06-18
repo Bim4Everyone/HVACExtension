@@ -102,6 +102,15 @@ def get_insulation_elements():
 
     return elements
 
+def plural_element_form(n):
+    n = abs(n)
+    if n % 10 == 1 and n % 100 != 11:
+        return "элемент"
+    elif 2 <= n % 10 <= 4 and not (12 <= n % 100 <= 14):
+        return "элемента"
+    else:
+        return "элементов"
+
 @notification()
 @log_plugin(EXEC_PARAMS.command_name)
 def script_execute(plugin_logger):
@@ -122,13 +131,19 @@ def script_execute(plugin_logger):
                 if not editor_report.is_element_edited(element):
                     insulation_to_delete.append(element)
 
+    insulation_number = len(insulation_to_delete)
+
     # Нужно вынести удаление в отдельный цикл от проверки занятости,
     # иначе при необходимости синхрона будет сбрасывать транзакцию с сообщением о устаревшей версии
     with revit.Transaction("BIM: Удаление изоляции"):
         for element in insulation_to_delete:
             doc.Delete(element.Id)
 
+    word = plural_element_form(insulation_number)
+    forms.alert("Было удалено {} {}".format(insulation_number, word), "Очистка изоляции")
+
     editor_report.show_report()
+
 
 script_execute()
 
