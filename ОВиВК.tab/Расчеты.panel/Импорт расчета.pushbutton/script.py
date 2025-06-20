@@ -50,7 +50,7 @@ uidoc = __revit__.ActiveUIDocument
 
 class CylinderZ:
     def __init__(self, z_min, z_max):
-        self.diameter = 2000
+        self.radius = 1000
         self.z_min = z_min
         self.z_max = z_max
         self.len = z_max - z_min
@@ -110,12 +110,11 @@ class AuditorEquipment:
 
         self.base_point_z = base_point.GetParamValue(BuiltInParameter.BASEPOINT_ELEVATION_PARAM)
         self.connection_type = connection_type
-        self.x_new = x_new
-        self.y_new = y_new
-        self.z_new = z_new
-        self.x = x
-        self.y = y
-        self.z = z
+
+        # Используем XYZ для хранения координат
+        self.original_coords = XYZ(x, y, z)
+        self.rotated_coords = XYZ(x_new, y_new, z_new)
+
         self.len = len
         self.code = code
         self.real_power = real_power
@@ -144,8 +143,8 @@ class AuditorEquipment:
             epsilon : float
                 Погрешность
             '''
-            minPoint = bb.Min
-            maxPoint = bb.Max
+            minPoint = revit_bb.Min
+            maxPoint = revit_bb.Max
 
             centroid = XYZ(
                 (minPoint.X + maxPoint.X) / 2,
@@ -154,31 +153,32 @@ class AuditorEquipment:
             )
             return centroid
 
-        xyz = revit_equipment.Location.Point
-        bb = revit_equipment.GetBoundingBox()
-        bb_center = get_bb_center()
+        revit_location = revit_equipment.Location.Point
+        revit_bb = revit_equipment.GetBoundingBox()
+        revit_bb_center = get_bb_center()
 
-        revit_coords = RevitXYZmms(
-            convert_to_mms(xyz.X),
-            convert_to_mms(xyz.Y),
-            convert_to_mms(xyz.Z)
+        revit_coords = XYZ(
+            convert_to_mms(revit_location.X),
+            convert_to_mms(revit_location.Y),
+            convert_to_mms(revit_location.Z)
         )
 
-        revit_bb_coords = RevitXYZmms(
-            convert_to_mms(bb_center.X),
-            convert_to_mms(bb_center.Y),
-            convert_to_mms(bb_center.Z)
+        revit_bb_coords = XYZ(
+            convert_to_mms(revit_bb_center.X),
+            convert_to_mms(revit_bb_center.Y),
+            convert_to_mms(revit_bb_center.Z)
         )
 
-        radius = self.level_cylinder.diameter / 2.0
+        radius = self.level_cylinder.radius
 
         epsilon = 1e-9
 
-        if ((abs(self.level_cylinder.z_min - revit_coords.z) <= epsilon or self.level_cylinder.z_min < revit_coords.z)
-                and (abs(revit_coords.z - self.level_cylinder.z_max) <= epsilon
-                     or revit_coords.z < self.level_cylinder.z_max)):
-            distance_to_location_center = math.sqrt((self.x - revit_coords.x) ** 2 + (self.y - revit_coords.y) ** 2)
-            distance_to_bb_center = math.sqrt((self.x - revit_bb_coords.x) ** 2 + (self.y - revit_bb_coords.y) ** 2)
+        if ((abs(self.level_cylinder.z_min - revit_coords.Z) <= epsilon or self.level_cylinder.z_min < revit_coords.Z)
+                and (abs(revit_coords.Z - self.level_cylinder.z_max) <= epsilon
+                     or revit_coords.Z < self.level_cylinder.z_max)):
+            # Используем методы XYZ для вычисления расстояния
+            distance_to_location_center = self.rotated_coords.DistanceTo(XYZ(revit_coords.X, revit_coords.Y, 0))
+            distance_to_bb_center = self.rotated_coords.DistanceTo(XYZ(revit_bb_coords.X, revit_bb_coords.Y, 0))
 
             distance = min(distance_to_bb_center, distance_to_location_center)
 
@@ -191,15 +191,19 @@ class AuditorEquipment:
         При активации DEBUG_MODE создает в модели экземпляр Цилиндра по координатам элемента в Аудиторе.
         '''
         for level_cylinder in level_cylinders:
-            if level_cylinder.z_min <= self.z <= level_cylinder.z_max:
+            if level_cylinder.z_min <= self.rotated_coords.Z <= level_cylinder.z_max:
                 self.level_cylinder = level_cylinder
 
                 if DEBUG_MODE:
-                    comment = self.type_name + ";" + str(self.x) + ";" + str(self.y) + ";" + str(self.z)
+                    comment = "{};{};{};{}".format(
+                        self.type_name,
+                        self.rotated_coords.X,
+                        self.rotated_coords.Y,
+                        self.rotated_coords.Z)
                     debug_placer.place_symbol(
-                        self.x,
-                        self.y,
-                        self.z,
+                        self.rotated_coords.X,
+                        self.rotated_coords.Y,
+                        self.rotated_coords.Z,
                         self.level_cylinder.z_max - self.level_cylinder.z_min,
                         comment
                     )
@@ -267,12 +271,6 @@ class ReadingRulesForValve:
     y_index = 4
     z_index = 5
     setting_index = 17
-
-class RevitXYZmms:
-    def __init__(self, x, y, z):
-        self.x = x
-        self.y = y
-        self.z = z
 
 def convert_to_mms(value):
     """Конвертирует из внутренних значений ревита в миллиметры"""
@@ -353,8 +351,8 @@ def extract_heating_device_description(file_path, angle):
 
         return AuditorEquipment(
             data[rr.connection_type_index],
-            x, y, z,
             x_new, y_new, z_new,
+            x, y, z,
             parse_float(data[rr.len_index]),
             data[rr.code_index],
             parse_float(data[rr.real_power_index]),
@@ -384,8 +382,8 @@ def extract_heating_device_description(file_path, angle):
 
         return AuditorEquipment(
             data[rr.maker_index],
-            x, y, z,
             x_new, y_new, z_new,
+            x, y, z,
             setting=get_setting_float_value(data[rr.setting_index].replace(',', '.')),
             type_name=VALVE_TYPE_NAME
         )
@@ -443,7 +441,7 @@ def create_level_cylinders(ayditror_equipment_elements):
     z_stock = 250 # Значение для понижения низа цилиндра, позволяющее проектировщику иметь погрешность по высоте
 
     unique_z_values = {
-        eq.z for eq in ayditror_equipment_elements
+        eq.rotated_coords.Z for eq in ayditror_equipment_elements
         if eq.type_name == EQUIPMENT_TYPE_NAME
     }
 
@@ -458,8 +456,6 @@ def create_level_cylinders(ayditror_equipment_elements):
             z_max = min(z_min + max_z_offset, next_z)
         else:
             z_max = z_min + max_z_offset
-
-        cylinder_list.append(CylinderZ(z_min, z_max))
 
         cylinder = CylinderZ(z_min, z_max)
         cylinder_list.append(cylinder)
@@ -514,9 +510,9 @@ def process_audytor_revit_matching(ayditror_equipment_elements, filtered_equipme
             ]
             if len(equipment_in_area) > 1:
                 for eq in equipment_in_area:
-                    area_coords = (ayditor_equipment.x_new,
-                                   ayditor_equipment.y_new,
-                                   ayditor_equipment.z_new)
+                    area_coords = (ayditor_equipment.original_coords.X,
+                                   ayditor_equipment.original_coords.Y,
+                                   ayditor_equipment.original_coords.Z)
                     equipment_to_areas[eq.Id].append(area_coords)
 
         if equipment_to_areas:
@@ -538,9 +534,9 @@ def process_audytor_revit_matching(ayditror_equipment_elements, filtered_equipme
             print('Не найдено универсальное оборудование в областях:')
             for audytor_equipment in not_found_audytor_reports:
                 print('Прибор х: {}, y: {}, z: {}'.format(
-                    audytor_equipment.x_new,
-                    audytor_equipment.y_new,
-                    audytor_equipment.z_new))
+                    audytor_equipment.original_coords.X,
+                    audytor_equipment.original_coords.Y,
+                    audytor_equipment.original_coords.Z))
 
     data_cache = EquipmentDataCache()
 
@@ -564,7 +560,7 @@ EQUIPMENT_TYPE_NAME = "Оборудование"
 VALVE_TYPE_NAME = "Клапан"
 OUTER_VALVE_NAME = "ZAWTERM"
 FAMILY_NAME_CONST = 'Обр_ОП_Универсальный'
-DEBUG_MODE = False
+DEBUG_MODE = True
 
 if DEBUG_MODE:
     debug_placer = DebugPlacerLib.DebugPlacer(doc, diameter=2000)
