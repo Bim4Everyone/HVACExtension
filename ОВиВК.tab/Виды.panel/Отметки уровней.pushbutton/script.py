@@ -60,6 +60,7 @@ view = doc.ActiveView
 
 
 class CustomSelectionFilter(ISelectionFilter):
+    """Кастомный фильтр выбора, для отсечения не вертикальных элементов"""
     def __init__(self, filter):
         self.filter = filter
 
@@ -84,7 +85,12 @@ class CustomSelectionFilter(ISelectionFilter):
 
         return False
 
+
 def get_connector_coordinates(element):
+    """
+    Получение координат основных коннекторов элемента.
+    """
+
     # Получаем коннекторы воздуховода
     connectors = element.ConnectorManager.Connectors
 
@@ -111,7 +117,11 @@ def get_connector_coordinates(element):
 
     return start_xyz, end_xyz
 
+
 def get_selected():
+    """
+    Выделение воздуховодов и труб, размещенных вертикально.
+    """
     categories = List[BuiltInCategory]()
     categories.Add(BuiltInCategory.OST_DuctCurves)
     categories.Add(BuiltInCategory.OST_PipeCurves)
@@ -131,7 +141,12 @@ def get_selected():
     elements = [doc.GetElement(r) for r in references]
     return elements
 
+
 def get_reference_from_element(element):
+    """
+    Получаем референс из линейного элемента. Чтоб работало и на воздуховоды и на трубы - берем осевую линию.
+    Если не получается ее найти - возвращаем None, чтоб потом вывести ошибку
+    """
     options = Options()
     options.View = view
     options.ComputeReferences = True
@@ -143,7 +158,12 @@ def get_reference_from_element(element):
             return geo_obj.Reference
     return None
 
+
 def get_mark_endpoint(orientation_name, tag_point):
+    """
+    Получаем координаты марки самой марки и координаты перелома выноски. Вычисляем их на основе точки для которой
+    считаем отметку.
+    """
     end_epsilon = 3
     bend_epsilon = 2
     up_scale = 0.001
@@ -163,7 +183,11 @@ def get_mark_endpoint(orientation_name, tag_point):
 
     return end_point, bend_point
 
+
 def check_base_internal_diff():
+    """
+    Вычисляем корректировку по z на случай расхождения базовой точки и начала координат
+    """
     internal_origin = InternalOrigin.Get(doc)
 
     base_point = FilteredElementCollector(doc) \
@@ -178,13 +202,10 @@ def check_base_internal_diff():
 
     return z_correction
 
-LEFT = "Слева"
-RIGHT = "Справа"
 
-@notification()
-@log_plugin(EXEC_PARAMS.command_name)
-def script_execute(plugin_logger):
-    if view.Category == None or not view.ViewType == ViewType.ThreeD:
+def start_up_checks():
+    """Стартовые проверки"""
+    if view.Category is None or not view.ViewType == ViewType.ThreeD:
         forms.alert(
             "Добавление отметок возможно только на 3D-Виде.",
             "Ошибка",
@@ -197,12 +218,9 @@ def script_execute(plugin_logger):
             exitscript=True)
         return
 
-    elements = get_selected()
 
-    orientation_name = SelectFromList('Выберите ориентацию марок', [LEFT, RIGHT])
-    if orientation_name is None:
-        sys.exit()
-
+def get_levels_z():
+    """Получение списка Z-координат уровней проекта"""
     levels = (FilteredElementCollector(doc).
               OfCategory(BuiltInCategory.OST_Levels).
               WhereElementIsNotElementType().ToElements())
@@ -211,6 +229,24 @@ def script_execute(plugin_logger):
     for level in levels:
         z = level.Elevation
         levels_z.append(z)
+    return levels_z
+
+
+LEFT = "Слева"
+RIGHT = "Справа"
+
+@notification()
+@log_plugin(EXEC_PARAMS.command_name)
+def script_execute(plugin_logger):
+    start_up_checks()
+
+    elements = get_selected()
+
+    orientation_name = SelectFromList('Выберите ориентацию марок', [LEFT, RIGHT])
+    if orientation_name is None:
+        sys.exit()
+
+    levels_z = get_levels_z()
 
     with (revit.Transaction("BIM: Размещение отметок")):
         # z-коррекция нужна для случаев когда идет расхождение базовой точки и начала проекта. Оно сбоит при заборе
