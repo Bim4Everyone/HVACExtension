@@ -203,6 +203,15 @@ def get_cabinets_by_levels():
     fire_cabinets = []
 
     for element in elements:
+        param = element.LookupParameter("ADSK_Позиция")
+
+        if param is None or param.IsReadOnly:
+            forms.alert(
+                "В части оборудования параметр экземпляра ADSK_Позиция не существует "
+                "или недоступен для редактирования. ID: {}".format(str(element.Id)),
+                "Ошибка",
+                exitscript=True)
+
         fire_cabinet = FireCabinet(element)
         fire_cabinets.append(fire_cabinet)
 
