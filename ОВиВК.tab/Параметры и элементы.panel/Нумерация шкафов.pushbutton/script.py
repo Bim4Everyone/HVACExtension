@@ -125,11 +125,13 @@ class FireCabinet:
         self.level_name = doc.GetElement(level_id).Name
         self.xyz = XYZ(x, y, z)
 
+
 def convert_to_mms(value):
     """Конвертирует из внутренних значений ревита в миллиметры"""
     result = UnitUtils.ConvertFromInternalUnits(value,
                                                 UnitTypeId.Millimeters)
     return result
+
 
 def group_by_rows_top_down(cabinets, y_tolerance=2000):
     """Разбивает шкафы на ряды по Y (сверху вниз) с учетом допуска"""
@@ -147,12 +149,10 @@ def group_by_rows_top_down(cabinets, y_tolerance=2000):
             rows.append([cab])
     return rows
 
+
 def get_fire_cabinet_equipment():
     """
     Возвращает список элементов механического оборудования, название семейства которых содержит 'Обр_Шпк'.
-
-    :param doc: Текущий документ Revit
-    :return: Список элементов FamilyInstance
     """
 
     editor_report = EditorReport()
@@ -174,24 +174,9 @@ def get_fire_cabinet_equipment():
 
     return result
 
-@notification()
-@log_plugin(EXEC_PARAMS.command_name)
-def script_execute(plugin_logger):
-    elements = get_fire_cabinet_equipment()
-    fire_cabinets = []
 
-    for element in elements:
-        fire_cabinet = FireCabinet(element)
-        fire_cabinets.append(fire_cabinet)
-
-    cabinets_by_level = {}
-    for cabinet in fire_cabinets:
-        level = cabinet.level_name
-        if level not in cabinets_by_level:
-            cabinets_by_level[level] = []
-        cabinets_by_level[level].append(cabinet)
-
-    sorted_cabinets_by_level = dict(sorted(cabinets_by_level.items(), key=lambda item: item[0]))
+def get_start_number():
+    """Получение числа с которого выполняется нумерация"""
 
     number = forms.ask_for_string(
         default='1',
@@ -209,6 +194,35 @@ def script_execute(plugin_logger):
 
     if number is None:
         sys.exit()
+
+    return number
+
+
+def get_cabinets_by_levels():
+    elements = get_fire_cabinet_equipment()
+    fire_cabinets = []
+
+    for element in elements:
+        fire_cabinet = FireCabinet(element)
+        fire_cabinets.append(fire_cabinet)
+
+    cabinets_by_level = {}
+    for cabinet in fire_cabinets:
+        level = cabinet.level_name
+        if level not in cabinets_by_level:
+            cabinets_by_level[level] = []
+        cabinets_by_level[level].append(cabinet)
+
+    sorted_cabinets_by_level = dict(sorted(cabinets_by_level.items(), key=lambda item: item[0]))
+    return sorted_cabinets_by_level
+
+
+@notification()
+@log_plugin(EXEC_PARAMS.command_name)
+def script_execute(plugin_logger):
+    sorted_cabinets_by_level = get_cabinets_by_levels()
+
+    number = get_start_number()
 
     with revit.Transaction("BIM: Нумерация шкафов"):
         for level_name in sorted(sorted_cabinets_by_level.keys()):
