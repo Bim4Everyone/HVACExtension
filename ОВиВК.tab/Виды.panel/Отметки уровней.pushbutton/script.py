@@ -49,6 +49,7 @@ from Autodesk.Revit.DB import ElementCategoryFilter
 from Autodesk.Revit.DB import ElementMulticategoryFilter
 from Autodesk.Revit.DB import Line
 from Autodesk.Revit.DB import ElementTransformUtils
+from Autodesk.Revit.DB import InternalOrigin
 
 from dosymep.Bim4Everyone.Templates import ProjectParameters
 from dosymep_libs.bim4everyone import *
@@ -119,7 +120,6 @@ def get_selected():
     selection_filter = CustomSelectionFilter(multi_category_filter)
 
     try:
-        # Предлагаем выбрать несколько объектов вместо одного
         references = uidoc.Selection.PickObjects(
             ObjectType.Element,
             selection_filter,
@@ -128,7 +128,6 @@ def get_selected():
     except Autodesk.Revit.Exceptions.OperationCanceledException:
         sys.exit()
 
-    # Преобразуем выбранные Reference в объекты Element
     elements = [doc.GetElement(r) for r in references]
     return elements
 
@@ -147,11 +146,11 @@ def get_reference_from_element(element):
 def get_mark_endpoint(orientation_name, tag_point):
     end_epsilon = 3
     bend_epsilon = 2
-    up_scale = 0.001  # Примерно 1 мм
+    up_scale = 0.001
 
-    right = view.RightDirection.Normalize()  # экранное "вправо"
-    up = view.UpDirection.Normalize().Multiply(up_scale)  # ослабляем вертикальный сдвиг
-    left = -right  # экранное "влево"
+    right = view.RightDirection.Normalize()
+    up = view.UpDirection.Normalize().Multiply(up_scale)
+    left = -right
 
     if orientation_name == LEFT:
         direction = left + up
@@ -163,6 +162,21 @@ def get_mark_endpoint(orientation_name, tag_point):
         bend_point = end_point - right.Multiply(bend_epsilon)
 
     return end_point, bend_point
+
+def check_base_internal_diff():
+    internal_origin = InternalOrigin.Get(doc)
+
+    base_point = FilteredElementCollector(doc) \
+        .OfCategory(BuiltInCategory.OST_ProjectBasePoint) \
+        .WhereElementIsNotElementType() \
+        .FirstElement()
+
+    base_point_z = base_point.GetParamValue(BuiltInParameter.BASEPOINT_ELEVATION_PARAM)
+
+    internal_origin_z = internal_origin.SharedPosition.Z
+    z_correction = (base_point_z - internal_origin_z)
+
+    return z_correction
 
 LEFT = "Слева"
 RIGHT = "Справа"
@@ -199,23 +213,27 @@ def script_execute(plugin_logger):
         levels_z.append(z)
 
     with (revit.Transaction("BIM: Размещение отметок")):
+        # z-коррекция нужна для случаев когда идет расхождение базовой точки и начала проекта. Оно сбоит при заборе
+        # координат коннекторов, из них мы убираем коррекцию.
+        # А так же сбой идет при передаче координат в ревит - тут мы наоборот добавляем коррекцию(tag_point)
+        # Срабатывает и когда базовая точка ниже начала и выше
+        z_correction = check_base_internal_diff()
+
         for element in elements:
             coord_list = get_connector_coordinates(element)
             connector_coord_1 = coord_list[0]
             connector_coord_2 = coord_list[1]
-            min_z = min(connector_coord_1.Z, connector_coord_2.Z)
-            max_z = max(connector_coord_1.Z, connector_coord_2.Z)
+            min_z = min(connector_coord_1.Z, connector_coord_2.Z) - z_correction
+            max_z = max(connector_coord_1.Z, connector_coord_2.Z) - z_correction
+
             for z in levels_z:
                 ref = get_reference_from_element(element)
-
                 if ref is None:
                     break
-                print min_z * 304.8
-                print z * 304.8
                 if not (min_z < z < max_z):
                     continue
 
-                tag_point = XYZ(connector_coord_1.X, connector_coord_1.Y, z)
+                tag_point = XYZ(connector_coord_1.X, connector_coord_1.Y, z + z_correction)
                 end_point, bend_point = get_mark_endpoint(orientation_name, tag_point)
 
                 doc.Create.NewSpotElevation(
