@@ -124,45 +124,21 @@ class AuditorEquipment:
         '''
         Определяет, пересекаются ли области положений элемента в ревите и в аудиторе
         '''
-        def get_bb_center():
-            '''
-            Получить центр Bounding Box
-
-            Parametrs
-            -------
-            revit_coords : float
-                Координаты центра вставки элемента в Ревите
-
-            revit_bb_coords : float
-                Координаты цента ВВ элемента в Ревите
-
-            epsilon : float
-                Погрешность
-            '''
-            minPoint = revit_bb.Min
-            maxPoint = revit_bb.Max
-
-            centroid = XYZ(
-                (minPoint.X + maxPoint.X) / 2,
-                (minPoint.Y + maxPoint.Y) / 2,
-                (minPoint.Z + maxPoint.Z) / 2
-            )
-            return centroid
 
         revit_location = revit_equipment.Location.Point
         revit_bb = revit_equipment.GetBoundingBox()
-        revit_bb_center = get_bb_center()
+        revit_bb_center = BoundingBoxHelper.get_bb_center(revit_bb)
 
         revit_coords = XYZ(
-            convert_to_mms(revit_location.X),
-            convert_to_mms(revit_location.Y),
-            convert_to_mms(revit_location.Z)
+            UnitConverter.to_millimeters(revit_location.X)
+            UnitConverter.to_millimeters(revit_location.Y)
+            UnitConverter.to_millimeters(revit_location.Z)
         )
 
         revit_bb_coords = XYZ(
-            convert_to_mms(revit_bb_center.X),
-            convert_to_mms(revit_bb_center.Y),
-            convert_to_mms(revit_bb_center.Z)
+            UnitConverter.to_millimeters(revit_bb_center.X)
+            UnitConverter.to_millimeters(revit_bb_center.Y)
+            UnitConverter.to_millimeters(revit_bb_center.Z)
         )
 
         radius = self.level_cylinder.radius
@@ -205,6 +181,20 @@ class AuditorEquipment:
                     )
                 break
 
+class UnitConverter:
+    @staticmethod
+    def to_millimeters(value):
+        """Конвертирует внутренние единицы Revit в миллиметры."""
+        return UnitUtils.ConvertFromInternalUnits(value, UnitTypeId.Millimeters)
+    def to_kilometers(value):
+        """Конвертирует внутренние единицы Revit в километры."""
+        return UnitUtils.ConvertFromInternalUnits(value, UnitTypeId.Meters)/1000
+
+    @staticmethod
+    def to_watts(value):
+        """Конвертирует в Ватты."""
+        return UnitUtils.ConvertToInternalUnits(value, UnitTypeId.Watts)
+
 class EquipmentDataCache:
     def __init__(self):
         self._cache = {}
@@ -230,9 +220,8 @@ class EquipmentDataCache:
             setting = item["setting"]
 
             if data.type_name == EQUIPMENT_TYPE_NAME:
-                real_power_watts = UnitUtils.ConvertToInternalUnits(data.real_power, UnitTypeId.Watts)
-                len_meters = UnitUtils.ConvertToInternalUnits(data.len,
-                                                 UnitTypeId.Meters) / 1000
+                real_power_watts = UnitConverter.to_watts(data.real_power)
+                len_meters = UnitConverter.to_kilometers(data.len)
                 element.SetParamValue('ADSK_Размер_Длина', len_meters)
                 element.SetParamValue('ADSK_Код изделия', data.code)
                 element.SetParamValue('ADSK_Тепловая мощность', real_power_watts)
@@ -268,11 +257,32 @@ class ReadingRulesForValve:
     z_index = 5
     setting_index = 17
 
-def convert_to_mms(value):
-    """Конвертирует из внутренних значений ревита в миллиметры"""
-    result = UnitUtils.ConvertFromInternalUnits(value,
-                                               UnitTypeId.Millimeters)
-    return result
+class BoundingBoxHelper:
+    @staticmethod
+    def get_bb_center(revit_bb):
+        '''
+        Получить центр Bounding Box
+
+        Parametrs
+        -------
+        revit_coords : float
+            Координаты центра вставки элемента в Ревите
+
+        revit_bb_coords : float
+            Координаты цента ВВ элемента в Ревите
+
+        epsilon : float
+            Погрешность
+        '''
+        minPoint = revit_bb.Min
+        maxPoint = revit_bb.Max
+
+        centroid = XYZ(
+            (minPoint.X + maxPoint.X) / 2,
+            (minPoint.Y + maxPoint.Y) / 2,
+            (minPoint.Z + maxPoint.Z) / 2
+        )
+        return centroid
 
 def get_setting_float_value(value):
     '''
