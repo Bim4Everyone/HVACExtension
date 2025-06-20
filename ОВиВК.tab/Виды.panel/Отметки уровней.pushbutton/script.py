@@ -65,12 +65,12 @@ class CustomSelectionFilter(ISelectionFilter):
         self.filter = filter
 
     def AllowElement(self, element):
-        return self.filter.PassesFilter(element) and self.IsVertical(element)
+        return self.filter.PassesFilter(element) and self.is_vertical(element)
 
     def AllowReference(self, reference, position):
         return True
 
-    def IsVertical(self, element):
+    def is_vertical(self, element):
         start_xyz, end_xyz = get_connector_coordinates(element)
 
         # Вычисляем разности координат
@@ -287,5 +287,6 @@ def script_execute(plugin_logger):
             "На виде не найдены осевые линии. Отметки не были размещены.",
             "Ошибка",
             exitscript=True)
+
 
 script_execute()
