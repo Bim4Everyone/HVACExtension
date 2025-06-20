@@ -55,6 +55,21 @@ class CylinderZ:
         self.z_max = z_max
         self.len = z_max - z_min
 
+class UnitConverter:
+    @staticmethod
+    def to_millimeters(value):
+        """Конвертирует внутренние единицы Revit в миллиметры."""
+        return UnitUtils.ConvertFromInternalUnits(value, UnitTypeId.Millimeters)
+    @staticmethod
+    def to_kilometers(value):
+        """Конвертирует внутренние единицы Revit в километры."""
+        return UnitUtils.ConvertFromInternalUnits(value, UnitTypeId.Meters)/100
+
+    @staticmethod
+    def to_watts(value):
+        """Конвертирует в Ватты."""
+        return UnitUtils.ConvertToInternalUnits(value, UnitTypeId.Watts)
+
 class AuditorEquipment:
 
     '''
@@ -130,14 +145,14 @@ class AuditorEquipment:
         revit_bb_center = BoundingBoxHelper.get_bb_center(revit_bb)
 
         revit_coords = XYZ(
-            UnitConverter.to_millimeters(revit_location.X)
-            UnitConverter.to_millimeters(revit_location.Y)
+            UnitConverter.to_millimeters(revit_location.X),
+            UnitConverter.to_millimeters(revit_location.Y),
             UnitConverter.to_millimeters(revit_location.Z)
         )
 
         revit_bb_coords = XYZ(
-            UnitConverter.to_millimeters(revit_bb_center.X)
-            UnitConverter.to_millimeters(revit_bb_center.Y)
+            UnitConverter.to_millimeters(revit_bb_center.X),
+            UnitConverter.to_millimeters(revit_bb_center.Y),
             UnitConverter.to_millimeters(revit_bb_center.Z)
         )
 
@@ -180,20 +195,6 @@ class AuditorEquipment:
                         comment
                     )
                 break
-
-class UnitConverter:
-    @staticmethod
-    def to_millimeters(value):
-        """Конвертирует внутренние единицы Revit в миллиметры."""
-        return UnitUtils.ConvertFromInternalUnits(value, UnitTypeId.Millimeters)
-    def to_kilometers(value):
-        """Конвертирует внутренние единицы Revit в километры."""
-        return UnitUtils.ConvertFromInternalUnits(value, UnitTypeId.Meters)/1000
-
-    @staticmethod
-    def to_watts(value):
-        """Конвертирует в Ватты."""
-        return UnitUtils.ConvertToInternalUnits(value, UnitTypeId.Watts)
 
 class EquipmentDataCache:
     def __init__(self):
