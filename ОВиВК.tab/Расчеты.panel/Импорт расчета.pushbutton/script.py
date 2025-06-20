@@ -76,12 +76,8 @@ class AuditorEquipment:
 
     def __init__(self,
                  connection_type= "",
-                 x_new = 0.0,
-                 y_new = 0.0,
-                 z_new = 0.0,
-                 x =0.0,
-                 y=0.0,
-                 z=0.0,
+                 rotated_coords=None,
+                 original_coords=None,
                  len = 0,
                  code = "",
                  real_power = "",
@@ -112,8 +108,8 @@ class AuditorEquipment:
         self.connection_type = connection_type
 
         # Используем XYZ для хранения координат
-        self.original_coords = XYZ(x, y, z)
-        self.rotated_coords = XYZ(x_new, y_new, z_new)
+        self.original_coords = original_coords or XYZ.Zero
+        self.rotated_coords = rotated_coords or XYZ.Zero
 
         self.len = len
         self.code = code
@@ -177,8 +173,8 @@ class AuditorEquipment:
                 and (abs(revit_coords.Z - self.level_cylinder.z_max) <= epsilon
                      or revit_coords.Z < self.level_cylinder.z_max)):
             # Используем методы XYZ для вычисления расстояния
-            distance_to_location_center = self.rotated_coords.DistanceTo(XYZ(revit_coords.X, revit_coords.Y, 0))
-            distance_to_bb_center = self.rotated_coords.DistanceTo(XYZ(revit_bb_coords.X, revit_bb_coords.Y, 0))
+            distance_to_location_center = self.rotated_coords.DistanceTo(XYZ(revit_coords.X, revit_coords.Y, revit_coords.Z))
+            distance_to_bb_center = self.rotated_coords.DistanceTo(XYZ(revit_bb_coords.X, revit_bb_coords.Y, revit_coords.Z))
 
             distance = min(distance_to_bb_center, distance_to_location_center)
 
@@ -350,17 +346,17 @@ def extract_heating_device_description(file_path, angle):
         x_new, y_new, z_new = rotate_point_around_origin(angle, x, y, z)
 
         return AuditorEquipment(
-            data[rr.connection_type_index],
-            x_new, y_new, z_new,
-            x, y, z,
-            parse_float(data[rr.len_index]),
-            data[rr.code_index],
-            parse_float(data[rr.real_power_index]),
-            parse_float(data[rr.nominal_power_index]),
-            get_setting_float_value(data[rr.setting_index].replace(',', '.')),
-            data[rr.maker_index],
-            data[rr.full_name_index],
-            EQUIPMENT_TYPE_NAME
+            connection_type=data[rr.connection_type_index],
+            rotated_coords = XYZ(x_new,y_new,z_new),
+            original_coords= XYZ(x,y,z),
+            len=parse_float(data[rr.len_index]),
+            code=data[rr.code_index],
+            real_power=parse_float(data[rr.real_power_index]),
+            nominal_power=parse_float(data[rr.nominal_power_index]),
+            setting=get_setting_float_value(data[rr.setting_index].replace(',', '.')),
+            maker=data[rr.maker_index],
+            full_name=data[rr.full_name_index],
+            type_name=EQUIPMENT_TYPE_NAME
         )
 
     def parse_valve(line):
@@ -381,9 +377,9 @@ def extract_heating_device_description(file_path, angle):
         x_new, y_new, z_new = rotate_point_around_origin(angle, x, y, z)
 
         return AuditorEquipment(
-            data[rr.maker_index],
-            x_new, y_new, z_new,
-            x, y, z,
+            maker=data[rr.maker_index],
+            rotated_coords = XYZ(x_new,y_new,z_new),
+            original_coords= XYZ(x,y,z),
             setting=get_setting_float_value(data[rr.setting_index].replace(',', '.')),
             type_name=VALVE_TYPE_NAME
         )
@@ -560,7 +556,7 @@ EQUIPMENT_TYPE_NAME = "Оборудование"
 VALVE_TYPE_NAME = "Клапан"
 OUTER_VALVE_NAME = "ZAWTERM"
 FAMILY_NAME_CONST = 'Обр_ОП_Универсальный'
-DEBUG_MODE = True
+DEBUG_MODE = False
 
 if DEBUG_MODE:
     debug_placer = DebugPlacerLib.DebugPlacer(doc, diameter=2000)
