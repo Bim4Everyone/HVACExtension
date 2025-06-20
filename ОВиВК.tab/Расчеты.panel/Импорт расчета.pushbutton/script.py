@@ -70,6 +70,23 @@ class UnitConverter:
         """Конвертирует в Ватты."""
         return UnitUtils.ConvertToInternalUnits(value, UnitTypeId.Watts)
 
+class GeometryHelper:
+    @staticmethod
+    def rotate_point(angle, x, y, z):
+        '''
+        Поворот координат из исходных данных на указанный угол вокруг начала координат из Аудитора
+        '''
+        if angle == 0:
+            return x, y, z
+        # Угол в радианах
+        angle_radians = math.radians(angle)
+        # Матрица поворота вокруг оси Z (в плоскости XY)
+        cos_theta = math.cos(angle_radians)
+        sin_theta = math.sin(angle_radians)
+        x_new = x * cos_theta - y * sin_theta
+        y_new = x * sin_theta + y * cos_theta
+        return x_new, y_new, z
+
 class AuditorEquipment:
 
     '''
@@ -325,22 +342,6 @@ def extract_heating_device_description(file_path, angle):
             i += 1
         return result
 
-    def rotate_point_around_origin(angle, x, y, z):
-        '''
-        Поворот координат из исходных данных на указанный угол вокруг начала координат из Аудитора
-        '''
-        if angle == 0:
-            return x, y, z
-        # Угол в радианах
-        angle_radians = math.radians(angle)
-        # Матрица поворота вокруг оси Z (в плоскости XY)
-        cos_theta = math.cos(angle_radians)
-        sin_theta = math.sin(angle_radians)
-        x_new = x * cos_theta - y * sin_theta
-        y_new = x * sin_theta + y * cos_theta
-        z_new = z
-        return x_new, y_new, z_new
-
     def parse_heating_device(line):
 
         '''
@@ -354,7 +355,7 @@ def extract_heating_device_description(file_path, angle):
         z = parse_float(data[rr.z_index]) * 1000
 
         z = z + z_correction
-        x_new, y_new, z_new = rotate_point_around_origin(angle, x, y, z)
+        x_new, y_new, z_new = GeometryHelper.rotate_point(angle, x, y, z)
 
         return AuditorEquipment(
             connection_type=data[rr.connection_type_index],
@@ -385,7 +386,7 @@ def extract_heating_device_description(file_path, angle):
         z = parse_float(data[rr.z_index]) * 1000
         z = z + z_correction
 
-        x_new, y_new, z_new = rotate_point_around_origin(angle, x, y, z)
+        x_new, y_new, z_new = GeometryHelper.rotate_point(angle, x, y, z)
 
         return AuditorEquipment(
             maker=data[rr.maker_index],
