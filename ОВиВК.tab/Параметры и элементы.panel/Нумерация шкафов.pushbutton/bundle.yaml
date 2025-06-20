@@ -1,0 +1,25 @@
+title:
+  ru: "Нумерация\nшкафов"
+  en_us: "Cabinets\nnumeration"
+
+tooltip:
+  ru: Нумерует пожарные шкафы.
+  
+    1. Проверьте, чтоб в имени семейства есть "Обр_Шпк" и параметр эксземпляра "ADSK_Позиция".
+
+    2. Запустите скрипт. Нумерация будет выполнена слева направо и сверху вниз, для каждого этажа, начиная с указанного номера.
+
+
+  en_us: Numbers fire cabinets.
+
+    1. Check that the family name contains "Обр_Шпк" and the instance parameter "ADSK_Позиция".
+
+    2. Run the script. The numbering will be done from left to right and top to bottom, for each floor, starting with the specified number.
+
+
+author: Redomine
+help_url: "https://kb.a101.ru/pages/viewpage.action?pageId=167838131"
+
+min_revit_version: 2022
+max_revit_version: 2024
+
