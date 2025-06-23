@@ -601,7 +601,6 @@ def process_start_up():
         sys.exit()
 
     operator.send_json_data(angle)
-
     return angle, filepath
 
 def process_audytor_revit_matching(auditor_equipment_list, revit_equipment_list):
