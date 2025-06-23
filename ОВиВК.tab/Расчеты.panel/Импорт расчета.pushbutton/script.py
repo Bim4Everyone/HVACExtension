@@ -422,95 +422,79 @@ class AuditorFileReader:
             forms.alert("Не найдено оборудование в импортируемом файле.", "Ошибка", exitscript=True)
 
         return equipment
-class AuditorFileReader:
+
+class ReportGenerator:
     @staticmethod
-    def read_auditor_file(file_path, angle, doc):
-        """Чтение и обработка файла Audytor."""
-        def parse_equipment_section(lines, title, start_offset, parse_func):
-            result = []
-            i = 0
-            while i < len(lines):
-                if len(result) == 10:
-                    return result
-                if title in lines[i]:
-                    i += start_offset
-                    while i < len(lines) and lines[i].strip():
-                        parsed_item = parse_func(lines[i])
-                        if parsed_item is not None:
-                            result.append(parsed_item)
-                        i += 1
-                i += 1
-            return result
+    def generate_area_overflow_report(auditor_equipment_list, revit_equipment_list):
+        """
+        Анализирует и возвращает данные о перекрытии областей оборудования
+        Возвращает словарь {equipment_id: [список координат областей]}
+        """
+        from collections import defaultdict
 
-        def parse_heating_device(line):
-            data = line.strip().split(';')
-            rr = ReadingRulesForEquipment()
-            x = TextParser.parse_float(data[rr.x_index]) * 1000
-            y = TextParser.parse_float(data[rr.y_index]) * 1000
-            z = TextParser.parse_float(data[rr.z_index]) * 1000
+        equipment_to_areas = defaultdict(list)
 
-            z = z + z_correction
-            x_new, y_new, z_new = GeometryHelper.rotate_point(angle, x, y, z)
+        for auditor_equipment in auditor_equipment_list:
+            equipment_in_area = [
+                eq for eq in revit_equipment_list
+                if auditor_equipment.is_in_data_area(eq)
+            ]
 
-            return AuditorEquipment(
-                connection_type=data[rr.connection_type_index],
-                rotated_coords=XYZ(x_new, y_new, z_new),
-                original_coords=XYZ(x, y, z),
-                len=TextParser.parse_float(data[rr.len_index]),
-                code=data[rr.code_index],
-                real_power=TextParser.parse_float(data[rr.real_power_index]),
-                nominal_power=TextParser.parse_float(data[rr.nominal_power_index]),
-                setting=TextParser.parse_setting(data[rr.setting_index].replace(',', '.')),
-                maker=data[rr.maker_index],
-                full_name=data[rr.full_name_index],
-                type_name=EQUIPMENT_TYPE_NAME
-            )
+            if len(equipment_in_area) > 1:
+                for eq in equipment_in_area:
+                    area_coords = (
+                        auditor_equipment.original_coords.X,
+                        auditor_equipment.original_coords.Y,
+                        auditor_equipment.original_coords.Z
+                    )
+                    equipment_to_areas[eq.Id].append(area_coords)
 
-        def parse_valve(line):
-            data = line.strip().split(';')
-            rr = ReadingRulesForValve()
-            if data[rr.connection_type_index] != OUTER_VALVE_NAME:
-                return None
+        return equipment_to_areas
 
-            x = TextParser.parse_float(data[rr.x_index]) * 1000
-            y = TextParser.parse_float(data[rr.y_index]) * 1000
-            z = TextParser.parse_float(data[rr.z_index]) * 1000
-            z = z + z_correction
+    @staticmethod
+    def generate_not_found_report(auditor_equipment_list):
+        """
+        Анализирует и возвращает список необработанного оборудования
+        Возвращает список объектов AuditorEquipment
+        """
+        return [
+            equipment for equipment in auditor_equipment_list
+            if not equipment.processed
+        ]
 
-            x_new, y_new, z_new = GeometryHelper.rotate_point(angle, x, y, z)
+    @staticmethod
+    def print_area_overflow_report(overflow_data):
+        """
+        Выводит отчет о перекрытии областей
+        """
+        if not overflow_data:
+            return
 
-            return AuditorEquipment(
-                maker=data[rr.maker_index],
-                rotated_coords=XYZ(x_new, y_new, z_new),
-                original_coords=XYZ(x, y, z),
-                setting=TextParser.parse_setting(data[rr.setting_index].replace(',', '.')),
-                type_name=VALVE_TYPE_NAME
-            )
+        print('Обнаружено переполнение данных областей:')
+        for eq_id, areas in overflow_data.iteritems():
+            print('ID элемента: {}'.format(eq_id))
+            print('Элемент попал в области:')
+            for coords in areas:
+                print('  х: {}, y: {}, z: {}'.format(
+                    coords[0],
+                    coords[1],
+                    coords[2]))
+        print('\n')
 
-        with codecs.open(file_path, 'r', encoding='utf-8') as file:
-            lines = file.readlines()
+    @staticmethod
+    def print_not_found_report(not_found_equipment):
+        """
+        Выводит отчет о не найденном оборудовании
+        """
+        if not not_found_equipment:
+            return
 
-        internal_origin = InternalOrigin.Get(doc)
-
-        base_point = FilteredElementCollector(doc) \
-            .OfCategory(BuiltInCategory.OST_ProjectBasePoint) \
-            .WhereElementIsNotElementType() \
-            .FirstElement()
-
-        base_point_z = base_point.GetParamValue(BuiltInParameter.BASEPOINT_ELEVATION_PARAM)
-
-        internal_origin_z = internal_origin.SharedPosition.Z
-        z_correction = (base_point_z - internal_origin_z) * 304.8
-
-        equipment = parse_equipment_section(lines, "Отопительные приборы CO на плане", 3, parse_heating_device)
-        valves = parse_equipment_section(lines, "Арматура СО на плане", 3, parse_valve)
-
-        equipment.extend(valves)
-
-        if not equipment:
-            forms.alert("Не найдено оборудование в импортируемом файле.", "Ошибка", exitscript=True)
-
-        return equipment
+        print('\nНе найдено универсальное оборудование в областях:')
+        for equipment in not_found_equipment:
+            print('Прибор х: {}, y: {}, z: {}'.format(
+                equipment.original_coords.X,
+                equipment.original_coords.Y,
+                equipment.original_coords.Z))
 
 def get_elements_by_category(category):
     """ Возвращает коллекцию элементов по категории """
@@ -562,64 +546,29 @@ def process_start_up():
 
     return angle, filepath
 
-def process_audytor_revit_matching(ayditror_equipment_elements, filtered_equipment):
-    def print_area_overflow_report(all_ayditor_equipment, all_equipment):
-        from collections import defaultdict
-
-        # Словарь: ключ — ID прибора, значение — список координат областей, в которые он попал
-        equipment_to_areas = defaultdict(list)
-
-        for ayditor_equipment in all_ayditor_equipment:
-            equipment_in_area = [
-                eq for eq in all_equipment if ayditor_equipment.is_in_data_area(eq)
-            ]
-            if len(equipment_in_area) > 1:
-                for eq in equipment_in_area:
-                    area_coords = (ayditor_equipment.original_coords.X,
-                                   ayditor_equipment.original_coords.Y,
-                                   ayditor_equipment.original_coords.Z)
-                    equipment_to_areas[eq.Id].append(area_coords)
-
-        if equipment_to_areas:
-            print('Обнаружено переполнение данных областей:')
-            for eq_id, areas in equipment_to_areas.iteritems():  # .iteritems() для Python 2
-                print('\nID элемента: {}'.format(eq_id))
-                print('Элемент попал в области:')
-                for coords in areas:
-                    print('  х: {}, y: {}, z: {}'.format(coords[0], coords[1], coords[2]))
-            print '\n '
-
-    def print_not_found_report(audytor_equipment_elements):
-        not_found_audytor_reports = []
-        for audytor_equipment in audytor_equipment_elements:
-            if not audytor_equipment.processed:
-                not_found_audytor_reports.append(audytor_equipment)
-
-        if len(not_found_audytor_reports) > 0:
-            print('Не найдено универсальное оборудование в областях:')
-            for audytor_equipment in not_found_audytor_reports:
-                print('Прибор х: {}, y: {}, z: {}'.format(
-                    audytor_equipment.original_coords.X,
-                    audytor_equipment.original_coords.Y,
-                    audytor_equipment.original_coords.Z))
-
+def process_audytor_revit_matching(auditor_equipment_list, revit_equipment_list):
     data_cache = EquipmentDataCache()
 
-    for ayditor_equipment in ayditror_equipment_elements:
+    for ayditor_equipment in auditor_equipment_list:
         equipment_in_area = [
-            eq for eq in filtered_equipment if ayditor_equipment.is_in_data_area(eq)
+            eq for eq in revit_equipment_list if ayditor_equipment.is_in_data_area(eq)
         ]
         ayditor_equipment.processed = len(equipment_in_area) >= 1
         if len(equipment_in_area) == 1:
             data_cache.collect_data(equipment_in_area[0], ayditor_equipment)
 
-    # Новый группированный отчет
-    print_area_overflow_report(ayditror_equipment_elements, filtered_equipment)
+    # Генерация и вывод отчетов
+    overflow_data = ReportGenerator.generate_area_overflow_report(
+        auditor_equipment_list,
+        revit_equipment_list
+    )
+    ReportGenerator.print_area_overflow_report(overflow_data)
 
-    # Финальный проход — запись параметров в Revit
+    not_found_equipment = ReportGenerator.generate_not_found_report(auditor_equipment_list)
+    ReportGenerator.print_not_found_report(not_found_equipment)
+
+    # Запись данных в Revit
     data_cache.write_all()
-
-    print_not_found_report(ayditror_equipment_elements)
 
 EQUIPMENT_TYPE_NAME = "Оборудование"
 VALVE_TYPE_NAME = "Клапан"
