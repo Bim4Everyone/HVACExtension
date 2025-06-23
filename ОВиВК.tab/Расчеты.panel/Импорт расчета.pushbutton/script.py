@@ -87,6 +87,20 @@ class GeometryHelper:
         y_new = x * sin_theta + y * cos_theta
         return x_new, y_new, z
 
+class TextParser:
+    @staticmethod
+    def parse_float(value):
+        """Конвертирует строку в float, заменяя запятые на точки."""
+        return float(value.replace(',', '.'))
+
+    @staticmethod
+    def parse_setting(value):
+        """Обрабатывает значение настройки (например, 'N' → 0)."""
+        if value in ('N', '', 'Kvs'):
+            return 0
+        return TextParser.parse_float(value)
+
+
 class AuditorEquipment:
 
     '''
@@ -350,9 +364,9 @@ def extract_heating_device_description(file_path, angle):
         '''
         data = line.strip().split(';')
         rr = reading_rules_device
-        x = parse_float(data[rr.x_index]) * 1000
-        y = parse_float(data[rr.y_index]) * 1000
-        z = parse_float(data[rr.z_index]) * 1000
+        x = TextParser.parse_float(data[rr.x_index]) * 1000
+        y = TextParser.parse_float(data[rr.y_index]) * 1000
+        z = TextParser.parse_float(data[rr.z_index]) * 1000
 
         z = z + z_correction
         x_new, y_new, z_new = GeometryHelper.rotate_point(angle, x, y, z)
@@ -361,11 +375,11 @@ def extract_heating_device_description(file_path, angle):
             connection_type=data[rr.connection_type_index],
             rotated_coords = XYZ(x_new,y_new,z_new),
             original_coords= XYZ(x,y,z),
-            len=parse_float(data[rr.len_index]),
+            len=TextParser.parse_float(data[rr.len_index]),
             code=data[rr.code_index],
-            real_power=parse_float(data[rr.real_power_index]),
-            nominal_power=parse_float(data[rr.nominal_power_index]),
-            setting=get_setting_float_value(data[rr.setting_index].replace(',', '.')),
+            real_power=TextParser.parse_float(data[rr.real_power_index]),
+            nominal_power=TextParser.parse_float(data[rr.nominal_power_index]),
+            setting=TextParser.parse_setting(data[rr.setting_index].replace(',', '.')),
             maker=data[rr.maker_index],
             full_name=data[rr.full_name_index],
             type_name=EQUIPMENT_TYPE_NAME
@@ -381,9 +395,9 @@ def extract_heating_device_description(file_path, angle):
         if data[rr.connection_type_index] != OUTER_VALVE_NAME:
             return None
 
-        x = parse_float(data[rr.x_index]) * 1000
-        y = parse_float(data[rr.y_index]) * 1000
-        z = parse_float(data[rr.z_index]) * 1000
+        x = TextParser.parse_float(data[rr.x_index]) * 1000
+        y = TextParser.parse_float(data[rr.y_index]) * 1000
+        z = TextParser.parse_float(data[rr.z_index]) * 1000
         z = z + z_correction
 
         x_new, y_new, z_new = GeometryHelper.rotate_point(angle, x, y, z)
@@ -392,7 +406,7 @@ def extract_heating_device_description(file_path, angle):
             maker=data[rr.maker_index],
             rotated_coords = XYZ(x_new,y_new,z_new),
             original_coords= XYZ(x,y,z),
-            setting=get_setting_float_value(data[rr.setting_index].replace(',', '.')),
+            setting=TextParser.parse_setting(data[rr.setting_index].replace(',', '.')),
             type_name=VALVE_TYPE_NAME
         )
 
