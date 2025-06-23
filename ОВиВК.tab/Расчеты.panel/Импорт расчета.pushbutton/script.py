@@ -70,6 +70,11 @@ class UnitConverter:
         """Конвертирует в Ватты."""
         return UnitUtils.ConvertToInternalUnits(value, UnitTypeId.Watts)
 
+    @staticmethod
+    def meters_to_millimeters(value):
+        """Конвертирует метры в миллиметры."""
+        return value * 1000
+
 class GeometryHelper:
     @staticmethod
     def rotate_point(angle, x, y, z):
@@ -206,10 +211,8 @@ class AuditorEquipment:
 
         radius = self.level_cylinder.radius
 
-        epsilon = 1e-9
-
-        if ((abs(self.level_cylinder.z_min - revit_coords.Z) <= epsilon or self.level_cylinder.z_min < revit_coords.Z)
-                and (abs(revit_coords.Z - self.level_cylinder.z_max) <= epsilon
+        if ((abs(self.level_cylinder.z_min - revit_coords.Z) <= EPSILON or self.level_cylinder.z_min < revit_coords.Z)
+                and (abs(revit_coords.Z - self.level_cylinder.z_max) <= EPSILON
                      or revit_coords.Z < self.level_cylinder.z_max)):
             # Используем методы XYZ для вычисления расстояния
             distance_to_location_center = self.rotated_coords.DistanceTo(XYZ(revit_coords.X, revit_coords.Y, revit_coords.Z))
@@ -320,7 +323,7 @@ class BoundingBoxHelper:
         revit_bb_coords : float
             Координаты цента ВВ элемента в Ревите
 
-        epsilon : float
+        EPSILON : float
             Погрешность
         '''
         minPoint = revit_bb.Min
@@ -333,88 +336,112 @@ class BoundingBoxHelper:
         )
         return centroid
 
-class AuditorFileReader:
+class AuditorFileParser:
+    """Отвечает только за парсинг строк файла в объекты"""
     @staticmethod
-    def read_auditor_file(file_path, angle, doc):
-        """Чтение и обработка файла Audytor."""
-        def parse_equipment_section(lines, title, start_offset, parse_func):
-            result = []
-            i = 0
-            while i < len(lines):
-                if len(result) == 10:
-                    return result
-                if title in lines[i]:
-                    i += start_offset
-                    while i < len(lines) and lines[i].strip():
-                        parsed_item = parse_func(lines[i])
-                        if parsed_item is not None:
-                            result.append(parsed_item)
-                        i += 1
-                i += 1
-            return result
+    def parse_heating_device(line, z_correction, angle):
+        data = line.strip().split(';')
+        rr = ReadingRulesForEquipment()
+        x = UnitConverter.meters_to_millimeters(TextParser.parse_float(data[rr.x_index]))
+        y = UnitConverter.meters_to_millimeters(TextParser.parse_float(data[rr.y_index]))
+        z = (UnitConverter.meters_to_millimeters(TextParser.parse_float(data[rr.z_index]))
+             + z_correction)
 
-        def parse_heating_device(line):
-            data = line.strip().split(';')
-            rr = ReadingRulesForEquipment()
-            x = TextParser.parse_float(data[rr.x_index]) * 1000
-            y = TextParser.parse_float(data[rr.y_index]) * 1000
-            z = TextParser.parse_float(data[rr.z_index]) * 1000
+        x_new, y_new, z_new = GeometryHelper.rotate_point(angle, x, y, z)
 
-            z = z + z_correction
-            x_new, y_new, z_new = GeometryHelper.rotate_point(angle, x, y, z)
+        return AuditorEquipment(
+            connection_type=data[rr.connection_type_index],
+            rotated_coords=XYZ(x_new, y_new, z_new),
+            original_coords=XYZ(x, y, z),
+            len=TextParser.parse_float(data[rr.len_index]),
+            code=data[rr.code_index],
+            real_power=TextParser.parse_float(data[rr.real_power_index]),
+            nominal_power=TextParser.parse_float(data[rr.nominal_power_index]),
+            setting=TextParser.parse_setting(data[rr.setting_index].replace(',', '.')),
+            maker=data[rr.maker_index],
+            full_name=data[rr.full_name_index],
+            type_name=EQUIPMENT_TYPE_NAME
+        )
 
-            return AuditorEquipment(
-                connection_type=data[rr.connection_type_index],
-                rotated_coords=XYZ(x_new, y_new, z_new),
-                original_coords=XYZ(x, y, z),
-                len=TextParser.parse_float(data[rr.len_index]),
-                code=data[rr.code_index],
-                real_power=TextParser.parse_float(data[rr.real_power_index]),
-                nominal_power=TextParser.parse_float(data[rr.nominal_power_index]),
-                setting=TextParser.parse_setting(data[rr.setting_index].replace(',', '.')),
-                maker=data[rr.maker_index],
-                full_name=data[rr.full_name_index],
-                type_name=EQUIPMENT_TYPE_NAME
-            )
+    @staticmethod
+    def parse_valve(line, z_correction, angle):
+        data = line.strip().split(';')
+        rr = ReadingRulesForValve()
+        if data[rr.connection_type_index] != OUTER_VALVE_NAME:
+            return None
 
-        def parse_valve(line):
-            data = line.strip().split(';')
-            rr = ReadingRulesForValve()
-            if data[rr.connection_type_index] != OUTER_VALVE_NAME:
-                return None
+        x = UnitConverter.meters_to_millimeters(TextParser.parse_float(data[rr.x_index]))
+        y = UnitConverter.meters_to_millimeters(TextParser.parse_float(data[rr.y_index]))
+        z = UnitConverter.meters_to_millimeters(TextParser.parse_float(data[rr.z_index])) + z_correction
 
-            x = TextParser.parse_float(data[rr.x_index]) * 1000
-            y = TextParser.parse_float(data[rr.y_index]) * 1000
-            z = TextParser.parse_float(data[rr.z_index]) * 1000
-            z = z + z_correction
+        x_new, y_new, z_new = GeometryHelper.rotate_point(angle, x, y, z)
 
-            x_new, y_new, z_new = GeometryHelper.rotate_point(angle, x, y, z)
+        return AuditorEquipment(
+            maker=data[rr.maker_index],
+            rotated_coords=XYZ(x_new, y_new, z_new),
+            original_coords=XYZ(x, y, z),
+            setting=TextParser.parse_setting(data[rr.setting_index].replace(',', '.')),
+            type_name=VALVE_TYPE_NAME
+        )
 
-            return AuditorEquipment(
-                maker=data[rr.maker_index],
-                rotated_coords=XYZ(x_new, y_new, z_new),
-                original_coords=XYZ(x, y, z),
-                setting=TextParser.parse_setting(data[rr.setting_index].replace(',', '.')),
-                type_name=VALVE_TYPE_NAME
-            )
+class SectionFinder:
+    """Отвечает за поиск секций в файле"""
+    @staticmethod
+    def find_section(lines, title, start_offset, parse_func, z_correction, angle):
+        result = []
+        i = 0
+        while i < len(lines):
+            if len(result) == 10:  # Лимит элементов для теста
+                return result
+            if title in lines[i]:
+                i += start_offset
+                while i < len(lines) and lines[i].strip():
+                    parsed_item = parse_func(lines[i], z_correction, angle)
+                    if parsed_item is not None:
+                        result.append(parsed_item)
+                    i += 1
+            i += 1
+        return result
 
-        with codecs.open(file_path, 'r', encoding='utf-8') as file:
-            lines = file.readlines()
-
+class ZCorrectionCalculator:
+    """Вычисляет поправку по Z координате"""
+    @staticmethod
+    def calculate_z_correction(doc):
         internal_origin = InternalOrigin.Get(doc)
-
         base_point = FilteredElementCollector(doc) \
             .OfCategory(BuiltInCategory.OST_ProjectBasePoint) \
             .WhereElementIsNotElementType() \
             .FirstElement()
-
         base_point_z = base_point.GetParamValue(BuiltInParameter.BASEPOINT_ELEVATION_PARAM)
+        z_difference = base_point_z - internal_origin.SharedPosition.Z
+        return UnitConverter.to_millimeters(z_difference)
 
-        internal_origin_z = internal_origin.SharedPosition.Z
-        z_correction = (base_point_z - internal_origin_z) * 304.8
+class AuditorFileReader:
+    """Координирует процесс чтения файла, используя другие классы"""
+    @staticmethod
+    def read_auditor_file(file_path, angle, doc):
+        with codecs.open(file_path, 'r', encoding='utf-8') as file:
+            lines = file.readlines()
 
-        equipment = parse_equipment_section(lines, "Отопительные приборы CO на плане", 3, parse_heating_device)
-        valves = parse_equipment_section(lines, "Арматура СО на плане", 3, parse_valve)
+        z_correction = ZCorrectionCalculator.calculate_z_correction(doc)
+
+        equipment = SectionFinder.find_section(
+            lines,
+            "Отопительные приборы CO на плане",
+            3,
+            AuditorFileParser.parse_heating_device,
+            z_correction,
+            angle
+        )
+
+        valves = SectionFinder.find_section(
+            lines,
+            "Арматура СО на плане",
+            3,
+            AuditorFileParser.parse_valve,
+            z_correction,
+            angle
+        )
 
         equipment.extend(valves)
 
@@ -575,6 +602,7 @@ VALVE_TYPE_NAME = "Клапан"
 OUTER_VALVE_NAME = "ZAWTERM"
 FAMILY_NAME_CONST = 'Обр_ОП_Универсальный'
 DEBUG_MODE = False
+EPSILON = 1e-9
 
 if DEBUG_MODE:
     debug_placer = DebugPlacerLib.DebugPlacer(doc, diameter=2000)
