@@ -123,6 +123,26 @@ class LevelCylinderGenerator:
             cylinders.append(CylinderZ(z_min, z_max))
         return cylinders
 
+class BasePointHelper:
+    _base_point = None
+    _base_point_z = None
+
+    @classmethod
+    def get_base_point(cls, doc):
+        if cls._base_point is None:
+            cls._base_point = FilteredElementCollector(doc) \
+                .OfCategory(BuiltInCategory.OST_ProjectBasePoint) \
+                .WhereElementIsNotElementType() \
+                .FirstElement()
+        return cls._base_point
+
+    @classmethod
+    def get_base_point_z(cls, doc):
+        if cls._base_point_z is None:
+            base_point = cls.get_base_point(doc)
+            cls._base_point_z = base_point.GetParamValue(BuiltInParameter.BASEPOINT_ELEVATION_PARAM)
+        return cls._base_point_z
+
 class AuditorEquipment:
 
     '''
@@ -165,14 +185,8 @@ class AuditorEquipment:
             Координаты исходные
 
         '''
-        base_point = FilteredElementCollector(doc) \
-            .OfCategory(BuiltInCategory.OST_ProjectBasePoint) \
-            .WhereElementIsNotElementType() \
-            .FirstElement()
 
-        # base_point - Возвращает базовую точку проекта
-
-        self.base_point_z = base_point.GetParamValue(BuiltInParameter.BASEPOINT_ELEVATION_PARAM)
+        self.base_point_z = BasePointHelper.get_base_point_z(doc)
         self.connection_type = connection_type
 
         # Используем XYZ для хранения координат
@@ -342,17 +356,21 @@ class AuditorFileParser:
     def parse_heating_device(line, z_correction, angle):
         data = line.strip().split(';')
         rr = ReadingRulesForEquipment()
-        x = UnitConverter.meters_to_millimeters(TextParser.parse_float(data[rr.x_index]))
-        y = UnitConverter.meters_to_millimeters(TextParser.parse_float(data[rr.y_index]))
-        z = (UnitConverter.meters_to_millimeters(TextParser.parse_float(data[rr.z_index]))
-             + z_correction)
 
-        x_new, y_new, z_new = GeometryHelper.rotate_point(angle, x, y, z)
+        # Получаем оба набора координат
+        original, rotated = AuditorFileParser._parse_coordinates(
+            data=data,
+            x_idx=rr.x_index,
+            y_idx=rr.y_index,
+            z_idx=rr.z_index,
+            z_correction=z_correction,
+            angle=angle
+        )
 
         return AuditorEquipment(
             connection_type=data[rr.connection_type_index],
-            rotated_coords=XYZ(x_new, y_new, z_new),
-            original_coords=XYZ(x, y, z),
+            rotated_coords=XYZ(*rotated),
+            original_coords=XYZ(*original),
             len=TextParser.parse_float(data[rr.len_index]),
             code=data[rr.code_index],
             real_power=TextParser.parse_float(data[rr.real_power_index]),
@@ -370,19 +388,36 @@ class AuditorFileParser:
         if data[rr.connection_type_index] != OUTER_VALVE_NAME:
             return None
 
-        x = UnitConverter.meters_to_millimeters(TextParser.parse_float(data[rr.x_index]))
-        y = UnitConverter.meters_to_millimeters(TextParser.parse_float(data[rr.y_index]))
-        z = UnitConverter.meters_to_millimeters(TextParser.parse_float(data[rr.z_index])) + z_correction
-
-        x_new, y_new, z_new = GeometryHelper.rotate_point(angle, x, y, z)
+        # Получаем оба набора координат
+        original, rotated = AuditorFileParser._parse_coordinates(
+            data=data,
+            x_idx=rr.x_index,
+            y_idx=rr.y_index,
+            z_idx=rr.z_index,
+            z_correction=z_correction,
+            angle=angle
+        )
 
         return AuditorEquipment(
             maker=data[rr.maker_index],
-            rotated_coords=XYZ(x_new, y_new, z_new),
-            original_coords=XYZ(x, y, z),
+            rotated_coords=XYZ(*rotated),
+            original_coords=XYZ(*original),
             setting=TextParser.parse_setting(data[rr.setting_index].replace(',', '.')),
             type_name=VALVE_TYPE_NAME
         )
+
+    @staticmethod
+    def _parse_coordinates(data, x_idx, y_idx, z_idx, z_correction, angle):
+        """Парсит и возвращает как оригинальные, так и повернутые координаты"""
+        x = UnitConverter.meters_to_millimeters(TextParser.parse_float(data[x_idx]))
+        y = UnitConverter.meters_to_millimeters(TextParser.parse_float(data[y_idx]))
+        z = UnitConverter.meters_to_millimeters(TextParser.parse_float(data[z_idx])) + z_correction
+
+        # Получаем повернутые координаты
+        x_new, y_new, z_new = GeometryHelper.rotate_point(angle, x, y, z)
+
+        # Возвращаем кортеж: (оригинальные_координаты, повернутые_координаты)
+        return (x, y, z), (x_new, y_new, z_new)
 
 class SectionFinder:
     """Отвечает за поиск секций в файле"""
@@ -408,11 +443,7 @@ class ZCorrectionCalculator:
     @staticmethod
     def calculate_z_correction(doc):
         internal_origin = InternalOrigin.Get(doc)
-        base_point = FilteredElementCollector(doc) \
-            .OfCategory(BuiltInCategory.OST_ProjectBasePoint) \
-            .WhereElementIsNotElementType() \
-            .FirstElement()
-        base_point_z = base_point.GetParamValue(BuiltInParameter.BASEPOINT_ELEVATION_PARAM)
+        base_point_z = BasePointHelper.get_base_point_z(doc)
         z_difference = base_point_z - internal_origin.SharedPosition.Z
         return UnitConverter.to_millimeters(z_difference)
 
