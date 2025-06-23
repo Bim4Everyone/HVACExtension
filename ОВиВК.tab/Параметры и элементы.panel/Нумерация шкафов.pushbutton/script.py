@@ -27,6 +27,7 @@ from Autodesk.Revit.DB import *
 from Autodesk.Revit.UI.Selection import Selection
 from Autodesk.DesignScript.Geometry import *
 
+from collections import defaultdict
 import RevitServices
 from RevitServices.Persistence import DocumentManager
 from RevitServices.Transactions import TransactionManager
@@ -43,6 +44,7 @@ clr.ImportExtensions(dosymep.Revit)
 clr.ImportExtensions(dosymep.Bim4Everyone)
 from dosymep.Bim4Everyone.Templates import ProjectParameters
 from dosymep_libs.bim4everyone import *
+from dosymep.Bim4Everyone.SharedParams import SharedParamsConfig
 
 doc = __revit__.ActiveUIDocument.Document
 
@@ -198,8 +200,7 @@ def get_start_number():
     return number
 
 
-def get_cabinets_by_levels():
-    elements = get_fire_cabinet_equipment()
+def get_cabinets_by_levels(elements):
     fire_cabinets = []
 
     for element in elements:
@@ -226,26 +227,50 @@ def get_cabinets_by_levels():
     return sorted_cabinets_by_level
 
 
+def split_elements_by_systems(elements):
+    system_para = SharedParamsConfig.Instance.VISSystemName
+
+    # Словарь для группировки элементов по имени системы
+    systems_dict = defaultdict(list)
+
+    for element in elements:
+        system_name = element.GetParamValueOrDefault(system_para)
+        if system_name is None:
+            forms.alert(
+                "У части шкафов не заполнен параметр ФОП_ВИС_Имя системы. Выполните полное обновление.",
+                "Ошибка",
+                exitscript=True)
+
+        systems_dict[system_name].append(element)
+
+    # Преобразуем словарь в список списков
+    split_elements   = list(systems_dict.values())
+    return split_elements
+
+
 @notification()
 @log_plugin(EXEC_PARAMS.command_name)
 def script_execute(plugin_logger):
-    sorted_cabinets_by_level = get_cabinets_by_levels()
-
-    number = get_start_number()
+    elements = get_fire_cabinet_equipment()
+    split_elements  = split_elements_by_systems(elements)
 
     with revit.Transaction("BIM: Нумерация шкафов"):
-        for level_name in sorted(sorted_cabinets_by_level.keys()):
-            cabinets = sorted_cabinets_by_level[level_name]
-            rows = group_by_rows_top_down(cabinets)
+        for system_elements in split_elements:
+            number = 1
+            sorted_cabinets_by_level = get_cabinets_by_levels(system_elements)
 
-            # Сортируем ряды сверху вниз (по средней Y, по убыванию)
-            rows = sorted(rows, key=lambda row: -sum(c.xyz.Y for c in row) / len(row))
+            for level_name in sorted(sorted_cabinets_by_level.keys()):
+                cabinets = sorted_cabinets_by_level[level_name]
+                rows = group_by_rows_top_down(cabinets)
 
-            for row in rows:
-                # В ряду сортируем слева направо по X
-                sorted_row = sorted(row, key=lambda c: c.xyz.X)
-                for cabinet in sorted_row:
-                    cabinet.element.SetParamValue("ADSK_Позиция", str(number))
-                    number += 1
+                # Сортируем ряды сверху вниз (по средней Y, по убыванию)
+                rows = sorted(rows, key=lambda row: -sum(c.xyz.Y for c in row) / len(row))
+
+                for row in rows:
+                    # В ряду сортируем слева направо по X
+                    sorted_row = sorted(row, key=lambda c: c.xyz.X)
+                    for cabinet in sorted_row:
+                        cabinet.element.SetParamValue("ADSK_Позиция", str(number))
+                        number += 1
 
 script_execute()
