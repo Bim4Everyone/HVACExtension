@@ -207,7 +207,7 @@ def get_cabinets_by_levels():
 
         if param is None or param.IsReadOnly:
             forms.alert(
-                "В части оборудования параметр экземпляра ADSK_Позиция не существует "
+                "Параметр экземпляра ADSK_Позиция в части оборудования не существует "
                 "или недоступен для редактирования. ID: {}".format(str(element.Id)),
                 "Ошибка",
                 exitscript=True)
