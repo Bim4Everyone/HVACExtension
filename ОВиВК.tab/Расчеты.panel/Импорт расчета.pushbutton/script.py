@@ -100,6 +100,23 @@ class TextParser:
             return 0
         return TextParser.parse_float(value)
 
+class LevelCylinderGenerator:
+    MAX_Z_OFFSET = 2500  # Максимальная высота цилиндра
+    Z_STOCK = 250        # Запас по высоте
+
+    @classmethod
+    def create_cylinders(cls, equipment_list):
+        """Создает CylinderZ для каждого уровня оборудования."""
+        z_values = {eq.rotated_coords.Z for eq in equipment_list if eq.type_name == EQUIPMENT_TYPE_NAME}
+        z_values = sorted(z_values)
+
+        cylinders = []
+        for i, z in enumerate(z_values):
+            z_min = z - cls.Z_STOCK
+            z_max = z_min + cls.MAX_Z_OFFSET if (i == len(z_values) - 1) \
+                else min(z_min + cls.MAX_Z_OFFSET, z_values[i + 1] - cls.Z_STOCK)
+            cylinders.append(CylinderZ(z_min, z_max))
+        return cylinders
 
 class AuditorEquipment:
 
@@ -440,37 +457,6 @@ def get_elements_by_category(category):
 
     return filtered_equipment
 
-def create_level_cylinders(ayditror_equipment_elements):
-    '''
-    Формирование цилиндров идет по низу аудитор-оборудования, которое выше отметок уровней в ревите. Соответственно,
-    для попадания  отметок элементов ревита в эти цилиндры мы понижаем низ и верх цилиндров на небольшую величину
-    '''
-
-    max_z_offset = 2500 # Значение предельного смещения для Z-прибора. Обусловлено тем, что 2200 - предельная высота
-    # установки приборов на лестничных клетках
-    z_stock = 250 # Значение для понижения низа цилиндра, позволяющее проектировщику иметь погрешность по высоте
-
-    unique_z_values = {
-        eq.rotated_coords.Z for eq in ayditror_equipment_elements
-        if eq.type_name == EQUIPMENT_TYPE_NAME
-    }
-
-    unique_z_values = sorted(unique_z_values)
-
-    cylinder_list = []
-    for i, z in enumerate(unique_z_values):
-        z_min = z - z_stock
-
-        if i + 1 < len(unique_z_values):
-            next_z = unique_z_values[i + 1] - z_stock
-            z_max = min(z_min + max_z_offset, next_z)
-        else:
-            z_max = z_min + max_z_offset
-
-        cylinder = CylinderZ(z_min, z_max)
-        cylinder_list.append(cylinder)
-    return  cylinder_list
-
 def process_start_up():
     if doc.IsFamilyDocument:
         forms.alert("Надстройка не предназначена для работы с семействами", "Ошибка", exitscript=True )
@@ -583,7 +569,7 @@ def script_execute(plugin_logger):
     ayditror_equipment_elements = extract_heating_device_description(filepath, angle)
 
     # собираем высоты цилиндров в которых будем искать данные
-    level_cylinders = create_level_cylinders(ayditror_equipment_elements)
+    level_cylinders = LevelCylinderGenerator.create_cylinders(ayditror_equipment_elements)
 
     with revit.Transaction("BIM: Импорт приборов"):
         for ayditor_equipment in ayditror_equipment_elements:
