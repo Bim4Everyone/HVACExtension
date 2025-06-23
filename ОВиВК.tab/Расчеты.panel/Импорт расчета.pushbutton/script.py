@@ -333,115 +333,184 @@ class BoundingBoxHelper:
         )
         return centroid
 
-def extract_heating_device_description(file_path, angle):
-    '''
-    Получение и обработка информации об элементов из исходных данных
+class AuditorFileReader:
+    @staticmethod
+    def read_auditor_file(file_path, angle, doc):
+        """Чтение и обработка файла Audytor."""
+        def parse_equipment_section(lines, title, start_offset, parse_func):
+            result = []
+            i = 0
+            while i < len(lines):
+                if len(result) == 10:
+                    return result
+                if title in lines[i]:
+                    i += start_offset
+                    while i < len(lines) and lines[i].strip():
+                        parsed_item = parse_func(lines[i])
+                        if parsed_item is not None:
+                            result.append(parsed_item)
+                        i += 1
+                i += 1
+            return result
 
-    Parametrs
-    ------
-    equipment: list
-        Список элементов и их свойств из Аудитора
-    '''
-    def parse_equipment_section(lines, title, start_offset, parse_func):
-        '''
-        Разбивка исходных данных на строки и отсечение лишней информации
-        '''
-        result = []
-        i = 0
-        while i < len(lines):
-            if len(result) == 10:
-                return result
-            if title in lines[i]:
-                i += start_offset
-                while i < len(lines) and lines[i].strip():
-                    parsed_item = parse_func(lines[i])
-                    if parsed_item is not None:
-                        result.append(parsed_item)
-                    i += 1
-            i += 1
-        return result
+        def parse_heating_device(line):
+            data = line.strip().split(';')
+            rr = ReadingRulesForEquipment()
+            x = TextParser.parse_float(data[rr.x_index]) * 1000
+            y = TextParser.parse_float(data[rr.y_index]) * 1000
+            z = TextParser.parse_float(data[rr.z_index]) * 1000
 
-    def parse_heating_device(line):
+            z = z + z_correction
+            x_new, y_new, z_new = GeometryHelper.rotate_point(angle, x, y, z)
 
-        '''
-        Чтение исходных данных для оборудования по указанными правилам, поворот координат на указанный угол
-        и запись в параметры экземпляра класса
-        '''
-        data = line.strip().split(';')
-        rr = reading_rules_device
-        x = TextParser.parse_float(data[rr.x_index]) * 1000
-        y = TextParser.parse_float(data[rr.y_index]) * 1000
-        z = TextParser.parse_float(data[rr.z_index]) * 1000
+            return AuditorEquipment(
+                connection_type=data[rr.connection_type_index],
+                rotated_coords=XYZ(x_new, y_new, z_new),
+                original_coords=XYZ(x, y, z),
+                len=TextParser.parse_float(data[rr.len_index]),
+                code=data[rr.code_index],
+                real_power=TextParser.parse_float(data[rr.real_power_index]),
+                nominal_power=TextParser.parse_float(data[rr.nominal_power_index]),
+                setting=TextParser.parse_setting(data[rr.setting_index].replace(',', '.')),
+                maker=data[rr.maker_index],
+                full_name=data[rr.full_name_index],
+                type_name=EQUIPMENT_TYPE_NAME
+            )
 
-        z = z + z_correction
-        x_new, y_new, z_new = GeometryHelper.rotate_point(angle, x, y, z)
+        def parse_valve(line):
+            data = line.strip().split(';')
+            rr = ReadingRulesForValve()
+            if data[rr.connection_type_index] != OUTER_VALVE_NAME:
+                return None
 
-        return AuditorEquipment(
-            connection_type=data[rr.connection_type_index],
-            rotated_coords = XYZ(x_new,y_new,z_new),
-            original_coords= XYZ(x,y,z),
-            len=TextParser.parse_float(data[rr.len_index]),
-            code=data[rr.code_index],
-            real_power=TextParser.parse_float(data[rr.real_power_index]),
-            nominal_power=TextParser.parse_float(data[rr.nominal_power_index]),
-            setting=TextParser.parse_setting(data[rr.setting_index].replace(',', '.')),
-            maker=data[rr.maker_index],
-            full_name=data[rr.full_name_index],
-            type_name=EQUIPMENT_TYPE_NAME
-        )
+            x = TextParser.parse_float(data[rr.x_index]) * 1000
+            y = TextParser.parse_float(data[rr.y_index]) * 1000
+            z = TextParser.parse_float(data[rr.z_index]) * 1000
+            z = z + z_correction
 
-    def parse_valve(line):
-        '''
-        Чтение исходных данных для клапанов по указанными правилам, поворот координат на указанный угол
-        и запись в параметры экземпляра класса
-        '''
-        data = line.strip().split(';')
-        rr = reading_rules_valve
-        if data[rr.connection_type_index] != OUTER_VALVE_NAME:
-            return None
+            x_new, y_new, z_new = GeometryHelper.rotate_point(angle, x, y, z)
 
-        x = TextParser.parse_float(data[rr.x_index]) * 1000
-        y = TextParser.parse_float(data[rr.y_index]) * 1000
-        z = TextParser.parse_float(data[rr.z_index]) * 1000
-        z = z + z_correction
+            return AuditorEquipment(
+                maker=data[rr.maker_index],
+                rotated_coords=XYZ(x_new, y_new, z_new),
+                original_coords=XYZ(x, y, z),
+                setting=TextParser.parse_setting(data[rr.setting_index].replace(',', '.')),
+                type_name=VALVE_TYPE_NAME
+            )
 
-        x_new, y_new, z_new = GeometryHelper.rotate_point(angle, x, y, z)
+        with codecs.open(file_path, 'r', encoding='utf-8') as file:
+            lines = file.readlines()
 
-        return AuditorEquipment(
-            maker=data[rr.maker_index],
-            rotated_coords = XYZ(x_new,y_new,z_new),
-            original_coords= XYZ(x,y,z),
-            setting=TextParser.parse_setting(data[rr.setting_index].replace(',', '.')),
-            type_name=VALVE_TYPE_NAME
-        )
+        internal_origin = InternalOrigin.Get(doc)
 
-    with codecs.open(file_path, 'r', encoding='utf-8') as file:
-        lines = file.readlines()
+        base_point = FilteredElementCollector(doc) \
+            .OfCategory(BuiltInCategory.OST_ProjectBasePoint) \
+            .WhereElementIsNotElementType() \
+            .FirstElement()
 
-    internal_origin = InternalOrigin.Get(doc)
+        base_point_z = base_point.GetParamValue(BuiltInParameter.BASEPOINT_ELEVATION_PARAM)
 
-    base_point = FilteredElementCollector(doc) \
-        .OfCategory(BuiltInCategory.OST_ProjectBasePoint) \
-        .WhereElementIsNotElementType() \
-        .FirstElement()
+        internal_origin_z = internal_origin.SharedPosition.Z
+        z_correction = (base_point_z - internal_origin_z) * 304.8
 
-    base_point_z = base_point.GetParamValue(BuiltInParameter.BASEPOINT_ELEVATION_PARAM)
+        equipment = parse_equipment_section(lines, "Отопительные приборы CO на плане", 3, parse_heating_device)
+        valves = parse_equipment_section(lines, "Арматура СО на плане", 3, parse_valve)
 
-    internal_origin_z = internal_origin.SharedPosition.Z
-    z_correction = (base_point_z - internal_origin_z) * 304.8
+        equipment.extend(valves)
 
-    reading_rules_device = ReadingRulesForEquipment()
-    reading_rules_valve = ReadingRulesForValve()
+        if not equipment:
+            forms.alert("Не найдено оборудование в импортируемом файле.", "Ошибка", exitscript=True)
 
-    equipment = parse_equipment_section(lines, "Отопительные приборы CO на плане", 3, parse_heating_device)
-    valves = parse_equipment_section(lines, "Арматура СО на плане", 3, parse_valve)
+        return equipment
+class AuditorFileReader:
+    @staticmethod
+    def read_auditor_file(file_path, angle, doc):
+        """Чтение и обработка файла Audytor."""
+        def parse_equipment_section(lines, title, start_offset, parse_func):
+            result = []
+            i = 0
+            while i < len(lines):
+                if len(result) == 10:
+                    return result
+                if title in lines[i]:
+                    i += start_offset
+                    while i < len(lines) and lines[i].strip():
+                        parsed_item = parse_func(lines[i])
+                        if parsed_item is not None:
+                            result.append(parsed_item)
+                        i += 1
+                i += 1
+            return result
 
-    equipment.extend(valves)
+        def parse_heating_device(line):
+            data = line.strip().split(';')
+            rr = ReadingRulesForEquipment()
+            x = TextParser.parse_float(data[rr.x_index]) * 1000
+            y = TextParser.parse_float(data[rr.y_index]) * 1000
+            z = TextParser.parse_float(data[rr.z_index]) * 1000
 
-    if not equipment:
-        forms.alert("Не найдено оборудование в импортируемом файле.", "Ошибка", exitscript=True)
+            z = z + z_correction
+            x_new, y_new, z_new = GeometryHelper.rotate_point(angle, x, y, z)
 
-    return equipment
+            return AuditorEquipment(
+                connection_type=data[rr.connection_type_index],
+                rotated_coords=XYZ(x_new, y_new, z_new),
+                original_coords=XYZ(x, y, z),
+                len=TextParser.parse_float(data[rr.len_index]),
+                code=data[rr.code_index],
+                real_power=TextParser.parse_float(data[rr.real_power_index]),
+                nominal_power=TextParser.parse_float(data[rr.nominal_power_index]),
+                setting=TextParser.parse_setting(data[rr.setting_index].replace(',', '.')),
+                maker=data[rr.maker_index],
+                full_name=data[rr.full_name_index],
+                type_name=EQUIPMENT_TYPE_NAME
+            )
+
+        def parse_valve(line):
+            data = line.strip().split(';')
+            rr = ReadingRulesForValve()
+            if data[rr.connection_type_index] != OUTER_VALVE_NAME:
+                return None
+
+            x = TextParser.parse_float(data[rr.x_index]) * 1000
+            y = TextParser.parse_float(data[rr.y_index]) * 1000
+            z = TextParser.parse_float(data[rr.z_index]) * 1000
+            z = z + z_correction
+
+            x_new, y_new, z_new = GeometryHelper.rotate_point(angle, x, y, z)
+
+            return AuditorEquipment(
+                maker=data[rr.maker_index],
+                rotated_coords=XYZ(x_new, y_new, z_new),
+                original_coords=XYZ(x, y, z),
+                setting=TextParser.parse_setting(data[rr.setting_index].replace(',', '.')),
+                type_name=VALVE_TYPE_NAME
+            )
+
+        with codecs.open(file_path, 'r', encoding='utf-8') as file:
+            lines = file.readlines()
+
+        internal_origin = InternalOrigin.Get(doc)
+
+        base_point = FilteredElementCollector(doc) \
+            .OfCategory(BuiltInCategory.OST_ProjectBasePoint) \
+            .WhereElementIsNotElementType() \
+            .FirstElement()
+
+        base_point_z = base_point.GetParamValue(BuiltInParameter.BASEPOINT_ELEVATION_PARAM)
+
+        internal_origin_z = internal_origin.SharedPosition.Z
+        z_correction = (base_point_z - internal_origin_z) * 304.8
+
+        equipment = parse_equipment_section(lines, "Отопительные приборы CO на плане", 3, parse_heating_device)
+        valves = parse_equipment_section(lines, "Арматура СО на плане", 3, parse_valve)
+
+        equipment.extend(valves)
+
+        if not equipment:
+            forms.alert("Не найдено оборудование в импортируемом файле.", "Ошибка", exitscript=True)
+
+        return equipment
 
 def get_elements_by_category(category):
     """ Возвращает коллекцию элементов по категории """
@@ -566,7 +635,7 @@ if DEBUG_MODE:
 def script_execute(plugin_logger):
     angle, filepath = process_start_up()
 
-    ayditror_equipment_elements = extract_heating_device_description(filepath, angle)
+    ayditror_equipment_elements = AuditorFileReader.read_auditor_file(filepath, angle, doc)
 
     # собираем высоты цилиндров в которых будем искать данные
     level_cylinders = LevelCylinderGenerator.create_cylinders(ayditror_equipment_elements)
