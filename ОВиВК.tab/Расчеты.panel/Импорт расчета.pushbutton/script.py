@@ -554,7 +554,7 @@ class ReportGenerator:
                 equipment.original_coords.Y,
                 equipment.original_coords.Z))
 
-def get_elements_by_category(category):
+def get_elements_by_family_name(category):
     """ Возвращает коллекцию элементов по категории """
     revit_equipment_elements = FilteredElementCollector(doc)\
                             .OfCategory(category)\
@@ -569,6 +569,7 @@ def get_elements_by_category(category):
     return filtered_equipment
 
 def process_start_up():
+
     if doc.IsFamilyDocument:
         forms.alert("Надстройка не предназначена для работы с семействами", "Ошибка", exitscript=True )
 
@@ -651,7 +652,7 @@ def script_execute(plugin_logger):
         for ayditor_equipment in ayditror_equipment_elements:
             ayditor_equipment.set_level_cylinder(level_cylinders)
 
-        equipment = get_elements_by_category(BuiltInCategory.OST_MechanicalEquipment)
+        equipment = get_elements_by_family_name(BuiltInCategory.OST_MechanicalEquipment)
         process_audytor_revit_matching(ayditror_equipment_elements, equipment)
 
 script_execute()
