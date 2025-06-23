@@ -316,15 +316,6 @@ class BoundingBoxHelper:
         )
         return centroid
 
-def get_setting_float_value(value):
-    '''
-    Корректировка настройки в исходных данных
-    '''
-    if value == 'N' or value == '' or value == 'Kvs':
-        return 0
-    else:
-        return float(value)
-
 def extract_heating_device_description(file_path, angle):
     '''
     Получение и обработка информации об элементов из исходных данных
@@ -334,9 +325,6 @@ def extract_heating_device_description(file_path, angle):
     equipment: list
         Список элементов и их свойств из Аудитора
     '''
-    def parse_float(value):
-        return float(value.replace(',', '.'))
-
     def parse_equipment_section(lines, title, start_offset, parse_func):
         '''
         Разбивка исходных данных на строки и отсечение лишней информации
