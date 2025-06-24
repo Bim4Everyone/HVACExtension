@@ -61,9 +61,9 @@ class UnitConverter:
         """Конвертирует внутренние единицы Revit в миллиметры."""
         return UnitUtils.ConvertFromInternalUnits(value, UnitTypeId.Millimeters)
     @staticmethod
-    def to_kilometers(value):
+    def from_meters(value):
         """Конвертирует внутренние единицы Revit в километры."""
-        return UnitUtils.ConvertFromInternalUnits(value, UnitTypeId.Meters)/100
+        return UnitUtils.ConvertToInternalUnits(value, UnitTypeId.Meters)
 
     @staticmethod
     def to_watts(value):
@@ -287,8 +287,8 @@ class EquipmentDataCache:
 
             if data.type_name == EQUIPMENT_TYPE_NAME:
                 real_power_watts = UnitConverter.to_watts(data.real_power)
-                len_meters = UnitConverter.to_kilometers(data.len)
-                element.SetParamValue('ADSK_Размер_Длина', len_meters)
+                len_millimeters = UnitConverter.from_meters(data.len)
+                element.SetParamValue('ADSK_Размер_Длина', len_millimeters)
                 element.SetParamValue('ADSK_Код изделия', data.code)
                 element.SetParamValue('ADSK_Тепловая мощность', real_power_watts)
 
@@ -375,7 +375,7 @@ class AuditorFileParser:
             code=data[rr.code_index],
             real_power=TextParser.parse_float(data[rr.real_power_index]),
             nominal_power=TextParser.parse_float(data[rr.nominal_power_index]),
-            setting=TextParser.parse_setting(data[rr.setting_index].replace(',', '.')),
+            setting=TextParser.parse_setting(data[rr.setting_index]),
             maker=data[rr.maker_index],
             full_name=data[rr.full_name_index],
             type_name=EQUIPMENT_TYPE_NAME
@@ -402,7 +402,7 @@ class AuditorFileParser:
             maker=data[rr.maker_index],
             rotated_coords=XYZ(*rotated),
             original_coords=XYZ(*original),
-            setting=TextParser.parse_setting(data[rr.setting_index].replace(',', '.')),
+            setting=TextParser.parse_setting(data[rr.setting_index]),
             type_name=VALVE_TYPE_NAME
         )
 
@@ -426,8 +426,6 @@ class SectionFinder:
         result = []
         i = 0
         while i < len(lines):
-            if len(result) == 10:  # Лимит элементов для теста
-                return result
             if title in lines[i]:
                 i += start_offset
                 while i < len(lines) and lines[i].strip():
@@ -590,7 +588,7 @@ def process_start_up():
     )
 
     try:
-        angle = float(angle.replace(',', '.'))
+        angle = TextParser.parse_float(angle)
     except ValueError:
         forms.alert(
             "Необходимо ввести число.",
