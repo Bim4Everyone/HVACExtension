@@ -115,6 +115,7 @@ class EditorReport:
 
 class FireCabinet:
     position_number = 0
+    angle = 0
     def __init__(self, element):
         self.element = element
         revit_xyz = element.Location.Point
@@ -135,20 +136,56 @@ def convert_to_mms(value):
     return result
 
 
-def group_by_rows_top_down(cabinets, y_tolerance=2000):
-    """Разбивает шкафы на ряды по Y (сверху вниз) с учетом допуска"""
-    sorted_cabs = sorted(cabinets, key=lambda c: (-c.xyz.Y, c.xyz.X))  # сверху вниз
-    rows = []
+def group_by_rows(cabinets, y_tolerance=2000):
+    """Группирует шкафы в ряды по Y, начиная строго слева от центра и далее против часовой"""
 
+    if not cabinets:
+        return []
+
+    # Центр — по X середина, по Y верхняя граница
+    min_x = min(cab.xyz.X for cab in cabinets)
+    max_x = max(cab.xyz.X for cab in cabinets)
+    max_y = max(cab.xyz.Y for cab in cabinets)
+
+    center_x = (min_x + max_x) / 2
+    center_point = XYZ(center_x, max_y + 0, 0)
+
+    def get_adjusted_angle(cab):
+        dx = cab.xyz.X - center_point.X
+        dy = cab.xyz.Y - center_point.Y
+        angle = math.atan2(dy, dx)
+        adjusted = (angle - math.pi) % (2 * math.pi)
+        return adjusted
+
+    # Добавляем угол каждому cabinet
+    for cab in cabinets:
+        cab.angle = get_adjusted_angle(cab)
+
+    # Сортируем по убыванию угла: от π (влево) против часовой
+    sorted_cabs = sorted(cabinets, key=lambda c: c.angle)
+
+    # Группировка по углам: в пределах y_tolerance по направлению от центра
+    rows = []
     for cab in sorted_cabs:
         placed = False
         for row in rows:
-            if abs(cab.xyz.Y - row[0].xyz.Y) <= y_tolerance:
+
+            ref_cab = row[0]
+            # Вектор от центра до текущего шкафа
+            vec = XYZ(cab.xyz.X - center_point.X, cab.xyz.Y - center_point.Y, 0)
+            ref_vec = XYZ(ref_cab.xyz.X - center_point.X, ref_cab.xyz.Y - center_point.Y, 0)
+
+            # Проверяем расстояние между проекциями вдоль направления
+            diff = vec - ref_vec
+            dist = diff.GetLength()
+
+            if dist <= y_tolerance:
                 row.append(cab)
                 placed = True
                 break
         if not placed:
             rows.append([cab])
+
     return rows
 
 
@@ -261,10 +298,10 @@ def script_execute(plugin_logger):
 
             for level_name in sorted(sorted_cabinets_by_level.keys()):
                 cabinets = sorted_cabinets_by_level[level_name]
-                rows = group_by_rows_top_down(cabinets)
+                rows = group_by_rows(cabinets)
 
                 # Сортируем ряды сверху вниз (по средней Y, по убыванию)
-                rows = sorted(rows, key=lambda row: -sum(c.xyz.Y for c in row) / len(row))
+                #rows = sorted(rows, key=lambda row: -sum(c.xyz.Y for c in row) / len(row))
 
                 for row in rows:
                     # В ряду сортируем слева направо по X
