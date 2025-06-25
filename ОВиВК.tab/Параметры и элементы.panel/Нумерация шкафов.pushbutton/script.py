@@ -15,6 +15,7 @@ import Revit
 import dosymep
 import codecs
 import math
+from operator import attrgetter
 
 clr.ImportExtensions(Revit.Elements)
 clr.ImportExtensions(Revit.GeometryConversion)
@@ -37,6 +38,7 @@ from pyrevit import revit
 from pyrevit import script
 from pyrevit import HOST_APP
 from pyrevit import EXEC_PARAMS
+from rpw.ui.forms import SelectFromList
 from rpw.ui.forms import select_file
 
 
@@ -136,8 +138,8 @@ def convert_to_mms(value):
     return result
 
 
-def group_by_rows(cabinets, y_tolerance=2000):
-    """Группирует шкафы в ряды по Y, начиная строго слева от центра и далее против часовой"""
+def group_by_rows(cabinets, selected_mode, y_tolerance=2000):
+    """Группирует шкафы в ряды по Y, начиная строго слева от центра и далее по окружности"""
 
     if not cabinets:
         return []
@@ -145,37 +147,69 @@ def group_by_rows(cabinets, y_tolerance=2000):
     # Центр — по X середина, по Y верхняя граница
     min_x = min(cab.xyz.X for cab in cabinets)
     max_x = max(cab.xyz.X for cab in cabinets)
+    min_y = min(cab.xyz.Y for cab in cabinets)
     max_y = max(cab.xyz.Y for cab in cabinets)
-
     center_x = (min_x + max_x) / 2
-    center_point = XYZ(center_x, max_y + 0, 0)
+    center_y = (min_y + max_y) / 2
 
-    def get_adjusted_angle(cab):
+    has_y_elbow = max_y - min_y < 20000
+    has_x_elbow = max_x - min_x < 20000
+
+    if selected_mode in [MIN_Y_CLOCKWISE, MIN_Y_COUNTERCLOCKWISE]:
+        # минимальный Y
+        start_cab = min(cabinets, key=lambda cab: cab.xyz.Y)
+    elif selected_mode in [MIN_X_CLOCKWISE, MIN_X_COUNTERCLOCKWISE]:
+        # минимальный X
+        start_cab = min(cabinets, key=lambda cab: cab.xyz.X)
+    elif selected_mode in [MAX_X_CLOCKWISE, MAX_X_COUNTERCLOCKWISE]:
+        # максимальный X
+        start_cab = max(cabinets, key=lambda cab: cab.xyz.X)
+    else:
+        start_cab = max(cabinets, key=lambda cab: cab.xyz.Y)
+
+    # Центр поворота
+    if has_x_elbow and not has_y_elbow:
+        center_point = XYZ(max_x + 10000, center_y, 0)
+    elif not has_x_elbow and has_y_elbow:
+        center_point = XYZ(center_x, max_y + 10000, 0)
+    else:
+        center_point = XYZ(center_x, center_y, 0)
+
+    reverse = selected_mode not in [MIN_Y_COUNTERCLOCKWISE,
+                                    MIN_X_COUNTERCLOCKWISE,
+                                    MAX_Y_COUNTERCLOCKWISE,
+                                    MAX_X_COUNTERCLOCKWISE]
+
+    def get_relative_angle(cab):
         dx = cab.xyz.X - center_point.X
         dy = cab.xyz.Y - center_point.Y
-        angle = math.atan2(dy, dx)
-        adjusted = (angle - math.pi) % (2 * math.pi)
-        return adjusted
+        cab_angle = math.atan2(dy, dx)
 
-    # Добавляем угол каждому cabinet
+        ref_dx = start_cab.xyz.X - center_point.X
+        ref_dy = start_cab.xyz.Y - center_point.Y
+        start_angle = math.atan2(ref_dy, ref_dx)
+
+        # Относительный угол, приведение к [0, 2π)
+        relative = (cab_angle - start_angle) % (2 * math.pi)
+        return relative
+
     for cab in cabinets:
-        cab.angle = get_adjusted_angle(cab)
+        cab.angle = get_relative_angle(cab)
 
-    # Сортируем по убыванию угла: от π (влево) против часовой
-    sorted_cabs = sorted(cabinets, key=lambda c: c.angle)
+    sorted_cabs = sorted(cabinets, key=get_relative_angle, reverse=reverse)
+    if reverse:
+        # Переносим последний элемент в начало
+        sorted_cabs = [sorted_cabs[-1]] + sorted_cabs[:-1]
 
-    # Группировка по углам: в пределах y_tolerance по направлению от центра
+    # Группировка по расстоянию от центра (вдоль луча)
     rows = []
     for cab in sorted_cabs:
         placed = False
         for row in rows:
-
             ref_cab = row[0]
-            # Вектор от центра до текущего шкафа
             vec = XYZ(cab.xyz.X - center_point.X, cab.xyz.Y - center_point.Y, 0)
             ref_vec = XYZ(ref_cab.xyz.X - center_point.X, ref_cab.xyz.Y - center_point.Y, 0)
 
-            # Проверяем расстояние между проекциями вдоль направления
             diff = vec - ref_vec
             dist = diff.GetLength()
 
@@ -284,21 +318,44 @@ def split_elements_by_systems(elements):
     split_elements   = list(systems_dict.values())
     return split_elements
 
+MIN_Y_CLOCKWISE = "Минимальным Y, по часовой стрелке"
+MIN_Y_COUNTERCLOCKWISE = "Минимальным Y, против часовой стрелки"
+MIN_X_CLOCKWISE = "Минимальным X, по часовой стрелке"
+MIN_X_COUNTERCLOCKWISE = "Минимальным X, против часовой стрелки"
+
+MAX_Y_CLOCKWISE = "Максимальным Y, по часовой стрелке"
+MAX_Y_COUNTERCLOCKWISE = "Максимальным Y, против часовой стрелки"
+MAX_X_CLOCKWISE = "Максимальным X, по часовой стрелке"
+MAX_X_COUNTERCLOCKWISE = "Максимальным X, против часовой стрелки"
+
 
 @notification()
 @log_plugin(EXEC_PARAMS.command_name)
 def script_execute(plugin_logger):
+    selected_mode = SelectFromList('Нумерация от шкафа с:', [MIN_Y_CLOCKWISE,
+                                                                      MIN_Y_COUNTERCLOCKWISE,
+                                                                      MIN_X_CLOCKWISE,
+                                                                      MIN_X_COUNTERCLOCKWISE,
+                                                                      MAX_Y_CLOCKWISE,
+                                                                      MAX_Y_COUNTERCLOCKWISE,
+                                                                      MAX_X_CLOCKWISE,
+                                                                      MAX_X_COUNTERCLOCKWISE])
+
+    if selected_mode is None:
+        sys.exit()
+
     elements = get_fire_cabinet_equipment()
     split_elements  = split_elements_by_systems(elements)
 
     with revit.Transaction("BIM: Нумерация шкафов"):
         for system_elements in split_elements:
-            number = 1
+
             sorted_cabinets_by_level = get_cabinets_by_levels(system_elements)
 
             for level_name in sorted(sorted_cabinets_by_level.keys()):
+                number = 1
                 cabinets = sorted_cabinets_by_level[level_name]
-                rows = group_by_rows(cabinets)
+                rows = group_by_rows(cabinets, selected_mode)
 
                 # Сортируем ряды сверху вниз (по средней Y, по убыванию)
                 #rows = sorted(rows, key=lambda row: -sum(c.xyz.Y for c in row) / len(row))
