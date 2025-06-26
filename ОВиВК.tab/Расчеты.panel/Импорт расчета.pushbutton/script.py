@@ -48,49 +48,48 @@ doc = __revit__.ActiveUIDocument.Document  # type: Document
 uiapp = __revit__.Application
 uidoc = __revit__.ActiveUIDocument
 
+
+EQUIPMENT_TYPE_NAME = "Оборудование"
+VALVE_TYPE_NAME = "Клапан"
+OUTER_VALVE_NAME = "ZAWTERM"
+FAMILY_NAME_CONST = 'Обр_ОП_Универсальный'
+DEBUG_MODE = False
+EPSILON = 1e-9
+
+
 class CylinderZ:
     def __init__(self, z_min, z_max):
         self.radius = 1000
         self.z_min = z_min
         self.z_max = z_max
-        self.len = z_max - z_min
+        self.cylinder_len = z_max - z_min
+
+    def contains_point(self, point):
+        """Проверяет, находится ли точка внутри цилиндра по Z"""
+        return self.z_min <= point.Z <= self.z_max
+
 
 class UnitConverter:
     @staticmethod
     def to_millimeters(value):
         """Конвертирует внутренние единицы Revit в миллиметры."""
         return UnitUtils.ConvertFromInternalUnits(value, UnitTypeId.Millimeters)
+
     @staticmethod
     def from_meters(value):
-        """Конвертирует внутренние единицы Revit в километры."""
+        """Конвертирует внутренние единицы Revit в метры."""
         return UnitUtils.ConvertToInternalUnits(value, UnitTypeId.Meters)
 
     @staticmethod
     def to_watts(value):
-        """Конвертирует в Ватты."""
+        """Конвертирует внутренние единицы Revit в ватты."""
         return UnitUtils.ConvertToInternalUnits(value, UnitTypeId.Watts)
 
     @staticmethod
     def meters_to_millimeters(value):
         """Конвертирует метры в миллиметры."""
-        return value * 1000
+        return UnitUtils.Convert(value, UnitTypeId.Meters, UnitTypeId.Millimeters)
 
-class GeometryHelper:
-    @staticmethod
-    def rotate_point(angle, x, y, z):
-        '''
-        Поворот координат из исходных данных на указанный угол вокруг начала координат из Аудитора
-        '''
-        if angle == 0:
-            return x, y, z
-        # Угол в радианах
-        angle_radians = math.radians(angle)
-        # Матрица поворота вокруг оси Z (в плоскости XY)
-        cos_theta = math.cos(angle_radians)
-        sin_theta = math.sin(angle_radians)
-        x_new = x * cos_theta - y * sin_theta
-        y_new = x * sin_theta + y * cos_theta
-        return x_new, y_new, z
 
 class TextParser:
     @staticmethod
@@ -103,11 +102,13 @@ class TextParser:
         """Обрабатывает значение настройки (например, 'N' → 0)."""
         if value in ('N', '', 'Kvs'):
             return 0
+
         return TextParser.parse_float(value)
+
 
 class LevelCylinderGenerator:
     MAX_Z_OFFSET = 2500  # Максимальная высота цилиндра
-    Z_STOCK = 250        # Запас по высоте
+    Z_STOCK = 250  # Запас по высоте
 
     @classmethod
     def create_cylinders(cls, equipment_list):
@@ -121,7 +122,9 @@ class LevelCylinderGenerator:
             z_max = z_min + cls.MAX_Z_OFFSET if (i == len(z_values) - 1) \
                 else min(z_min + cls.MAX_Z_OFFSET, z_values[i + 1] - cls.Z_STOCK)
             cylinders.append(CylinderZ(z_min, z_max))
+
         return cylinders
+
 
 class BasePointHelper:
     _base_point = None
@@ -134,6 +137,7 @@ class BasePointHelper:
                 .OfCategory(BuiltInCategory.OST_ProjectBasePoint) \
                 .WhereElementIsNotElementType() \
                 .FirstElement()
+
         return cls._base_point
 
     @classmethod
@@ -141,10 +145,11 @@ class BasePointHelper:
         if cls._base_point_z is None:
             base_point = cls.get_base_point(doc)
             cls._base_point_z = base_point.GetParamValue(BuiltInParameter.BASEPOINT_ELEVATION_PARAM)
+
         return cls._base_point_z
 
-class AuditorEquipment:
 
+class AuditorEquipment:
     '''
     Класс используется для хранения и обратки информации об элементах из Аудитора.
 
@@ -156,44 +161,32 @@ class AuditorEquipment:
         Список, который содержит пары Z min и Z max для каждого элемента из Аудитор
 
     '''
-    
-
     processed = False
     level_cylinder = None
 
-
     def __init__(self,
-                 connection_type= "",
+                 connection_type="",
                  rotated_coords=None,
                  original_coords=None,
-                 len = 0,
-                 code = "",
-                 real_power = "",
-                 nominal_power = "",
-                 setting = 0.0,
-                 maker = "",
-                 full_name = "",
-                 type_name = None):
+                 equipment_len=0,
+                 code="",
+                 real_power=0,
+                 nominal_power=0,
+                 setting=0.0,
+                 maker="",
+                 full_name="",
+                 type_name=None):
         '''
         Parametrs
         --------
         connection_type : str
             Тип обрабатываемого элемента в Аудиторе
-        x_new, y_new, z_new : float
-            Координаты после поворота
-        x, y, z : float
-            Координаты исходные
-
         '''
-
         self.base_point_z = BasePointHelper.get_base_point_z(doc)
         self.connection_type = connection_type
-
-        # Используем XYZ для хранения координат
         self.original_coords = original_coords or XYZ.Zero
         self.rotated_coords = rotated_coords or XYZ.Zero
-
-        self.len = len
+        self.equipment_len = equipment_len
         self.code = code
         self.real_power = real_power
         self.nominal_power = nominal_power
@@ -206,35 +199,29 @@ class AuditorEquipment:
         '''
         Определяет, пересекаются ли области положений элемента в ревите и в аудиторе
         '''
-
         revit_location = revit_equipment.Location.Point
         revit_bb = revit_equipment.GetBoundingBox()
-        revit_bb_center = BoundingBoxHelper.get_bb_center(revit_bb)
-
+        revit_bb_center = get_bb_center(revit_bb)
         revit_coords = XYZ(
             UnitConverter.to_millimeters(revit_location.X),
             UnitConverter.to_millimeters(revit_location.Y),
             UnitConverter.to_millimeters(revit_location.Z)
         )
-
         revit_bb_coords = XYZ(
             UnitConverter.to_millimeters(revit_bb_center.X),
             UnitConverter.to_millimeters(revit_bb_center.Y),
             UnitConverter.to_millimeters(revit_bb_center.Z)
         )
-
         radius = self.level_cylinder.radius
-
         if ((abs(self.level_cylinder.z_min - revit_coords.Z) <= EPSILON or self.level_cylinder.z_min < revit_coords.Z)
                 and (abs(revit_coords.Z - self.level_cylinder.z_max) <= EPSILON
                      or revit_coords.Z < self.level_cylinder.z_max)):
-            # Используем методы XYZ для вычисления расстояния
-            distance_to_location_center = self.rotated_coords.DistanceTo(XYZ(revit_coords.X, revit_coords.Y, revit_coords.Z))
-            distance_to_bb_center = self.rotated_coords.DistanceTo(XYZ(revit_bb_coords.X, revit_bb_coords.Y, revit_coords.Z))
-
+            distance_to_location_center = self.rotated_coords.DistanceTo(revit_coords)
+            distance_to_bb_center = self.rotated_coords.DistanceTo(revit_bb_coords)
             distance = min(distance_to_bb_center, distance_to_location_center)
 
             return distance <= radius
+
         return False
 
     def set_level_cylinder(self, level_cylinders):
@@ -243,7 +230,7 @@ class AuditorEquipment:
         При активации DEBUG_MODE создает в модели экземпляр Цилиндра по координатам элемента в Аудиторе.
         '''
         for level_cylinder in level_cylinders:
-            if level_cylinder.z_min <= self.rotated_coords.Z <= level_cylinder.z_max:
+            if level_cylinder.contains_point(self.rotated_coords):
                 self.level_cylinder = level_cylinder
 
                 if DEBUG_MODE:
@@ -260,6 +247,7 @@ class AuditorEquipment:
                         comment
                     )
                 break
+
 
 class EquipmentDataCache:
     def __init__(self):
@@ -287,14 +275,15 @@ class EquipmentDataCache:
 
             if data.type_name == EQUIPMENT_TYPE_NAME:
                 real_power_watts = UnitConverter.to_watts(data.real_power)
-                len_millimeters = UnitConverter.from_meters(data.len)
+                len_millimeters = UnitConverter.from_meters(data.equipment_len)
                 element.SetParamValue('ADSK_Размер_Длина', len_millimeters)
                 element.SetParamValue('ADSK_Код изделия', data.code)
                 element.SetParamValue('ADSK_Тепловая мощность', real_power_watts)
-
             # В любом случае, если есть настройка — записываем
+
             if setting:
                 element.SetParamValue('ADSK_Настройка', setting)
+
 
 class ReadingRulesForEquipment:
     '''
@@ -304,13 +293,14 @@ class ReadingRulesForEquipment:
     x_index = 3
     y_index = 4
     z_index = 5
-    len_index = 12
+    equipment_len_index = 12
     code_index = 16
     real_power_index = 20
     nominal_power_index = 22
     setting_index = 28
     maker_index = 30
     full_name_index = 31
+
 
 class ReadingRulesForValve:
     '''
@@ -323,32 +313,6 @@ class ReadingRulesForValve:
     z_index = 5
     setting_index = 17
 
-class BoundingBoxHelper:
-    @staticmethod
-    def get_bb_center(revit_bb):
-        '''
-        Получить центр Bounding Box
-
-        Parametrs
-        -------
-        revit_coords : float
-            Координаты центра вставки элемента в Ревите
-
-        revit_bb_coords : float
-            Координаты цента ВВ элемента в Ревите
-
-        EPSILON : float
-            Погрешность
-        '''
-        minPoint = revit_bb.Min
-        maxPoint = revit_bb.Max
-
-        centroid = XYZ(
-            (minPoint.X + maxPoint.X) / 2,
-            (minPoint.Y + maxPoint.Y) / 2,
-            (minPoint.Z + maxPoint.Z) / 2
-        )
-        return centroid
 
 class AuditorFileParser:
     """Отвечает только за парсинг строк файла в объекты"""
@@ -356,9 +320,8 @@ class AuditorFileParser:
     def parse_heating_device(line, z_correction, angle):
         data = line.strip().split(';')
         rr = ReadingRulesForEquipment()
-
         # Получаем оба набора координат
-        original, rotated = AuditorFileParser._parse_coordinates(
+        original_point, rotated_point = AuditorFileParser._parse_coordinates(
             data=data,
             x_idx=rr.x_index,
             y_idx=rr.y_index,
@@ -366,12 +329,11 @@ class AuditorFileParser:
             z_correction=z_correction,
             angle=angle
         )
-
         return AuditorEquipment(
             connection_type=data[rr.connection_type_index],
-            rotated_coords=XYZ(*rotated),
-            original_coords=XYZ(*original),
-            len=TextParser.parse_float(data[rr.len_index]),
+            rotated_coords=rotated_point,
+            original_coords=original_point,
+            equipment_len=TextParser.parse_float(data[rr.equipment_len_index]),
             code=data[rr.code_index],
             real_power=TextParser.parse_float(data[rr.real_power_index]),
             nominal_power=TextParser.parse_float(data[rr.nominal_power_index]),
@@ -385,11 +347,11 @@ class AuditorFileParser:
     def parse_valve(line, z_correction, angle):
         data = line.strip().split(';')
         rr = ReadingRulesForValve()
+
         if data[rr.connection_type_index] != OUTER_VALVE_NAME:
             return None
-
         # Получаем оба набора координат
-        original, rotated = AuditorFileParser._parse_coordinates(
+        original_point, rotated_point = AuditorFileParser._parse_coordinates(
             data=data,
             x_idx=rr.x_index,
             y_idx=rr.y_index,
@@ -397,11 +359,10 @@ class AuditorFileParser:
             z_correction=z_correction,
             angle=angle
         )
-
         return AuditorEquipment(
             maker=data[rr.maker_index],
-            rotated_coords=XYZ(*rotated),
-            original_coords=XYZ(*original),
+            rotated_coords=rotated_point,
+            original_coords=original_point,
             setting=TextParser.parse_setting(data[rr.setting_index]),
             type_name=VALVE_TYPE_NAME
         )
@@ -414,82 +375,23 @@ class AuditorFileParser:
         z = UnitConverter.meters_to_millimeters(TextParser.parse_float(data[z_idx])) + z_correction
 
         # Получаем повернутые координаты
-        x_new, y_new, z_new = GeometryHelper.rotate_point(angle, x, y, z)
+        original_point = XYZ(x, y, z)
+        rotated_point = rotate_point(angle, original_point)
 
         # Возвращаем кортеж: (оригинальные_координаты, повернутые_координаты)
-        return (x, y, z), (x_new, y_new, z_new)
+        return original_point, rotated_point
 
-class SectionFinder:
-    """Отвечает за поиск секций в файле"""
-    @staticmethod
-    def find_section(lines, title, start_offset, parse_func, z_correction, angle):
-        result = []
-        i = 0
-        while i < len(lines):
-            if title in lines[i]:
-                i += start_offset
-                while i < len(lines) and lines[i].strip():
-                    parsed_item = parse_func(lines[i], z_correction, angle)
-                    if parsed_item is not None:
-                        result.append(parsed_item)
-                    i += 1
-            i += 1
-        return result
-
-class ZCorrectionCalculator:
-    """Вычисляет поправку по Z координате"""
-    @staticmethod
-    def calculate_z_correction(doc):
-        internal_origin = InternalOrigin.Get(doc)
-        base_point_z = BasePointHelper.get_base_point_z(doc)
-        z_difference = base_point_z - internal_origin.SharedPosition.Z
-        return UnitConverter.to_millimeters(z_difference)
-
-class AuditorFileReader:
-    """Координирует процесс чтения файла, используя другие классы"""
-    @staticmethod
-    def read_auditor_file(file_path, angle, doc):
-        with codecs.open(file_path, 'r', encoding='utf-8') as file:
-            lines = file.readlines()
-
-        z_correction = ZCorrectionCalculator.calculate_z_correction(doc)
-
-        equipment = SectionFinder.find_section(
-            lines,
-            "Отопительные приборы CO на плане",
-            3,
-            AuditorFileParser.parse_heating_device,
-            z_correction,
-            angle
-        )
-
-        valves = SectionFinder.find_section(
-            lines,
-            "Арматура СО на плане",
-            3,
-            AuditorFileParser.parse_valve,
-            z_correction,
-            angle
-        )
-
-        equipment.extend(valves)
-
-        if not equipment:
-            forms.alert("Не найдено оборудование в импортируемом файле.", "Ошибка", exitscript=True)
-
-        return equipment
 
 class ReportGenerator:
     @staticmethod
     def generate_area_overflow_report(auditor_equipment_list, revit_equipment_list):
         """
         Анализирует и возвращает данные о перекрытии областей оборудования
-        Возвращает словарь {equipment_id: [список координат областей]}
+        Возвращает словарь {equipment_to_areas: [список координат областей]}
         """
         from collections import defaultdict
 
         equipment_to_areas = defaultdict(list)
-
         for auditor_equipment in auditor_equipment_list:
             equipment_in_area = [
                 eq for eq in revit_equipment_list
@@ -498,13 +400,7 @@ class ReportGenerator:
 
             if len(equipment_in_area) > 1:
                 for eq in equipment_in_area:
-                    area_coords = (
-                        auditor_equipment.original_coords.X,
-                        auditor_equipment.original_coords.Y,
-                        auditor_equipment.original_coords.Z
-                    )
-                    equipment_to_areas[eq.Id].append(area_coords)
-
+                    equipment_to_areas[eq.Id].append(auditor_equipment.original_coords)
         return equipment_to_areas
 
     @staticmethod
@@ -525,11 +421,12 @@ class ReportGenerator:
         """
         if not overflow_data:
             return
-
         print('Обнаружено переполнение данных областей:')
+
         for eq_id, areas in overflow_data.iteritems():
             print('ID элемента: {}'.format(eq_id))
             print('Элемент попал в области:')
+
             for coords in areas:
                 print('  х: {}, y: {}, z: {}'.format(
                     coords[0],
@@ -544,20 +441,80 @@ class ReportGenerator:
         """
         if not not_found_equipment:
             return
-
         print('\nНе найдено универсальное оборудование в областях:')
+
         for equipment in not_found_equipment:
             print('Прибор х: {}, y: {}, z: {}'.format(
                 equipment.original_coords.X,
                 equipment.original_coords.Y,
                 equipment.original_coords.Z))
 
+
+def calculate_z_correction(doc):
+    internal_origin = InternalOrigin.Get(doc)
+    base_point_z = BasePointHelper.get_base_point_z(doc)
+    z_difference = base_point_z - internal_origin.SharedPosition.Z
+
+    return UnitConverter.to_millimeters(z_difference)
+
+
+def find_section(lines, title, start_offset, parse_func, z_correction, angle):
+    result = []
+    i = 0
+    while i < len(lines):
+        if title in lines[i]:
+            i += start_offset
+
+            while i < len(lines) and lines[i].strip():
+                parsed_item = parse_func(lines[i], z_correction, angle)
+
+                if parsed_item is not None:
+                    result.append(parsed_item)
+                i += 1
+        i += 1
+    return result
+
+
+def get_bb_center(revit_bb):
+    '''
+    Получить центр Bounding Box
+    '''
+    minPoint = revit_bb.Min
+    maxPoint = revit_bb.Max
+
+    centroid = XYZ(
+        (minPoint.X + maxPoint.X) / 2,
+        (minPoint.Y + maxPoint.Y) / 2,
+        (minPoint.Z + maxPoint.Z) / 2
+    )
+    return centroid
+
+
+def rotate_point(angle, point):
+    '''
+    Поворот координат из исходных данных на указанный угол вокруг начала координат из Аудитора
+    '''
+
+    if angle == 0:
+        return point
+
+    # Угол в радианах
+    angle_radians = math.radians(angle)
+    # Матрица поворота вокруг оси Z (в плоскости XY)
+    cos_theta = math.cos(angle_radians)
+    sin_theta = math.sin(angle_radians)
+    x_new = point.X * cos_theta - point.Y * sin_theta
+    y_new = point.X * sin_theta + point.Y * cos_theta
+
+    return XYZ(x_new, y_new, point.Z)
+
+
 def get_elements_by_family_name(category):
     """ Возвращает коллекцию элементов по категории """
-    revit_equipment_elements = FilteredElementCollector(doc)\
-                            .OfCategory(category)\
-                            .WhereElementIsNotElementType()\
-                            .ToElements()
+    revit_equipment_elements = FilteredElementCollector(doc) \
+        .OfCategory(category) \
+        .WhereElementIsNotElementType() \
+        .ToElements()
 
     filtered_equipment = [
         eq for eq in revit_equipment_elements
@@ -566,10 +523,10 @@ def get_elements_by_family_name(category):
 
     return filtered_equipment
 
-def process_start_up():
 
+def process_start_up():
     if doc.IsFamilyDocument:
-        forms.alert("Надстройка не предназначена для работы с семействами", "Ошибка", exitscript=True )
+        forms.alert("Надстройка не предназначена для работы с семействами", "Ошибка", exitscript=True)
 
     filepath = select_file('Файл расчетов (*.txt)|*.txt')
 
@@ -602,6 +559,7 @@ def process_start_up():
     operator.send_json_data(angle)
     return angle, filepath
 
+
 def process_audytor_revit_matching(auditor_equipment_list, revit_equipment_list):
     data_cache = EquipmentDataCache()
 
@@ -610,6 +568,7 @@ def process_audytor_revit_matching(auditor_equipment_list, revit_equipment_list)
             eq for eq in revit_equipment_list if ayditor_equipment.is_in_data_area(eq)
         ]
         ayditor_equipment.processed = len(equipment_in_area) >= 1
+
         if len(equipment_in_area) == 1:
             data_cache.collect_data(equipment_in_area[0], ayditor_equipment)
 
@@ -619,30 +578,51 @@ def process_audytor_revit_matching(auditor_equipment_list, revit_equipment_list)
         revit_equipment_list
     )
     ReportGenerator.print_area_overflow_report(overflow_data)
-
     not_found_equipment = ReportGenerator.generate_not_found_report(auditor_equipment_list)
     ReportGenerator.print_not_found_report(not_found_equipment)
 
     # Запись данных в Revit
     data_cache.write_all()
 
-EQUIPMENT_TYPE_NAME = "Оборудование"
-VALVE_TYPE_NAME = "Клапан"
-OUTER_VALVE_NAME = "ZAWTERM"
-FAMILY_NAME_CONST = 'Обр_ОП_Универсальный'
-DEBUG_MODE = False
-EPSILON = 1e-9
+
+def read_auditor_file(file_path, angle, doc):
+    with codecs.open(file_path, 'r', encoding='utf-8') as file:
+        lines = file.readlines()
+
+    z_correction = calculate_z_correction(doc)
+    equipment = find_section(
+        lines,
+        "Отопительные приборы CO на плане",
+        3,
+        AuditorFileParser.parse_heating_device,
+        z_correction,
+        angle
+    )
+    valves = find_section(
+        lines,
+        "Арматура СО на плане",
+        3,
+        AuditorFileParser.parse_valve,
+        z_correction,
+        angle
+    )
+    equipment.extend(valves)
+
+    if not equipment:
+        forms.alert("Не найдено оборудование в импортируемом файле.", "Ошибка", exitscript=True)
+
+    return equipment
+
 
 if DEBUG_MODE:
     debug_placer = DebugPlacerLib.DebugPlacer(doc, diameter=2000)
+
 
 @notification()
 @log_plugin(EXEC_PARAMS.command_name)
 def script_execute(plugin_logger):
     angle, filepath = process_start_up()
-
-    ayditror_equipment_elements = AuditorFileReader.read_auditor_file(filepath, angle, doc)
-
+    ayditror_equipment_elements = read_auditor_file(filepath, angle, doc)
     # собираем высоты цилиндров в которых будем искать данные
     level_cylinders = LevelCylinderGenerator.create_cylinders(ayditror_equipment_elements)
 
@@ -652,5 +632,6 @@ def script_execute(plugin_logger):
 
         equipment = get_elements_by_family_name(BuiltInCategory.OST_MechanicalEquipment)
         process_audytor_revit_matching(ayditror_equipment_elements, equipment)
+
 
 script_execute()
