@@ -42,15 +42,7 @@ from rpw.ui.forms import SelectFromList
 
 from Autodesk.Revit.UI.Selection import ObjectType
 from Autodesk.Revit.UI.Selection import ISelectionFilter
-
 from Autodesk.Revit.DB import BuiltInCategory
-from Autodesk.Revit.DB import ElementFilter
-from Autodesk.Revit.DB import LogicalOrFilter
-from Autodesk.Revit.DB import ElementCategoryFilter
-from Autodesk.Revit.DB import ElementMulticategoryFilter
-from Autodesk.Revit.DB import Line
-from Autodesk.Revit.DB import ElementTransformUtils
-from Autodesk.Revit.DB import InternalOrigin
 
 from dosymep.Bim4Everyone.Templates import ProjectParameters
 from dosymep_libs.bim4everyone import *
@@ -82,41 +74,9 @@ class DuctPipeVerticalFilter(ISelectionFilter):
         return True
 
 
-def get_connector_coordinates(element):
-    """
-    Получение координат основных коннекторов элемента.
-    """
-
-    # Получаем коннекторы воздуховода
-    connectors = element.ConnectorManager.Connectors
-
-    # Получаем координаты начала и конца воздуховода через коннекторы
-    start_point = None
-    end_point = None
-
-    for connector in connectors:
-        # К линейному элементу может быть подключено произвольное количество врезок, каждая из которых попадет
-        # в список коннекторов линейного элемента. Проверяем чтоб айди владельца был айди рабочего элемента
-        if connector.Owner.Id == element.Id:
-            if start_point is None:
-                start_point = connector.Origin
-            else:
-                end_point = connector.Origin
-                break
-
-    if start_point is None or end_point is None:
-        forms.alert("Не удалось получить координаты коннекторов.", "Ошибка", exitscript=True)
-
-    # Получаем координаты начала и конца воздуховода
-    start_xyz = XYZ(start_point.X, start_point.Y, start_point.Z)
-    end_xyz = XYZ(end_point.X, end_point.Y, end_point.Z)
-
-    return start_xyz, end_xyz
-
-
 def get_selected():
     """
-    Выделение воздуховодов и труб, размещенных вертикально.
+    Выделение воздуховодов, труб, арматуры и оборудования.
     """
     try:
         references = uidoc.Selection.PickObjects(
@@ -134,25 +94,6 @@ def get_selected():
     return elements
 
 
-def check_base_internal_diff():
-    """
-    Вычисляем корректировку по z на случай расхождения базовой точки и начала координат
-    """
-    internal_origin = InternalOrigin.Get(doc)
-
-    base_point = FilteredElementCollector(doc) \
-        .OfCategory(BuiltInCategory.OST_ProjectBasePoint) \
-        .WhereElementIsNotElementType() \
-        .FirstElement()
-
-    base_point_z = base_point.GetParamValue(BuiltInParameter.BASEPOINT_ELEVATION_PARAM)
-
-    internal_origin_z = internal_origin.SharedPosition.Z
-    z_correction = (base_point_z - internal_origin_z)
-
-    return z_correction
-
-
 def start_up_checks():
     """Стартовые проверки"""
     if view.Category is None or not view.ViewType == ViewType.ThreeD:
@@ -161,19 +102,14 @@ def start_up_checks():
             "Ошибка",
             exitscript=True)
 
-    if not view.IsLocked:
-        forms.alert(
-            "3D‑вид должен быть заблокирован.",
-            "Ошибка",
-            exitscript=True)
-        return
 
 def set_section_box_by_elements(view, elements):
+    """Получаем BoundingBox по элементам для нового вида"""
     min_x = min_y = min_z = float('inf')
     max_x = max_y = max_z = float('-inf')
 
     for elem in elements:
-        bbox = elem.get_BoundingBox(None)  # Лучше использовать None для получения общей границы
+        bbox = elem.get_BoundingBox(None)
         if not bbox:
             continue
 
@@ -198,6 +134,7 @@ def set_section_box_by_elements(view, elements):
     section_box.Transform = Transform.Identity  # Обязательно!
 
     view.SetSectionBox(section_box)
+
 
 def get_unique_name(name, elements):
     base_name = name
