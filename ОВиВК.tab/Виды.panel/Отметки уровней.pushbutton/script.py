@@ -85,6 +85,31 @@ class CustomSelectionFilter(ISelectionFilter):
 
         return False
 
+def is_vertical(element):
+    start_xyz, end_xyz = get_connector_coordinates(element)
+
+    # Вычисляем разности координат
+    delta_x = round(end_xyz.X, 3) - round(start_xyz.X, 3)
+    delta_y = round(end_xyz.Y, 3) - round(start_xyz.Y, 3)
+    delta_z = round(end_xyz.Z, 3) - round(start_xyz.Z, 3)
+    epsilon = 0.01 # Соответствует смещению в 3мм
+
+    # Если линия вертикальна (delta_x < epsilon и delta_y < epsilon), возвращаем True
+    if abs(delta_x) < epsilon and abs(delta_y) < epsilon:
+        return True
+
+    return False
+
+def filter_elements(elements):
+    result = []
+
+    for element in elements:
+        if element.InAnyCategory([BuiltInCategory.OST_DuctCurves, BuiltInCategory.OST_PipeCurves]):
+            if is_vertical(element):
+                result.append(element)
+
+    return result
+
 
 def get_connector_coordinates(element):
     """
@@ -157,7 +182,6 @@ def get_reference_from_element(element):
 
     geom_elem = element.get_Geometry(options)
     line = None
-    print "поиск линий_________"
     lines = []
     for geo_obj in geom_elem:
 
@@ -165,7 +189,7 @@ def get_reference_from_element(element):
             print 1
             line = geo_obj.Reference
             lines.append(line)
-    print "________________"
+
     return lines[1]
 
 
@@ -261,7 +285,12 @@ RIGHT = "Справа"
 def script_execute(plugin_logger):
     start_up_checks()
 
-    elements = get_selected()
+    elements = [uidoc.Document.GetElement(elem_id) for elem_id in uidoc.Selection.GetElementIds()]
+
+    elements = filter_elements(elements)
+
+    if len(elements) == 0:
+        elements = get_selected()
 
     orientation_name = SelectFromList('Выберите ориентацию марок', [LEFT, RIGHT])
     if orientation_name is None:
