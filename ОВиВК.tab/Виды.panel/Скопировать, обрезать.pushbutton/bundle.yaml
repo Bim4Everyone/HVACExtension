@@ -1,0 +1,29 @@
+title:
+  ru: "Скопировать,\nобрезать"
+  en_us: "Copy\ncrop"
+
+tooltip:
+  ru: Копирует активный 3D-вид по выделенным элементам.
+  
+    1. Перейдите на необходимый для обрезки 3D-вид.
+
+    2. Выделите элементы заранее или запустите скрипт и выделите элементы.
+
+    3. Вид будет скопирован с добавлением границы по заданным элементам.
+
+
+  en_us: Copies the active 3D view by the selected elements.
+
+    1. Go to the 3D view you need to crop.
+    
+    2. Select the elements in advance or run the script and select the elements.
+    
+    3. The view will be copied with the addition of a border by the specified elements.
+
+
+author: Redomine
+help_url: "https://kb.a101.ru/pages/viewpage.action?pageId=167838733"
+
+min_revit_version: 2022
+max_revit_version: 2024
+
