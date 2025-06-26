@@ -139,6 +139,9 @@ def get_selected():
         sys.exit()
 
     elements = [doc.GetElement(r) for r in references]
+    if len(elements) == 0:
+        sys.exit()
+
     return elements
 
 
@@ -153,10 +156,17 @@ def get_reference_from_element(element):
     options.IncludeNonVisibleObjects = True
 
     geom_elem = element.get_Geometry(options)
+    line = None
+    print "поиск линий_________"
+    lines = []
     for geo_obj in geom_elem:
+
         if isinstance(geo_obj, Line):
-            return geo_obj.Reference
-    return None
+            print 1
+            line = geo_obj.Reference
+            lines.append(line)
+    print "________________"
+    return lines[1]
 
 
 def get_mark_endpoint(orientation_name, tag_point):
@@ -231,6 +241,17 @@ def get_levels_z():
         levels_z.append(z)
     return levels_z
 
+def interpolate_point_by_z(p1, p2, z_target):
+    """Находит точку на отрезке p1-p2 с заданным z_target"""
+    if abs(p2.Z - p1.Z) < 1e-6:
+        # Практически горизонтальная труба — Z не изменяется
+        return None
+
+    t = (z_target - p1.Z) / (p2.Z - p1.Z)
+    x = p1.X + t * (p2.X - p1.X)
+    y = p1.Y + t * (p2.Y - p1.Y)
+    return XYZ(x, y, z_target)
+
 
 LEFT = "Слева"
 RIGHT = "Справа"
@@ -249,6 +270,8 @@ def script_execute(plugin_logger):
     levels_z = get_levels_z()
 
     with (revit.Transaction("BIM: Размещение отметок")):
+
+
         # z-коррекция нужна для случаев когда идет расхождение базовой точки и начала проекта. Оно сбоит при заборе
         # координат коннекторов, из них мы убираем коррекцию.
         # А так же сбой идет при передаче координат в ревит - тут мы наоборот добавляем коррекцию(tag_point)
@@ -259,17 +282,19 @@ def script_execute(plugin_logger):
             coord_list = get_connector_coordinates(element)
             connector_coord_1 = coord_list[0]
             connector_coord_2 = coord_list[1]
+
             min_z = min(connector_coord_1.Z, connector_coord_2.Z) - z_correction
             max_z = max(connector_coord_1.Z, connector_coord_2.Z) - z_correction
 
+            ref = get_reference_from_element(element)
+            if ref is None:
+                break
+
             for z in levels_z:
-                ref = get_reference_from_element(element)
-                if ref is None:
-                    break
                 if not (min_z < z < max_z):
                     continue
 
-                tag_point = XYZ(connector_coord_1.X, connector_coord_1.Y, z + z_correction)
+                tag_point = interpolate_point_by_z(connector_coord_1, connector_coord_2, z + z_correction)
                 end_point, bend_point = get_mark_endpoint(orientation_name, tag_point)
 
                 doc.Create.NewSpotElevation(
