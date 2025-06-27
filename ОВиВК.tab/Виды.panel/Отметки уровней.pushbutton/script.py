@@ -252,7 +252,17 @@ def get_levels_descriptions():
     levels_inst = []
     for level in levels:
         z = level.Elevation
+
         name = level.Name
+        lower_name = name.lower()
+        keyword = "этаж"
+
+        index = lower_name.find(keyword)
+
+        if index != -1:
+            name = name[:index + len(keyword)]
+        else:
+            name = name
         lev_el = LevelDescription(name, z)
         levels_inst.append(lev_el)
     return levels_inst
