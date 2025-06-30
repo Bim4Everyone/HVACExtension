@@ -57,13 +57,15 @@ from dosymep_libs.bim4everyone import *
 doc = __revit__.ActiveUIDocument.Document
 uidoc = __revit__.ActiveUIDocument
 view = doc.ActiveView
-categoris = [BuiltInCategory.OST_DuctCurves,
-            BuiltInCategory.OST_PipeCurves,
-            BuiltInCategory.OST_MechanicalEquipment,
-            BuiltInCategory.OST_DuctAccessory,
-            BuiltInCategory.OST_PipeAccessory,
-            BuiltInCategory.OST_DuctFitting,
-            BuiltInCategory.OST_PipeFitting]
+categories = [BuiltInCategory.OST_DuctCurves,
+              BuiltInCategory.OST_PipeCurves,
+              BuiltInCategory.OST_MechanicalEquipment,
+              BuiltInCategory.OST_DuctAccessory,
+              BuiltInCategory.OST_PipeAccessory,
+              BuiltInCategory.OST_DuctFitting,
+              BuiltInCategory.OST_PipeFitting]
+
+
 
 class LevelDescription:
     def __init__(self, name, elevation):
@@ -83,21 +85,9 @@ class LevelOption(forms.TemplateListItem):
 
 class VISElementsFilter(ISelectionFilter):
     def AllowElement(self, element):
-        if element.InAnyCategory(categoris):
+        if element.InAnyCategory(categories):
             return True
 
-        return False
-
-    def AllowReference(self, reference, position):
-        return True
-
-
-class TypeAnnotationFilter(ISelectionFilter):
-    def AllowElement(self, element):
-        fam_name = element.Name
-
-        if element.Category.IsId(BuiltInCategory.OST_GenericAnnotation) and "ТипАн_Мрк_B4E_Уровень" in fam_name:
-            return True
         return False
 
     def AllowReference(self, reference, position):
@@ -196,7 +186,7 @@ def get_selected():
             continue
         #print element.Id
         #print categoris
-        if element.InAnyCategory(categoris):
+        if element.InAnyCategory(categories):
             filter_result.append(element)
 
     if len(filter_result) != 0:
