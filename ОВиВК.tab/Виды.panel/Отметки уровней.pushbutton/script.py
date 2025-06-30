@@ -318,10 +318,8 @@ def get_type_annotation():
 @log_plugin(EXEC_PARAMS.command_name)
 def script_execute(plugin_logger):
     start_up_checks()
-
-    elements = get_selected()
-
     type_annotation = get_type_annotation()
+    elements = get_selected()
     orig_pont = type_annotation.Location.Point
 
 
