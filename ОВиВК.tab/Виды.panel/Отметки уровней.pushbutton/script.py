@@ -328,7 +328,9 @@ def script_execute(plugin_logger):
                 new_tag_id = ElementTransformUtils.CopyElement(doc, type_annotation.Id, translation)
                 new_tag = doc.GetElement(new_tag_id[0])
                 new_tag.SetParamValue("Имя уровня", level.name)
-                string_elevation = "{:+.3f}".format(level.elevation * 304.8 / 1000)
+                elevation = UnitUtils.ConvertFromInternalUnits(level.elevation,
+                                                   UnitTypeId.Meters)
+                string_elevation = "{:+.3f}".format(elevation)
                 new_tag.SetParamValue("Отметка уровня", string_elevation)
 
 
