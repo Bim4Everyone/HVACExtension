@@ -2,7 +2,6 @@
 import sys
 import clr
 
-
 clr.AddReference('ProtoGeometry')
 clr.AddReference("RevitNodes")
 clr.AddReference("RevitServices")
@@ -23,7 +22,6 @@ clr.ImportExtensions(Revit.GeometryConversion)
 import System
 from System.Collections.Generic import *
 
-
 from Autodesk.Revit.DB import *
 from Autodesk.Revit.UI.Selection import Selection
 from Autodesk.DesignScript.Geometry import *
@@ -41,14 +39,15 @@ from pyrevit import EXEC_PARAMS
 from rpw.ui.forms import SelectFromList
 from rpw.ui.forms import select_file
 
-
 clr.ImportExtensions(dosymep.Revit)
 clr.ImportExtensions(dosymep.Bim4Everyone)
 from dosymep.Bim4Everyone.Templates import ProjectParameters
 from dosymep_libs.bim4everyone import *
 from dosymep.Bim4Everyone.SharedParams import SharedParamsConfig
 
+
 doc = __revit__.ActiveUIDocument.Document
+
 
 class EditorReport:
     """
@@ -227,7 +226,6 @@ def get_fire_cabinet_equipment():
     """
     Возвращает список элементов механического оборудования, название семейства которых содержит 'Обр_Шпк'.
     """
-
     editor_report = EditorReport()
 
     collector = FilteredElementCollector(doc) \
@@ -248,33 +246,11 @@ def get_fire_cabinet_equipment():
     return result
 
 
-def get_start_number():
-    """Получение числа с которого выполняется нумерация"""
-
-    number = forms.ask_for_string(
-        default='1',
-        prompt='С какого числа стартует нумерация:',
-        title="Нумерация шкафов"
-    )
-
-    try:
-        number = int(number)
-    except ValueError:
-        forms.alert(
-            "Нужно ввести число.",
-            "Ошибка",
-            exitscript=True)
-
-    if number is None:
-        sys.exit()
-
-    return number
-
-
 def get_cabinets_by_levels(elements):
     fire_cabinets = []
 
     for element in elements:
+        # Не хочется сначала выполнять IsExists а потом пытаться получить параметр для проверки на рид онли.
         param = element.LookupParameter("ADSK_Позиция")
 
         if param is None or param.IsReadOnly:
@@ -299,9 +275,9 @@ def get_cabinets_by_levels(elements):
 
 
 def split_elements_by_systems(elements):
+    """Делим шкафы по системам"""
     system_para = SharedParamsConfig.Instance.VISSystemName
 
-    # Словарь для группировки элементов по имени системы
     systems_dict = defaultdict(list)
 
     for element in elements:
@@ -318,11 +294,11 @@ def split_elements_by_systems(elements):
     split_elements   = list(systems_dict.values())
     return split_elements
 
+
 MIN_Y_CLOCKWISE = "Минимальным Y, по часовой стрелке"
 MIN_Y_COUNTERCLOCKWISE = "Минимальным Y, против часовой стрелки"
 MIN_X_CLOCKWISE = "Минимальным X, по часовой стрелке"
 MIN_X_COUNTERCLOCKWISE = "Минимальным X, против часовой стрелки"
-
 MAX_Y_CLOCKWISE = "Максимальным Y, по часовой стрелке"
 MAX_Y_COUNTERCLOCKWISE = "Максимальным Y, против часовой стрелки"
 MAX_X_CLOCKWISE = "Максимальным X, по часовой стрелке"
@@ -349,7 +325,6 @@ def script_execute(plugin_logger):
 
     with revit.Transaction("BIM: Нумерация шкафов"):
         for system_elements in split_elements:
-
             sorted_cabinets_by_level = get_cabinets_by_levels(system_elements)
 
             for level_name in sorted(sorted_cabinets_by_level.keys()):
@@ -357,14 +332,12 @@ def script_execute(plugin_logger):
                 cabinets = sorted_cabinets_by_level[level_name]
                 rows = group_by_rows(cabinets, selected_mode)
 
-                # Сортируем ряды сверху вниз (по средней Y, по убыванию)
-                #rows = sorted(rows, key=lambda row: -sum(c.xyz.Y for c in row) / len(row))
-
                 for row in rows:
                     # В ряду сортируем слева направо по X
                     sorted_row = sorted(row, key=lambda c: c.xyz.X)
                     for cabinet in sorted_row:
                         cabinet.element.SetParamValue("ADSK_Позиция", str(number))
                         number += 1
+
 
 script_execute()
