@@ -66,7 +66,6 @@ categories = [BuiltInCategory.OST_DuctCurves,
               BuiltInCategory.OST_PipeFitting]
 
 
-
 class LevelDescription:
     def __init__(self, name, elevation):
         self.name = name
@@ -331,5 +330,6 @@ def script_execute(plugin_logger):
                 new_tag.SetParamValue("Имя уровня", level.name)
                 string_elevation = "{:+.3f}".format(level.elevation * 304.8 / 1000)
                 new_tag.SetParamValue("Отметка уровня", string_elevation)
+
 
 script_execute()
