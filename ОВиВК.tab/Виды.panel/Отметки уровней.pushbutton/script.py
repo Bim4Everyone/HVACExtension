@@ -74,13 +74,9 @@ class LevelDescription:
 
 
 class LevelOption(forms.TemplateListItem):
-    def __init__(self, level):
-        self.level = level
-        super(LevelOption, self).__init__(level.Name)
-
     @property
     def name(self):
-        return self.level.Name
+        return self.item
 
 
 class VISElementsFilter(ISelectionFilter):
@@ -140,7 +136,7 @@ def get_connector_coordinates(element):
     # Получаем коннекторы
     connectors = get_connectors(element)
 
-    # Получаем координаты начала и конца воздуховода через коннекторы
+    # Получаем координаты начала и конца элемента через коннекторы
     start_point = None
     end_point = None
 
@@ -157,6 +153,7 @@ def get_connector_coordinates(element):
     if start_point is None and end_point is None:
         forms.alert("Не удалось получить координаты коннекторов.", "Ошибка", exitscript=True)
 
+    # Если у нас встречается элемент с одним коннектором - получает bbox и добавляем его высоту к стартовой точке
     if end_point is None:
         bbox = element.get_BoundingBox(None)
         min_pt = bbox.Min
@@ -164,8 +161,6 @@ def get_connector_coordinates(element):
         z_diff = max_pt.Z - min_pt.Z
         end_point = XYZ(start_point.X, start_point.Y, start_point.Z + z_diff)
 
-
-    # Получаем координаты начала и конца воздуховода
     start_xyz = XYZ(start_point.X, start_point.Y, start_point.Z)
     end_xyz = XYZ(end_point.X, end_point.Y, end_point.Z)
 
@@ -184,8 +179,7 @@ def get_selected():
         cat = element.Category
         if cat is None:
             continue
-        #print element.Id
-        #print categoris
+
         if element.InAnyCategory(categories):
             filter_result.append(element)
 
@@ -196,7 +190,7 @@ def get_selected():
         references = uidoc.Selection.PickObjects(
             ObjectType.Element,
             VISElementsFilter(),
-            "Выберите воздуховоды или трубы, нажмите Finish по окончании"
+            "Выберите воздуховоды или трубы"
         )
     except Autodesk.Revit.Exceptions.OperationCanceledException:
         sys.exit()
@@ -244,7 +238,6 @@ def start_up_checks():
         return
 
 
-
 def get_levels_descriptions():
     """Получение списка Z-координат уровней проекта"""
     levels = (FilteredElementCollector(doc).
@@ -257,7 +250,7 @@ def get_levels_descriptions():
         key=lambda lvl: (not lvl.Name[0].isalpha(), lvl.Name.lower())
     )
 
-    options = [LevelOption(lvl) for lvl in sorted_levels]
+    options = [LevelOption(lvl.Name) for lvl in sorted_levels]
 
     selected = forms.SelectFromList.show(
         options,
@@ -265,6 +258,7 @@ def get_levels_descriptions():
         name_attr='name',
         button_name='Выбрать уровни'
     )
+
 
     if selected is None:
         sys.exit()
@@ -287,7 +281,9 @@ def get_levels_descriptions():
         levels_inst.append(lev_el)
     return levels_inst
 
+
 def get_type_annotation():
+    """Получаем размещенную на виде шаблонную ТА, если нет - прекращаем выполнение"""
     generic_annotations = FilteredElementCollector(doc, view.Id) \
         .OfCategory(BuiltInCategory.OST_GenericAnnotation) \
         .WhereElementIsNotElementType() \
