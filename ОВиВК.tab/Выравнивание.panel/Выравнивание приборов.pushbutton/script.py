@@ -31,7 +31,7 @@ class RevitRepository:
                 if "обр_" in e.Symbol.FamilyName.lower() and "завес" not in e.Symbol.FamilyName.lower()]
 
     def get_radiator_center(self, radiator):
-        bbox = radiator.get_BoundingBox(None)
+        bbox = radiator.GetBoundingBox()
         return (bbox.Min + bbox.Max) * 0.5 if bbox else radiator.Location.Point
 
     def get_alignment_lines(self):
