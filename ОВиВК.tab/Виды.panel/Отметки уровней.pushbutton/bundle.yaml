@@ -4,22 +4,26 @@ title:
 
 tooltip:
   ru: Выставляет отметки уровней на стояках воздуховодов/труб.
+    
+    1. Разместите шаблонную типовую аннотацию на виде.
   
-    1. При вызове скрипта выберите произвольное количество вертикальных элементов.
+    2. Выберите необхоимые элементы. Если элементы были выбраны заранее, то этот шаг можно пропустить.
 
-    2. Укажите требуемую ориентацию марок.
+    3. Выберите необходимые для нумерации уровни.
 
-    3. То, какая марка будет проставлена в итоге - зависит от последней использованной в проекте высотной отметки.
+    4. Настройте необходимый вид типовых аннотаций уровней.
 
 
 
-  en_us: Sets level marks on air duct/pipe risers..
+  en_us: Sets level marks on air duct/pipe risers.
 
-    1. When calling the script, select an arbitrary number of vertical elements.
-
-    2. Specify the required orientation of the marks.
-
-    3. Which mark will be placed in the end depends on the last elevation mark used in the project.
+    1. Place a template type annotation on the view.
+    
+    2. Select the required elements. If the elements were selected in advance, this step can be skipped.
+    
+    3. Select the levels required for numbering.
+    
+    4. Set up the required type of type annotations.
 
 
 author: Redomine

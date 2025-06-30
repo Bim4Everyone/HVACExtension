@@ -70,6 +70,17 @@ class LevelDescription:
         self.name = name
         self.elevation = elevation
 
+
+class LevelOption(forms.TemplateListItem):
+    def __init__(self, level):
+        self.level = level
+        super(LevelOption, self).__init__(level.Name)
+
+    @property
+    def name(self):
+        return self.level.Name
+
+
 class VISElementsFilter(ISelectionFilter):
     def AllowElement(self, element):
         if element.InAnyCategory(categoris):
@@ -243,6 +254,7 @@ def start_up_checks():
         return
 
 
+
 def get_levels_descriptions():
     """Получение списка Z-координат уровней проекта"""
     levels = (FilteredElementCollector(doc).
@@ -250,9 +262,27 @@ def get_levels_descriptions():
               WhereElementIsNotElementType().ToElements())
 
     levels_inst = []
-    for level in levels:
-        z = level.Elevation
+    sorted_levels = sorted(
+        levels,
+        key=lambda lvl: (not lvl.Name[0].isalpha(), lvl.Name.lower())
+    )
 
+    options = [LevelOption(lvl) for lvl in sorted_levels]
+
+    selected = forms.SelectFromList.show(
+        options,
+        multiselect=True,
+        name_attr='name',
+        button_name='Выбрать уровни'
+    )
+
+    if selected is None:
+        sys.exit()
+
+    for level in levels:
+        if level.Name not in selected:
+            continue
+        z = level.Elevation
         name = level.Name
         lower_name = name.lower()
         keyword = "этаж"
@@ -267,23 +297,31 @@ def get_levels_descriptions():
         levels_inst.append(lev_el)
     return levels_inst
 
+def get_type_annotation():
+    generic_annotations = FilteredElementCollector(doc, view.Id) \
+        .OfCategory(BuiltInCategory.OST_GenericAnnotation) \
+        .WhereElementIsNotElementType() \
+        .ToElements()
+
+    target_family_name = "ТипАн_Мрк_B4E_Уровень"
+
+    filtered_annotations = [el for el in generic_annotations if el.Symbol.Family.Name == target_family_name]
+    if len(filtered_annotations) == 0:
+        forms.alert("Разместите на виде хотя бы одно шаблонное семейство ТипАн_Мрк_B4E_Уровень.",
+                    "Ошибка",
+                    exitscript=True)
+
+    return filtered_annotations[0]
+
 
 @notification()
 @log_plugin(EXEC_PARAMS.command_name)
 def script_execute(plugin_logger):
     start_up_checks()
+
     elements = get_selected()
 
-    reference = uidoc.Selection.PickObject(
-        ObjectType.Element,
-        TypeAnnotationFilter(),
-        "Выберите воздуховоды или трубы, нажмите Finish по окончании"
-    )
-
-    if reference is None or len(elements) == 0:
-        sys.exit()
-
-    type_annotation = doc.GetElement(reference)
+    type_annotation = get_type_annotation()
     orig_pont = type_annotation.Location.Point
 
 
@@ -304,8 +342,8 @@ def script_execute(plugin_logger):
 
                 new_point = XYZ(connector_coord_1.X, connector_coord_1.Y, level.elevation + z_correction)
                 translation = new_point - orig_pont
-                new_tag_Id = ElementTransformUtils.CopyElement(doc, type_annotation.Id, translation)
-                new_tag = doc.GetElement(new_tag_Id[0])
+                new_tag_id = ElementTransformUtils.CopyElement(doc, type_annotation.Id, translation)
+                new_tag = doc.GetElement(new_tag_id[0])
                 new_tag.SetParamValue("Имя уровня", level.name)
                 string_elevation = "{:+.3f}".format(level.elevation * 304.8 / 1000)
                 new_tag.SetParamValue("Отметка уровня", string_elevation)
