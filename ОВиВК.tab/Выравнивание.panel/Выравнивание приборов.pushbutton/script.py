@@ -20,6 +20,45 @@ _MIN_DISTANCE = 0.001
 _MAX_DISTANCE = 4.92126  # 1.5 метра
 _MAX_ANGLE = math.radians(30)
 
+class EditorReport:
+    def __init__(self, doc):
+        self.doc = doc
+        self.edited_reports = []
+        self.status_report = ''
+        self.edited_report = ''
+
+    def __get_element_editor_name(self, element):
+        user_name = __revit__.Application.Username
+        edited_by = element.GetParamValueOrDefault(BuiltInParameter.EDITED_BY)
+        if edited_by is None:
+            return None
+        if edited_by.lower() in user_name.lower():
+            return None
+        return edited_by
+
+    def is_element_edited(self, element):
+        self.update_status = WorksharingUtils.GetModelUpdatesStatus(self.doc, element.Id)
+        if self.update_status == ModelUpdatesStatus.UpdatedInCentral:
+            self.status_report = "Вы владеете элементами, но ваш файл устарел. Выполните синхронизацию."
+
+        name = self.__get_element_editor_name(element)
+        if name is not None and name not in self.edited_reports:
+            self.edited_reports.append(name)
+            return True
+        return False
+
+    def show_report(self):
+        if len(self.edited_reports) > 0:
+            self.edited_report = (
+                "Часть элементов занята пользователями: {}".format(", ".join(self.edited_reports))
+            )
+        if self.edited_report or self.status_report:
+            message = self.status_report
+            if self.edited_report and self.status_report:
+                message += "\n"
+            message += self.edited_report
+            forms.alert(message, "Ошибка", exitscript=True)
+
 class RevitRepository:
     def __init__(self, doc):
         self.doc = doc
@@ -66,6 +105,7 @@ class RevitRepository:
 def script_execute(plugin_logger):
     doc = __revit__.ActiveUIDocument.Document
     repo = RevitRepository(doc)
+    report = EditorReport(doc)
 
     radiators = repo.get_all_radiators()
     if not radiators:
@@ -78,6 +118,9 @@ def script_execute(plugin_logger):
     aligned = 0
     with revit.Transaction("Выравнивание радиаторов"):
         for radiator in radiators:
+            if report.is_element_edited(radiator):
+                continue
+
             center = repo.get_radiator_center(radiator)
             direction = radiator.GetTransform().BasisX.Normalize()
 
@@ -106,6 +149,7 @@ def script_execute(plugin_logger):
                     ElementTransformUtils.MoveElement(doc, radiator.Id, offset)
                     aligned += 1
 
+    report.show_report()
     forms.alert("Готово! Выровнено радиаторов: {}".format(aligned), exitscript=True)
 
 script_execute()
