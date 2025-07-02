@@ -11,6 +11,8 @@ clr.AddReference("dosymep.Bim4Everyone.dll")
 
 import dosymep
 import re
+import glob
+import os
 from low_voltage_task_class_lib import JsonOperator, EditedReport, LowVoltageSystemData
 
 clr.ImportExtensions(dosymep.Revit)
@@ -274,6 +276,22 @@ def clear_param_false_values(elements, json_data):
             element.SetParamValue(TASK_SS_PARAM, "")
             element.SetParamValue(DATE_SS_PARAM, "")
 
+def del_latest_file(file_folder_path):
+    # Находим все JSON-файлы в директории
+    json_files = glob.glob(os.path.join(file_folder_path, "*.json"))
+    if not json_files:
+        return
+
+    # Находим файл с самым поздним временем модификации
+    latest_file = max(json_files, key=os.path.getmtime)
+
+    date = operator.get_utc_date()
+
+    if date not in latest_file:
+        return
+    else:
+        os.remove(latest_file)
+
 def setup_params():
     revit_params = [MARK_PARAM,
                     FLOOR_PARAM,
@@ -305,11 +323,14 @@ def script_execute(plugin_logger):
     setup_params()
     file_folder_path, is_path_local = operator.get_document_path()
 
+    del_latest_file(file_folder_path)
+
     if is_path_local:
         operator.show_local_path(file_folder_path)
 
     # Получаем данные из последнего по дате редактирования файла
     old_data = operator.get_json_data(file_folder_path)
+
 
     # Получаем список элементов, без фильтрации
     raw_collection = get_elements()
