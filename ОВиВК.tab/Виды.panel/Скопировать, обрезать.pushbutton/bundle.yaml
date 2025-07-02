@@ -3,7 +3,7 @@ title:
   en_us: "Copy\ncrop"
 
 tooltip:
-  ru: Копирует активный 3D-вид по выделенным элементам.
+  ru: Копирует активный 3D-вид по выделенным элементам внутренних инженерных систем.
   
     1. Перейдите на необходимый для обрезки 3D-вид.
 
@@ -12,7 +12,7 @@ tooltip:
     3. Вид будет скопирован с добавлением границы по заданным элементам.
 
 
-  en_us: Copies the active 3D view by the selected elements.
+  en_us: Copies the active 3D view of the selected elements of internal engineering systems..
 
     1. Go to the 3D view you need to crop.
     

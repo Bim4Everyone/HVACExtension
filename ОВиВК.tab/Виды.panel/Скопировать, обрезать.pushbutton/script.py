@@ -85,26 +85,27 @@ def start_up_checks():
     """Стартовые проверки"""
     if view.Category is None or not view.ViewType == ViewType.ThreeD:
         forms.alert(
-            "Добавление отметок возможно только на 3D-Виде.",
+            "Работа возможна только на 3D-Виде.",
             "Ошибка",
             exitscript=True)
 
 
+def expand_bounding_box(bbox, offset_ft=0.01):
+    """Слегка расшриряем bbox чтоб избежать скрытия штриховки поверхности"""
+    min_pt = bbox.Min
+    max_pt = bbox.Max
+
+    new_min = XYZ(min_pt.X - offset_ft, min_pt.Y - offset_ft, min_pt.Z - offset_ft)
+    new_max = XYZ(max_pt.X + offset_ft, max_pt.Y + offset_ft, max_pt.Z + offset_ft)
+
+    bbox.Min = new_min
+    bbox.Max = new_max
+
+    return bbox
+
+
 def get_section_box_by_elements(elements):
     """Получаем BoundingBox по элементам для нового вида"""
-
-    def expand_bounding_box(bbox, offset_ft=0.01):
-        """Слегка расшриряем bbox чтоб избежать скрытия штриховки поверхности"""
-        min_pt = bbox.Min
-        max_pt = bbox.Max
-
-        new_min = XYZ(min_pt.X - offset_ft, min_pt.Y - offset_ft, min_pt.Z - offset_ft)
-        new_max = XYZ(max_pt.X + offset_ft, max_pt.Y + offset_ft, max_pt.Z + offset_ft)
-
-        bbox.Min = new_min
-        bbox.Max = new_max
-
-        return bbox
 
     bboxes = List[BoundingBoxXYZ]()
 
@@ -144,14 +145,14 @@ def get_unique_name():
     name = view.Name
     name = re.sub(r'[\\:{}\[\];<>?\`~]', '', name)
     views = (FilteredElementCollector(doc)
-             .OfCategory(BuiltInCategory.OST_Views)
+             .OfClass(View3D)
              .WhereElementIsNotElementType()
              .ToElements())
 
     base_name = name
     counter = 1
 
-    existing_names = set(el.Name for el in views if hasattr(el, "Name"))
+    existing_names = set(el.Name for el in views)
 
     while name in existing_names:
         name = "{}_копия {}".format(base_name, counter)
