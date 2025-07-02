@@ -331,7 +331,6 @@ def script_execute(plugin_logger):
     # Получаем данные из последнего по дате редактирования файла
     old_data = operator.get_json_data(file_folder_path)
 
-
     # Получаем список элементов, без фильтрации
     raw_collection = get_elements()
 
