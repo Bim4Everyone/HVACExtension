@@ -3,18 +3,26 @@ title:
   en_us: "Cabinets\nnumeration"
 
 tooltip:
-  ru: Нумерует пожарные шкафы.
+  ru: Скрипт обрабатывает семейства категории "Оборудование", которые содержат "Обр_Шпк" в имени семейства и имеют параметр экземпляра "ADSK_Позиция".
+    
+    1. Проверьте чтоб шкафы соответствующих этажей принадлежали одному уровню. Особенно это касается 1-ого этажа с переменной отметкой пола.
   
-    1. Проверьте, чтоб в имени семейства есть "Обр_Шпк" и параметр эксземпляра "ADSK_Позиция".
+    2. Запустите скрипт.
+    
+    3. Выберите направление нумерации и стартовый шкаф из предложенных вариантов.
+    
+    3. Шкафы будут пронумерованы в указанном направлении.
 
-    2. Запустите скрипт. Нумерация будет выполнена слева направо и сверху вниз, для каждого этажа, начиная с указанного номера.
 
+  en_us: The script processes families of the "Mechanical Equipment" category that contain "Обр_Шпк" in the family name and have the "ADSK_Позиция" instance parameter.
 
-  en_us: Numbers fire cabinets.
-
-    1. Check that the family name contains "Обр_Шпк" and the instance parameter "ADSK_Позиция".
-
-    2. Run the script. The numbering will be done from left to right and top to bottom, for each floor, starting with the specified number.
+      1. Check that the cabinets of the corresponding floors belong to the same level. This is especially true for the 1st floor with a variable floor elevation.
+      
+      2. Run the script.
+      
+      3. Select the numbering direction and the starting cabinet from the proposed options.
+      
+      3. The cabinets will be numbered in the specified direction.
 
 
 author: Redomine

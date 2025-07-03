@@ -137,12 +137,22 @@ def convert_to_mms(value):
     return result
 
 
-def group_by_rows(cabinets, selected_mode, y_tolerance=2000):
-    """Группирует шкафы в ряды по Y, начиная строго слева от центра и далее по окружности"""
+def get_relative_angle(cab, center_point, start_cab):
+    dx = cab.xyz.X - center_point.X
+    dy = cab.xyz.Y - center_point.Y
+    cab_angle = math.atan2(dy, dx)
 
-    if not cabinets:
-        return []
+    ref_dx = start_cab.xyz.X - center_point.X
+    ref_dy = start_cab.xyz.Y - center_point.Y
+    start_angle = math.atan2(ref_dy, ref_dx)
 
+    # Относительный угол, приведение к [0, 2π)
+    relative = (cab_angle - start_angle) % (2 * math.pi)
+    return relative
+
+
+def get_geo_params(cabinets):
+    """Получаем основные параметры массива шкафов - их центр и крайние точки"""
     # Центр — по X середина, по Y верхняя граница
     min_x = min(cab.xyz.X for cab in cabinets)
     max_x = max(cab.xyz.X for cab in cabinets)
@@ -150,10 +160,11 @@ def group_by_rows(cabinets, selected_mode, y_tolerance=2000):
     max_y = max(cab.xyz.Y for cab in cabinets)
     center_x = (min_x + max_x) / 2
     center_y = (min_y + max_y) / 2
+    return min_x, max_x, min_y, max_y, center_x, center_y
 
-    has_y_elbow = max_y - min_y < 20000
-    has_x_elbow = max_x - min_x < 20000
 
+def select_start_cab(selected_mode, cabinets):
+    """Получаем стартовый шкаф в зависимости от выбранного мода"""
     if selected_mode in [MIN_Y_CLOCKWISE, MIN_Y_COUNTERCLOCKWISE]:
         # минимальный Y
         start_cab = min(cabinets, key=lambda cab: cab.xyz.Y)
@@ -165,6 +176,22 @@ def group_by_rows(cabinets, selected_mode, y_tolerance=2000):
         start_cab = max(cabinets, key=lambda cab: cab.xyz.X)
     else:
         start_cab = max(cabinets, key=lambda cab: cab.xyz.Y)
+
+    return start_cab
+
+
+def group_by_rows(cabinets, selected_mode, y_tolerance=2000, type_building_width_millimeters = 20000):
+    """Группирует шкафы в ряды по Y, начиная строго слева от центра и далее по окружности"""
+
+    if not cabinets:
+        return []
+
+    min_x, max_x, min_y, max_y, center_x, center_y = get_geo_params(cabinets)
+
+    has_y_elbow = max_y - min_y < type_building_width_millimeters
+    has_x_elbow = max_x - min_x < type_building_width_millimeters
+
+    start_cab = select_start_cab(selected_mode, cabinets)
 
     # Центр поворота
     if has_x_elbow and not has_y_elbow:
@@ -179,23 +206,11 @@ def group_by_rows(cabinets, selected_mode, y_tolerance=2000):
                                     MAX_Y_COUNTERCLOCKWISE,
                                     MAX_X_COUNTERCLOCKWISE]
 
-    def get_relative_angle(cab):
-        dx = cab.xyz.X - center_point.X
-        dy = cab.xyz.Y - center_point.Y
-        cab_angle = math.atan2(dy, dx)
-
-        ref_dx = start_cab.xyz.X - center_point.X
-        ref_dy = start_cab.xyz.Y - center_point.Y
-        start_angle = math.atan2(ref_dy, ref_dx)
-
-        # Относительный угол, приведение к [0, 2π)
-        relative = (cab_angle - start_angle) % (2 * math.pi)
-        return relative
-
-    for cab in cabinets:
-        cab.angle = get_relative_angle(cab)
-
-    sorted_cabs = sorted(cabinets, key=get_relative_angle, reverse=reverse)
+    sorted_cabs = sorted(
+        cabinets,
+        key=lambda cab: get_relative_angle(cab, center_point, start_cab),
+        reverse=reverse
+    )
     if reverse:
         # Переносим последний элемент в начало
         sorted_cabs = [sorted_cabs[-1]] + sorted_cabs[:-1]
@@ -228,20 +243,20 @@ def get_fire_cabinet_equipment():
     """
     editor_report = EditorReport()
 
-    collector = FilteredElementCollector(doc) \
-        .OfCategory(BuiltInCategory.OST_MechanicalEquipment) \
-        .WhereElementIsNotElementType()
+    collector = ((FilteredElementCollector(doc)
+                    .OfClass(FamilyInstance)
+                    .WherePasses(ElementCategoryFilter(BuiltInCategory.OST_MechanicalEquipment)))
+                    .WhereElementIsNotElementType())
 
     result = []
 
     for el in collector:
-        if isinstance(el, FamilyInstance):
-            family_name = el.Symbol.Family.Name
-            if "Обр_Шпк" in family_name:
-                if not editor_report.is_element_edited(el):
-                    result.append(el)
-                else:
-                    editor_report.show_report()
+        family_name = el.Symbol.Family.Name
+        if "Обр_Шпк" in family_name:
+            if not editor_report.is_element_edited(el):
+                result.append(el)
+
+    editor_report.show_report()
 
     return result
 
@@ -251,7 +266,8 @@ def get_cabinets_by_levels(elements):
 
     for element in elements:
         # Не хочется сначала выполнять IsExists а потом пытаться получить параметр для проверки на рид онли.
-        param = element.LookupParameter("ADSK_Позиция")
+        param = element.LookupParameter(ADSK_POSITION_PARAM_NAME)
+
 
         if param is None or param.IsReadOnly:
             forms.alert(
@@ -260,15 +276,14 @@ def get_cabinets_by_levels(elements):
                 "Ошибка",
                 exitscript=True)
 
+    for element in elements:
         fire_cabinet = FireCabinet(element)
         fire_cabinets.append(fire_cabinet)
 
     cabinets_by_level = {}
     for cabinet in fire_cabinets:
         level = cabinet.level_name
-        if level not in cabinets_by_level:
-            cabinets_by_level[level] = []
-        cabinets_by_level[level].append(cabinet)
+        cabinets_by_level.setdefault(level, []).append(cabinet)
 
     sorted_cabinets_by_level = dict(sorted(cabinets_by_level.items(), key=lambda item: item[0]))
     return sorted_cabinets_by_level
@@ -276,13 +291,14 @@ def get_cabinets_by_levels(elements):
 
 def split_elements_by_systems(elements):
     """Делим шкафы по системам"""
-    system_para = SharedParamsConfig.Instance.VISSystemName
+    system_param = SharedParamsConfig.Instance.VISSystemName
 
     systems_dict = defaultdict(list)
 
     for element in elements:
-        system_name = element.GetParamValueOrDefault(system_para)
-        if system_name is None:
+        system_name = element.GetParamValueOrDefault(system_param)
+
+        if system_name in [None, "", "!Нет системы"]:
             forms.alert(
                 "У части шкафов не заполнен параметр ФОП_ВИС_Имя системы. Выполните полное обновление.",
                 "Ошибка",
@@ -290,9 +306,7 @@ def split_elements_by_systems(elements):
 
         systems_dict[system_name].append(element)
 
-    # Преобразуем словарь в список списков
-    split_elements   = list(systems_dict.values())
-    return split_elements
+    return list(systems_dict.values())
 
 
 MIN_Y_CLOCKWISE = "Минимальным Y, по часовой стрелке"
@@ -303,19 +317,21 @@ MAX_Y_CLOCKWISE = "Максимальным Y, по часовой стрелк�
 MAX_Y_COUNTERCLOCKWISE = "Максимальным Y, против часовой стрелки"
 MAX_X_CLOCKWISE = "Максимальным X, по часовой стрелке"
 MAX_X_COUNTERCLOCKWISE = "Максимальным X, против часовой стрелки"
+ADSK_POSITION_PARAM_NAME = "ADSK_Позиция"
 
 
 @notification()
 @log_plugin(EXEC_PARAMS.command_name)
 def script_execute(plugin_logger):
-    selected_mode = SelectFromList('Нумерация от шкафа с:', [MIN_Y_CLOCKWISE,
-                                                                      MIN_Y_COUNTERCLOCKWISE,
-                                                                      MIN_X_CLOCKWISE,
-                                                                      MIN_X_COUNTERCLOCKWISE,
-                                                                      MAX_Y_CLOCKWISE,
-                                                                      MAX_Y_COUNTERCLOCKWISE,
-                                                                      MAX_X_CLOCKWISE,
-                                                                      MAX_X_COUNTERCLOCKWISE])
+    selected_mode = SelectFromList('Нумерация от шкафа с:',
+                                   [MIN_Y_CLOCKWISE,
+                                    MIN_Y_COUNTERCLOCKWISE,
+                                    MIN_X_CLOCKWISE,
+                                    MIN_X_COUNTERCLOCKWISE,
+                                    MAX_Y_CLOCKWISE,
+                                    MAX_Y_COUNTERCLOCKWISE,
+                                    MAX_X_CLOCKWISE,
+                                    MAX_X_COUNTERCLOCKWISE])
 
     if selected_mode is None:
         sys.exit()
@@ -336,7 +352,7 @@ def script_execute(plugin_logger):
                     # В ряду сортируем слева направо по X
                     sorted_row = sorted(row, key=lambda c: c.xyz.X)
                     for cabinet in sorted_row:
-                        cabinet.element.SetParamValue("ADSK_Позиция", str(number))
+                        cabinet.element.SetParamValue(ADSK_POSITION_PARAM_NAME, str(number))
                         number += 1
 
 
