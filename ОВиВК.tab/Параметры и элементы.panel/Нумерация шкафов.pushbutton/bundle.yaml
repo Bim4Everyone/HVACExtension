@@ -4,10 +4,9 @@ title:
 
 tooltip:
   ru: Скрипт обрабатывает семейства категории "Оборудование", которые содержат "Обр_Шпк" в имени семейства и имеют параметр экземпляра "ADSK_Позиция".
-    
-    1. Проверьте чтобы шкафы соответствующих этажей принадлежали одному уровню. Особенно это касается 1-ого этажа с переменной отметкой пола.
+    Важно, чтобы шкафы соответствующих этажей принадлежали одному уровню. Особенно это касается 1-ого этажа с переменной отметкой пола.
   
-    2. Запустите скрипт.
+    1. Запустите скрипт.
     
     3. Выберите направление нумерации и стартовый шкаф из предложенных вариантов.
     
@@ -15,8 +14,7 @@ tooltip:
 
 
   en_us: The script processes families of the "Mechanical Equipment" category that contain "Обр_Шпк" in the family name and have the "ADSK_Позиция" instance parameter.
-
-      1. Check that the cabinets of the corresponding floors belong to the same level. This is especially true for the 1st floor with a variable floor elevation.
+    It is important that the cabinets of the corresponding floors belong to the same level. This is especially true for the 1st floor with a variable floor elevation.
       
       2. Run the script.
       
