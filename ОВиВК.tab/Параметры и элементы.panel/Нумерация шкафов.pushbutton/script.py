@@ -193,11 +193,14 @@ def group_by_rows(cabinets, selected_mode, y_tolerance=2000, type_building_width
 
     start_cab = select_start_cab(selected_mode, cabinets)
 
+    # Смещение общего центра для ситуации когда корпус идет по прямой, чтобы обеспечить корректную нумерацию
+    CENTRAL_POINT_OFFSET = 10000
+
     # Центр поворота
     if has_x_elbow and not has_y_elbow:
-        center_point = XYZ(max_x + 10000, center_y, 0)
+        center_point = XYZ(max_x + CENTRAL_POINT_OFFSET, center_y, 0)
     elif not has_x_elbow and has_y_elbow:
-        center_point = XYZ(center_x, max_y + 10000, 0)
+        center_point = XYZ(center_x, max_y + CENTRAL_POINT_OFFSET, 0)
     else:
         center_point = XYZ(center_x, center_y, 0)
 
@@ -243,10 +246,9 @@ def get_fire_cabinet_equipment():
     """
     editor_report = EditorReport()
 
-    collector = ((FilteredElementCollector(doc)
-                    .OfClass(FamilyInstance)
-                    .WherePasses(ElementCategoryFilter(BuiltInCategory.OST_MechanicalEquipment)))
-                    .WhereElementIsNotElementType())
+    collector = (FilteredElementCollector(doc)
+                 .OfClass(FamilyInstance)
+                 .WherePasses(ElementCategoryFilter(BuiltInCategory.OST_MechanicalEquipment)))
 
     result = []
 
@@ -267,7 +269,6 @@ def get_cabinets_by_levels(elements):
     for element in elements:
         # Не хочется сначала выполнять IsExists а потом пытаться получить параметр для проверки на рид онли.
         param = element.LookupParameter(ADSK_POSITION_PARAM_NAME)
-
 
         if param is None or param.IsReadOnly:
             forms.alert(
