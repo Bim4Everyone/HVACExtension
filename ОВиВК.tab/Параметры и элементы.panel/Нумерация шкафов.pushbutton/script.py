@@ -246,9 +246,9 @@ def get_fire_cabinet_equipment():
     """
     editor_report = EditorReport()
 
-    collector = (FilteredElementCollector(doc)
-                 .OfClass(FamilyInstance)
-                 .WherePasses(ElementCategoryFilter(BuiltInCategory.OST_MechanicalEquipment)))
+    collector = FilteredElementCollector(doc) \
+        .OfClass(FamilyInstance) \
+        .WherePasses(ElementCategoryFilter(BuiltInCategory.OST_MechanicalEquipment))
 
     result = []
 
