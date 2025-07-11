@@ -1,0 +1,31 @@
+title:
+  ru: "Нумерация\nшкафов"
+  en_us: "Cabinets\nnumeration"
+
+tooltip:
+  ru: Скрипт обрабатывает семейства категории "Оборудование", которые содержат "Обр_Шпк" в имени семейства и имеют параметр экземпляра "ADSK_Позиция".
+    Важно, чтобы шкафы соответствующих этажей принадлежали одному уровню. Особенно это касается 1-ого этажа с переменной отметкой пола.
+  
+    1. Запустите скрипт.
+    
+    3. Выберите направление нумерации и стартовый шкаф из предложенных вариантов.
+    
+    3. Шкафы будут пронумерованы в указанном направлении.
+
+
+  en_us: The script processes families of the "Mechanical Equipment" category that contain "Обр_Шпк" in the family name and have the "ADSK_Позиция" instance parameter.
+    It is important that the cabinets of the corresponding floors belong to the same level. This is especially true for the 1st floor with a variable floor elevation.
+      
+      2. Run the script.
+      
+      3. Select the numbering direction and the starting cabinet from the proposed options.
+      
+      3. The cabinets will be numbered in the specified direction.
+
+
+author: Redomine
+help_url: "https://kb.a101.ru/pages/viewpage.action?pageId=167838131"
+
+min_revit_version: 2022
+max_revit_version: 2024
+
