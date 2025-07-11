@@ -4,12 +4,26 @@ title:
 
 tooltip:
   ru: >- 
-    Please Write Description
+    Просмотр гильз, сгруппированных статусам. Статусы определяются заново каждый раз при запуске плагина.
+  
+  
+    Для запуска плагина необходимо, чтобы активный документ и все связанные документы удовлетворяли требованиям к именованию файлов моделей BIM-стандарта.
+  
+  
+    1. Открыть документ и запустить плагин.
   en_us: >- 
-    Please Write Description
+    Watch sleeves, grouped status. Statuses update each time you start the plugin.
+  
+  
+    Before you start the plugin, make sure your active document and all linked documents satisfy all naming rules of BIM-standard.
+  
+  
+    1. Open document and start the plugin.
 
 assembly: RevitSleeves.dll
 command_class: ShowNavigatorCommand
+
+is_beta: true
 
 author: vlastroG
 
