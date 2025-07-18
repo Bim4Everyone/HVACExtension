@@ -97,10 +97,7 @@ def get_connectors(element):
 
     if isinstance(element, FamilyInstance) and element.MEPModel.ConnectorManager is not None:
         inst_cons = list(element.MEPModel.ConnectorManager.Connectors)
-        filtered_cons = []
-        for con in inst_cons:
-            if con.Domain in (Domain.DomainHvac, Domain.DomainPiping):
-                filtered_cons.append(con)
+        filtered_cons = [con for con in inst_cons if con.Domain in (Domain.DomainHvac, Domain.DomainPiping)]
 
         min_z = min(c.Origin.Z for c in filtered_cons)
         max_z = max(c.Origin.Z for c in filtered_cons)
@@ -111,8 +108,7 @@ def get_connectors(element):
 
     if element.InAnyCategory([BuiltInCategory.OST_DuctCurves,
                               BuiltInCategory.OST_PipeCurves,
-                              BuiltInCategory.OST_FlexDuctCurves]) and \
-            isinstance(element, MEPCurve) and element.ConnectorManager is not None:
+                              BuiltInCategory.OST_FlexDuctCurves]):
 
         # Если это воздуховод — фильтруем только не Curve-коннекторы. Это завязано на врезки которые тоже падают в список
         # но с нулевым расходом и двунаправленным потоком
@@ -150,20 +146,36 @@ def get_connector_coordinates(element):
                 break
 
     if start_point is None and end_point is None:
-        forms.alert("Не удалось получить координаты коннекторов.", "Ошибка", exitscript=True)
+        forms.alert("Не удалось получить координаты коннекторов. ID: {}".format(str(element.Id)),
+                    "Ошибка",
+                    exitscript=True)
 
     # Если у нас встречается элемент с одним коннектором - получает bbox и добавляем его высоту к стартовой точке
     if end_point is None:
         bbox = element.get_BoundingBox(None)
-        min_pt = bbox.Min
-        max_pt = bbox.Max
-        z_diff = max_pt.Z - min_pt.Z
+        z_diff = bbox.Max.Z - bbox.Min.Z
         end_point = XYZ(start_point.X, start_point.Y, start_point.Z + z_diff)
 
-    start_xyz = XYZ(start_point.X, start_point.Y, start_point.Z)
-    end_xyz = XYZ(end_point.X, end_point.Y, end_point.Z)
+    return start_point, end_point
 
-    return start_xyz, end_xyz
+
+def get_pre_selected():
+    """
+    Получение заранее выбранных элементов.
+    """
+
+    elements = [uidoc.Document.GetElement(elem_id) for elem_id in uidoc.Selection.GetElementIds()]
+
+    filter_result = []
+    for element in elements:
+        cat = element.Category
+        if cat is None:
+            continue
+
+        if element.InAnyCategory(categories):
+            filter_result.append(element)
+
+    return filter_result
 
 
 def get_selected():
@@ -223,7 +235,7 @@ def check_base_internal_diff():
 
 def start_up_checks():
     """Стартовые проверки"""
-    if view.Category is None or not view.ViewType == ViewType.ThreeD:
+    if view.Category is None or view.ViewType != ViewType.ThreeD:
         forms.alert(
             "Добавление отметок возможно только на 3D-Виде.",
             "Ошибка",
@@ -234,14 +246,14 @@ def start_up_checks():
             "3D‑вид должен быть заблокирован.",
             "Ошибка",
             exitscript=True)
-        return
 
 
 def get_levels_descriptions():
     """Получение списка Z-координат уровней проекта"""
-    levels = (FilteredElementCollector(doc).
-              OfCategory(BuiltInCategory.OST_Levels).
-              WhereElementIsNotElementType().ToElements())
+    levels = FilteredElementCollector(doc) \
+        .OfCategory(BuiltInCategory.OST_Levels) \
+        .WhereElementIsNotElementType() \
+        .ToElements()
 
     levels_inst = []
     sorted_levels = sorted(
@@ -262,10 +274,9 @@ def get_levels_descriptions():
     if selected is None:
         sys.exit()
 
+    levels = [level for level in levels if level.Name in selected]
+
     for level in levels:
-        if level.Name not in selected:
-            continue
-        z = level.Elevation
         name = level.Name
         lower_name = name.lower()
         keyword = "этаж"
@@ -274,9 +285,8 @@ def get_levels_descriptions():
 
         if index != -1:
             name = name[:index + len(keyword)]
-        else:
-            name = name
-        lev_el = LevelDescription(name, z)
+
+        lev_el = LevelDescription(name, level.Elevation)
         levels_inst.append(lev_el)
     return levels_inst
 
@@ -292,7 +302,8 @@ def get_type_annotation():
 
     filtered_annotations = [el for el in generic_annotations if el.Symbol.Family.Name == target_family_name]
     if len(filtered_annotations) == 0:
-        forms.alert("Разместите на виде хотя бы одно шаблонное семейство ТипАн_Мрк_B4E_Уровень.",
+        forms.alert("Разместите на виде хотя бы одно шаблонное семейство {}."
+                    .format(target_family_name),
                     "Ошибка",
                     exitscript=True)
 
@@ -304,9 +315,10 @@ def get_type_annotation():
 def script_execute(plugin_logger):
     start_up_checks()
     type_annotation = get_type_annotation()
-    elements = get_selected()
+    type_annotation_id = type_annotation.Id
     orig_pont = type_annotation.Location.Point
 
+    elements = get_pre_selected() or get_selected()
 
     levels = get_levels_descriptions()
     z_correction = check_base_internal_diff()
@@ -325,7 +337,7 @@ def script_execute(plugin_logger):
 
                 new_point = XYZ(connector_coord_1.X, connector_coord_1.Y, level.elevation + z_correction)
                 translation = new_point - orig_pont
-                new_tag_id = ElementTransformUtils.CopyElement(doc, type_annotation.Id, translation)
+                new_tag_id = ElementTransformUtils.CopyElement(doc, type_annotation_id, translation)
                 new_tag = doc.GetElement(new_tag_id[0])
                 new_tag.SetParamValue("Имя уровня", level.name)
                 elevation = UnitUtils.ConvertFromInternalUnits(level.elevation,

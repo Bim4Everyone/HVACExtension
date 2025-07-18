@@ -3,27 +3,24 @@ title:
   en_us: "Riser\naltitude"
 
 tooltip:
-  ru: Выставляет отметки уровней на стояках воздуховодов/труб.
+  ru: Расставляет отметки уровней на стояках воздуховодов/труб. Для работы требуется активный, заблокированный 3D-вид. 
     
-    1. Разместите шаблонную типовую аннотацию на виде.
+    1. Разместите шаблонную типовую аннотацию "ТипАн_Мрк_B4E_Уровень" на виде.
   
-    2. Выберите необхоимые элементы. Если элементы были выбраны заранее, то этот шаг можно пропустить.
+    2. Выберите элементы для маркировки. Если элементы были выбраны заранее, то этот шаг можно пропустить.
 
-    3. Выберите необходимые для нумерации уровни.
-
-    4. Настройте необходимый вид типовых аннотаций уровней.
+    3. Выберите уровни для нумерации.
 
 
 
-  en_us: Sets level marks on air duct/pipe risers.
 
-    1. Place a template type annotation on the view.
+  en_us: Places level marks on air duct/pipe risers. Requires an active, locked 3D view to work..
+
+    1. Place the template typical annotation "ТипАн_Мрк_B4E_Уровень" on the view.
     
-    2. Select the required elements. If the elements were selected in advance, this step can be skipped.
+    2. Select the elements to be marked. If the elements were selected in advance, this step can be skipped.
     
-    3. Select the levels required for numbering.
-    
-    4. Set up the required type of type annotations.
+    3. Select the levels to be numbered.
 
 
 author: Redomine
