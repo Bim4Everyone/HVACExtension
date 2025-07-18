@@ -1,0 +1,33 @@
+title:
+  ru: Настройки гильз
+  en_us: Sleeves settings
+
+tooltip:
+  ru: >-
+    Настройки расстановки гильз.
+    
+    
+    1. Открыть документ и запустить плагин.
+
+    2. Задать настройки расстановки гильз
+
+    3. Нажать "ОК".
+  en_us: >-
+    Settings for placing sleeves.
+    
+    
+    1. Open document and start the plugin.
+
+    2. Configure settings for sleeves.
+
+    3. Press "OK".
+
+assembly: RevitSleeves.dll
+command_class: SleevesSettingsCommand
+
+is_beta: true
+
+author: vlastroG
+
+min_revit_version: 2022
+max_revit_version: 2024
