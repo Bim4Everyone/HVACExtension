@@ -16,7 +16,7 @@ tooltip:
 
 
 
-  en_us: Places level marks on air duct/pipe risers. Requires an active, locked 3D view to work..
+  en_us: Places level marks on air duct/pipe risers. Requires an active, locked 3D view to work.
 
     1. Place the template standard annotation "ТипАн_Мрк_B4E_Уровень" on the 3D view.
     
