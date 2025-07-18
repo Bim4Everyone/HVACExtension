@@ -5,22 +5,26 @@ title:
 tooltip:
   ru: Расставляет отметки уровней на стояках воздуховодов/труб. Для работы требуется активный, заблокированный 3D-вид. 
     
-    1. Разместите шаблонную типовую аннотацию "ТипАн_Мрк_B4E_Уровень" на виде.
+    1. Разместите шаблонную типовую аннотацию "ТипАн_Мрк_B4E_Уровень" на 3D виде.
   
-    2. Выберите элементы для маркировки. Если элементы были выбраны заранее, то этот шаг можно пропустить.
+    2. Выберите элементы для маркировки и запустите скрипт.
 
-    3. Выберите уровни для нумерации.
+    3. В открывшемся окне выберите уровни для нумерации.
+
+   4. Нажмите "Выбрать уровни" для запуска скрипта.
 
 
 
 
   en_us: Places level marks on air duct/pipe risers. Requires an active, locked 3D view to work..
 
-    1. Place the template typical annotation "ТипАн_Мрк_B4E_Уровень" on the view.
+    1. Place the template standard annotation "ТипАн_Мрк_B4E_Уровень" on the 3D view.
     
-    2. Select the elements to be marked. If the elements were selected in advance, this step can be skipped.
+    2. Select the elements to be marked and run the script.
     
-    3. Select the levels to be numbered.
+    3. In the window that opens, select the levels to be numbered.
+    
+    4. Click "Select levels" to run the script.
 
 
 author: Redomine
