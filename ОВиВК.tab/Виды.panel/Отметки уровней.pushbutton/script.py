@@ -105,20 +105,15 @@ def get_connectors(element):
         filtered = [c for c in filtered_cons if abs(c.Origin.Z - min_z) < 1e-6 or abs(c.Origin.Z - max_z) < 1e-6]
         connectors.extend(filtered)
 
+    # Если это воздуховод — фильтруем только не Curve-коннекторы. Это завязано на врезки которые тоже падают в список
+    if element.InAnyCategory([BuiltInCategory.OST_DuctCurves, BuiltInCategory.OST_PipeCurves]):
+        for conn in element.ConnectorManager.Connectors:
+            if conn.ConnectorType != ConnectorType.Curve:
+                connectors.append(conn)
+    elif element.InAnyCategory([BuiltInCategory.OST_FlexDuctCurves, BuiltInCategory.OST_FlexPipeCurves]):
+        # Для других категорий (гибкие трубы и гибкие воздуховоды) — добавляем все
+        connectors.extend(element.ConnectorManager.Connectors)
 
-    if element.InAnyCategory([BuiltInCategory.OST_DuctCurves,
-                              BuiltInCategory.OST_PipeCurves,
-                              BuiltInCategory.OST_FlexDuctCurves]):
-
-        # Если это воздуховод — фильтруем только не Curve-коннекторы. Это завязано на врезки которые тоже падают в список
-        # но с нулевым расходом и двунаправленным потоком
-        if element.InAnyCategory([BuiltInCategory.OST_DuctCurves, BuiltInCategory.OST_PipeCurves]):
-            for conn in element.ConnectorManager.Connectors:
-                if conn.ConnectorType != ConnectorType.Curve:
-                    connectors.append(conn)
-        else:
-            # Для других категорий (трубы и гибкие воздуховоды) — добавляем все
-            connectors.extend(element.ConnectorManager.Connectors)
 
     return connectors
 
