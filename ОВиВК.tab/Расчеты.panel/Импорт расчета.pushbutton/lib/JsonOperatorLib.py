@@ -36,10 +36,13 @@ class JsonAngleOperator:
         self.doc = doc
         self.uiapp = uiapp
 
-    def get_document_path(self):
+    def get_document_path(self, filename):
         """
         Возвращает путь к config.json в директории проекта.
         Создаёт директорию и файл при необходимости.
+
+        Args:
+            filename (str): Имя файла ('config.json' или 'version.json')
 
         Returns:
             str: Полный путь к файлу config.json.
@@ -58,47 +61,48 @@ class JsonAngleOperator:
             os.makedirs(full_dir_path)
 
         # Путь к config.json
-        config_path = os.path.join(full_dir_path, 'config.json')
+        file_path = os.path.join(full_dir_path, filename)
 
         # Создаём файл, если его нет
-        if not os.path.isfile(config_path):
-            with codecs.open(config_path, 'w', encoding='utf-8') as f:
+        if not os.path.isfile(file_path):
+            with codecs.open(file_path, 'w', encoding='utf-8') as f:
                 json.dump(0.0, f, ensure_ascii=False)
 
-        return config_path
+        return file_path
 
-    def send_json_data(self, data):
+    def send_json_data(self, data, filename):
         """
         Отправляет одно числовое значение в JSON файл.
 
         Args:
             data (float): Значение, которое нужно сохранить в JSON файл.
+            filename (str): Имя файла ('config.json' или 'version.json')
         """
-        new_file_path = self.get_document_path()
+        new_file_path = self.get_document_path(filename)
 
         with codecs.open(new_file_path, 'w', encoding='utf-8') as json_file:
-            json.dump(float(data), json_file, ensure_ascii=False)
+            json.dump(data, json_file, ensure_ascii=False)
 
 
-    def get_json_data(self):
+    def get_json_data(self, filename):
         """
         Получает данные из JSON файла.
+
+        Args:
+            filename (str): Имя файла ('config.json' или 'version.json')
 
         Returns:
             float: Значение из JSON-файла.
         """
 
-        json_path = self.get_document_path()
+        json_path = self.get_document_path(filename)
 
         if not os.path.isfile(json_path):
             return 0
 
         with codecs.open(json_path, 'r', encoding='utf-8') as json_file:
             value = json.load(json_file)
-            if isinstance(value, (float, int)):
-                return float(value)
-
-        return 0
+        return value
 
     def get_project_name(self):
         """

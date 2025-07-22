@@ -55,7 +55,8 @@ OUTER_VALVE_NAME = "ZAWTERM"
 FAMILY_NAME_CONST = 'Обр_ОП_Универсальный'
 DEBUG_MODE = False
 EPSILON = 1e-9
-
+JSON_CONFIG = 'config.json'
+JSON_VERSION = 'version.json'
 
 class CylinderZ:
     def __init__(self, z_min, z_max):
@@ -289,6 +290,17 @@ class ReadingRulesForEquipment:
     '''
     Класс используется для интерпретиции данных по Приборам
     '''
+
+    def __init__(self, audytor_version):
+        self.audytor_version = audytor_version
+
+    @staticmethod
+    def versioning_setting(audytor_version):
+        versioning_setting_index = 28
+        if audytor_version == "Audytor SET 7.3":
+            versioning_setting_index = 29
+        return versioning_setting_index
+
     connection_type_index = 2
     x_index = 3
     y_index = 4
@@ -297,7 +309,11 @@ class ReadingRulesForEquipment:
     code_index = 16
     real_power_index = 20
     nominal_power_index = 22
-    setting_index = 28
+
+    @property
+    def setting_index(self):
+        return self.versioning_setting(self.audytor_version)
+
     maker_index = 30
     full_name_index = 31
 
@@ -317,9 +333,9 @@ class ReadingRulesForValve:
 class AuditorFileParser:
     """Отвечает только за парсинг строк файла в объекты"""
     @staticmethod
-    def parse_heating_device(line, z_correction, angle):
+    def parse_heating_device(line, z_correction, angle, audytor_version):
         data = line.strip().split(';')
-        rr = ReadingRulesForEquipment()
+        rr = ReadingRulesForEquipment(audytor_version)
         # Получаем оба набора координат
         original_point, rotated_point = AuditorFileParser._parse_coordinates(
             data=data,
@@ -344,7 +360,7 @@ class AuditorFileParser:
         )
 
     @staticmethod
-    def parse_valve(line, z_correction, angle):
+    def parse_valve(line, z_correction, angle, audytor_version):
         data = line.strip().split(';')
         rr = ReadingRulesForValve()
 
@@ -458,7 +474,7 @@ def calculate_z_correction(doc):
     return UnitConverter.to_millimeters(z_difference)
 
 
-def find_section(lines, title, start_offset, parse_func, z_correction, angle):
+def find_section(lines, title, start_offset, parse_func, z_correction, angle, audytor_version):
     result = []
     i = 0
     while i < len(lines):
@@ -466,7 +482,7 @@ def find_section(lines, title, start_offset, parse_func, z_correction, angle):
             i += start_offset
 
             while i < len(lines) and lines[i].strip():
-                parsed_item = parse_func(lines[i], z_correction, angle)
+                parsed_item = parse_func(lines[i], z_correction, angle, audytor_version)
 
                 if parsed_item is not None:
                     result.append(parsed_item)
@@ -536,7 +552,8 @@ def process_start_up():
     operator = JsonOperatorLib.JsonAngleOperator(doc, uiapp)
 
     # Получаем данные из последнего по дате редактирования файла
-    old_angle = operator.get_json_data()
+    old_angle = operator.get_json_data(JSON_CONFIG)
+    old_version = operator.get_json_data(JSON_VERSION)
 
     angle = forms.ask_for_string(
         default=str(old_angle),
@@ -556,8 +573,17 @@ def process_start_up():
     if angle is None:
         sys.exit()
 
-    operator.send_json_data(angle)
-    return angle, filepath
+    operator.send_json_data(angle, JSON_CONFIG)
+
+    audytor_version = forms.ask_for_one_item(
+        ['Audytor SET 7.2', 'Audytor SET 7.3'],
+        default= old_version,
+        prompt='Выберите версию Аудитора',
+        title='Импорт расчетов'
+    )
+    operator.send_json_data(audytor_version, JSON_VERSION)
+
+    return angle, filepath, audytor_version
 
 
 def process_audytor_revit_matching(auditor_equipment_list, revit_equipment_list):
@@ -585,7 +611,7 @@ def process_audytor_revit_matching(auditor_equipment_list, revit_equipment_list)
     data_cache.write_all()
 
 
-def read_auditor_file(file_path, angle, doc):
+def read_auditor_file(file_path, angle, audytor_version, doc):
     with codecs.open(file_path, 'r', encoding='utf-8') as file:
         lines = file.readlines()
 
@@ -596,7 +622,8 @@ def read_auditor_file(file_path, angle, doc):
         3,
         AuditorFileParser.parse_heating_device,
         z_correction,
-        angle
+        angle,
+        audytor_version
     )
     valves = find_section(
         lines,
@@ -604,7 +631,8 @@ def read_auditor_file(file_path, angle, doc):
         3,
         AuditorFileParser.parse_valve,
         z_correction,
-        angle
+        angle,
+        audytor_version
     )
     equipment.extend(valves)
 
@@ -621,8 +649,8 @@ if DEBUG_MODE:
 @notification()
 @log_plugin(EXEC_PARAMS.command_name)
 def script_execute(plugin_logger):
-    angle, filepath = process_start_up()
-    ayditror_equipment_elements = read_auditor_file(filepath, angle, doc)
+    angle, filepath, audytor_version = process_start_up()
+    ayditror_equipment_elements = read_auditor_file(filepath, angle, audytor_version, doc)
     # собираем высоты цилиндров в которых будем искать данные
     level_cylinders = LevelCylinderGenerator.create_cylinders(ayditror_equipment_elements)
 
