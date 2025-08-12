@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import sys
 import clr
+import csv
 
 clr.AddReference('ProtoGeometry')
 clr.AddReference("RevitNodes")
@@ -15,6 +16,7 @@ import dosymep
 import codecs
 import math
 
+
 clr.ImportExtensions(Revit.Elements)
 clr.ImportExtensions(Revit.GeometryConversion)
 
@@ -22,6 +24,7 @@ import System
 import JsonOperatorLib
 import DebugPlacerLib
 from System.Collections.Generic import *
+from System.IO import StreamWriter
 
 from Autodesk.Revit.DB import *
 from Autodesk.Revit.DB import InternalOrigin
@@ -58,6 +61,42 @@ EPSILON = 1e-9
 JSON_CONFIG = 'config.json'
 JSON_VERSION = 'version.json'
 
+
+class CSVReportGenerator(object):
+    @staticmethod
+    def generate_report(changes):
+        """Генерация отчета без столбца с единицами измерения"""
+        csv_lines = [u"ID элемента;Имя параметра;Было;Стало"]
+
+        for change in changes:
+            param_name = change["param_name"]
+
+            # Функция форматирования значений
+            def format_value(value, is_power=False):
+                if value is None:
+                    return u""
+                try:
+                    num = float(value)
+                    if is_power:
+                        # Для мощности конвертируем внутренние единицы Revit в ватты
+                        num = UnitUtils.ConvertFromInternalUnits(num, UnitTypeId.Watts)
+                    return u"{:.1f}".format(round(num, 1))
+                except (ValueError, TypeError):
+                    return unicode(value)
+
+            # Определяем тип параметра для специального форматирования
+            is_power = "Мощность" in param_name or "ADSK_Тепловая мощность" in param_name
+
+            line = u"{0};{1};{2};{3}".format(
+                unicode(change["element_id"]),
+                unicode(param_name),
+                format_value(change["old_value"], is_power),
+                format_value(change["new_value"], is_power)
+            )
+            csv_lines.append(line)
+
+        return u"\n".join(csv_lines).encode('utf-8-sig')
+
 class CylinderZ:
     def __init__(self, z_min, z_max):
         self.radius = 1000
@@ -91,6 +130,11 @@ class UnitConverter:
         """Конвертирует метры в миллиметры."""
         return UnitUtils.Convert(value, UnitTypeId.Meters, UnitTypeId.Millimeters)
 
+    @staticmethod
+    def from_millimeters(value):
+        """Конвертирует миллиметры во внутренние единицы Revit"""
+        return UnitUtils.ConvertToInternalUnits(value, UnitTypeId.Millimeters)
+
 
 class TextParser:
     @staticmethod
@@ -105,6 +149,16 @@ class TextParser:
             return 0
 
         return TextParser.parse_float(value)
+
+    @staticmethod
+    def format_rounded(value, decimals=1):
+        """Округляет значение до указанного количества знаков"""
+        if value is None:
+            return u""
+        try:
+            return u"{:.{dec}f}".format(round(float(value), decimals), dec=decimals)
+        except (ValueError, TypeError):
+            return unicode(value)
 
 
 class LevelCylinderGenerator:
@@ -253,6 +307,7 @@ class AuditorEquipment:
 class EquipmentDataCache:
     def __init__(self):
         self._cache = {}
+        self._changes = []
 
     def collect_data(self, element, auditor_data):
         """Собирает данные в кэш. Запись в Revit произойдёт позже."""
@@ -268,23 +323,65 @@ class EquipmentDataCache:
                 self._cache[element.Id]["setting"] = auditor_data.setting
 
     def write_all(self):
-        """Пишет все данные в Revit — один раз для каждого элемента"""
+        """Записывает все данные из кэша в элементы Revit"""
         for item in self._cache.values():
             element = item["element"]
             data = item["data"]
             setting = item["setting"]
 
             if data.type_name == EQUIPMENT_TYPE_NAME:
-                real_power_watts = UnitConverter.to_watts(data.real_power)
-                len_millimeters = UnitConverter.from_meters(data.equipment_len)
-                element.SetParamValue('ADSK_Размер_Длина', len_millimeters)
-                element.SetParamValue('ADSK_Код изделия', data.code)
-                element.SetParamValue('ADSK_Тепловая мощность', real_power_watts)
-            # В любом случае, если есть настройка — записываем
+                # 1. Код изделия
+                old_code = str(element.GetParamValue('ADSK_Код изделия') or "")
+                new_code = str(data.code or "")
+                if old_code != new_code:
+                    element.SetParamValue('ADSK_Код изделия', new_code)
+                    self._changes.append({
+                        "element_id": element.Id,
+                        "param_name": "ADSK_Код изделия",
+                        "old_value": old_code,
+                        "new_value": new_code
+                    })
 
-            if setting:
-                element.SetParamValue('ADSK_Настройка', setting)
+                # 2. Длина - ИСПРАВЛЕНИЕ: записываем значение в мм
+                old_length = UnitConverter.to_millimeters(element.GetParamValue('ADSK_Размер_Длина') or 0)
+                new_length = data.equipment_len  # Уже в мм из Audytor
+                if abs(old_length - new_length) > EPSILON:
+                    # Конвертируем мм во внутренние единицы Revit перед записью
+                    element.SetParamValue('ADSK_Размер_Длина', UnitConverter.from_millimeters(new_length))
+                    self._changes.append({
+                        "element_id": element.Id,
+                        "param_name": "ADSK_Размер_Длина",
+                        "old_value": old_length,
+                        "new_value": new_length
+                    })
 
+                # 3. Мощность
+                old_power = element.GetParamValue('ADSK_Тепловая мощность') or 0
+                new_power = UnitConverter.to_watts(data.real_power)
+                if abs(old_power - new_power) > EPSILON:
+                    element.SetParamValue('ADSK_Тепловая мощность', new_power)
+                    self._changes.append({
+                        "element_id": element.Id,
+                        "param_name": "ADSK_Тепловая мощность",
+                        "old_value": old_power,
+                        "new_value": new_power
+                    })
+
+            # Обработка клапанов
+            if setting is not None:
+                old_setting = element.GetParamValue('ADSK_Настройка') or 0
+                if abs(old_setting - setting) > EPSILON:
+                    element.SetParamValue('ADSK_Настройка', setting)
+                    self._changes.append({
+                        "element_id": element.Id,
+                        "param_name": "ADSK_Настройка",
+                        "old_value": old_setting,
+                        "new_value": setting
+                    })
+
+    def get_changes(self):
+        """Возвращает список изменений"""
+        return self._changes
 
 class ReadingRulesForEquipment:
     '''
@@ -349,7 +446,7 @@ class AuditorFileParser:
             connection_type=data[rr.connection_type_index],
             rotated_coords=rotated_point,
             original_coords=original_point,
-            equipment_len=TextParser.parse_float(data[rr.equipment_len_index]),
+            equipment_len=TextParser.parse_float(data[rr.equipment_len_index])*1000,
             code=data[rr.code_index],
             real_power=TextParser.parse_float(data[rr.real_power_index]),
             nominal_power=TextParser.parse_float(data[rr.nominal_power_index]),
@@ -586,9 +683,7 @@ def process_start_up():
     return angle, filepath, audytor_version
 
 
-def process_audytor_revit_matching(auditor_equipment_list, revit_equipment_list):
-    data_cache = EquipmentDataCache()
-
+def process_audytor_revit_matching(auditor_equipment_list, revit_equipment_list, data_cache):
     for ayditor_equipment in auditor_equipment_list:
         equipment_in_area = [
             eq for eq in revit_equipment_list if ayditor_equipment.is_in_data_area(eq)
@@ -659,7 +754,35 @@ def script_execute(plugin_logger):
             ayditor_equipment.set_level_cylinder(level_cylinders)
 
         equipment = get_elements_by_family_name(BuiltInCategory.OST_MechanicalEquipment)
-        process_audytor_revit_matching(ayditror_equipment_elements, equipment)
+        data_cache = EquipmentDataCache()
+        process_audytor_revit_matching(ayditror_equipment_elements, equipment, data_cache)
+        changes = data_cache.get_changes()
 
+        # Если есть изменения - предлагаем сохранить отчет
+        if changes:
+            if forms.alert(u"Хотите сохранить отчет в формате CSV?",
+                           title=u"Создание отчета",
+                           ok=False, yes=True, no=True):
+                # Генерируем CSV содержимое
+                csv_content = CSVReportGenerator.generate_report(changes)
+
+                # Получаем путь для сохранения
+                save_path = forms.save_file(
+                    u"Сохранить отчет как...",
+                    u"CSV Files|*.csv",
+                    doc.PathName if doc.IsWorkshared else u"")
+
+                if save_path:
+                    try:
+                        # Сохраняем файл с BOM (для корректного открытия в Excel)
+                        with open(save_path, 'wb') as f:
+                            f.write(csv_content)
+
+                        forms.alert(u"Отчет успешно сохранен по пути: {}".format(save_path),
+                                    title=u"Отчет сохранен")
+                    except Exception as e:
+                        forms.alert(u"Ошибка при сохранении отчета: {}".format(unicode(e)),
+                                    title=u"Ошибка",
+                                    exitscript=True)
 
 script_execute()
