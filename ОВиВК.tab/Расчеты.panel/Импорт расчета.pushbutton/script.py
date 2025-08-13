@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 import sys
 import clr
-import csv
 
 clr.AddReference('ProtoGeometry')
 clr.AddReference("RevitNodes")
@@ -24,7 +23,6 @@ import System
 import JsonOperatorLib
 import DebugPlacerLib
 from System.Collections.Generic import *
-from System.IO import StreamWriter
 
 from Autodesk.Revit.DB import *
 from Autodesk.Revit.DB import InternalOrigin
@@ -199,7 +197,8 @@ class BasePointHelper:
     def get_base_point_z(cls, doc):
         if cls._base_point_z is None:
             base_point = cls.get_base_point(doc)
-            cls._base_point_z = base_point.GetParamValue(BuiltInParameter.BASEPOINT_ELEVATION_PARAM)
+            cls._base_point_z = (
+                base_point.GetParamValue(BuiltInParameter.BASEPOINT_ELEVATION_PARAM))
 
         return cls._base_point_z
 
@@ -268,12 +267,16 @@ class AuditorEquipment:
             UnitConverter.to_millimeters(revit_bb_center.Z)
         )
         radius = self.level_cylinder.radius
-        if ((abs(self.level_cylinder.z_min - revit_coords.Z) <= EPSILON or self.level_cylinder.z_min < revit_coords.Z)
+        if ((abs(self.level_cylinder.z_min - revit_coords.Z) <= EPSILON
+             or self.level_cylinder.z_min < revit_coords.Z)
                 and (abs(revit_coords.Z - self.level_cylinder.z_max) <= EPSILON
                      or revit_coords.Z < self.level_cylinder.z_max)):
-            distance_to_location_center = self.rotated_coords.DistanceTo(revit_coords)
-            distance_to_bb_center = self.rotated_coords.DistanceTo(revit_bb_coords)
-            distance = min(distance_to_bb_center, distance_to_location_center)
+            distance_to_location_center = (
+                self.rotated_coords.DistanceTo(revit_coords))
+            distance_to_bb_center = (
+                self.rotated_coords.DistanceTo(revit_bb_coords))
+            distance = (
+                min(distance_to_bb_center, distance_to_location_center))
 
             return distance <= radius
 
@@ -341,13 +344,13 @@ class EquipmentDataCache:
                         "old_value": old_code,
                         "new_value": new_code
                     })
-
-                # 2. Длина - ИСПРАВЛЕНИЕ: записываем значение в мм
-                old_length = UnitConverter.to_millimeters(element.GetParamValue('ADSK_Размер_Длина') or 0)
-                new_length = data.equipment_len  # Уже в мм из Audytor
+                # 2. Длина
+                old_length = (UnitConverter.to_millimeters
+                              (element.GetParamValue('ADSK_Размер_Длина') or 0))
+                new_length = data.equipment_len
                 if abs(old_length - new_length) > EPSILON:
-                    # Конвертируем мм во внутренние единицы Revit перед записью
-                    element.SetParamValue('ADSK_Размер_Длина', UnitConverter.from_millimeters(new_length))
+                    element.SetParamValue('ADSK_Размер_Длина',
+                                          UnitConverter.from_millimeters(new_length))
                     self._changes.append({
                         "element_id": element.Id,
                         "param_name": "ADSK_Размер_Длина",
@@ -446,7 +449,8 @@ class AuditorFileParser:
             connection_type=data[rr.connection_type_index],
             rotated_coords=rotated_point,
             original_coords=original_point,
-            equipment_len=TextParser.parse_float(data[rr.equipment_len_index])*1000,
+            equipment_len=TextParser.parse_float(
+                data[rr.equipment_len_index])*1000,
             code=data[rr.code_index],
             real_power=TextParser.parse_float(data[rr.real_power_index]),
             nominal_power=TextParser.parse_float(data[rr.nominal_power_index]),
@@ -483,9 +487,12 @@ class AuditorFileParser:
     @staticmethod
     def _parse_coordinates(data, x_idx, y_idx, z_idx, z_correction, angle):
         """Парсит и возвращает как оригинальные, так и повернутые координаты"""
-        x = UnitConverter.meters_to_millimeters(TextParser.parse_float(data[x_idx]))
-        y = UnitConverter.meters_to_millimeters(TextParser.parse_float(data[y_idx]))
-        z = UnitConverter.meters_to_millimeters(TextParser.parse_float(data[z_idx])) + z_correction
+        x = (UnitConverter.meters_to_millimeters
+             (TextParser.parse_float(data[x_idx])))
+        y = (UnitConverter.meters_to_millimeters
+             (TextParser.parse_float(data[y_idx])))
+        z = (UnitConverter.meters_to_millimeters
+             (TextParser.parse_float(data[z_idx])) + z_correction)
 
         # Получаем повернутые координаты
         original_point = XYZ(x, y, z)
@@ -496,6 +503,34 @@ class AuditorFileParser:
 
 
 class ReportGenerator:
+    @staticmethod
+    def generate_all_reports(changes, not_found_equip=None, overflow_data=None):
+        """Генерирует все типы отчетов"""
+        reports = {
+            'changes_report': ReportGenerator._generate_changes_report(changes),
+            'not_found_report': ReportGenerator._generate_not_found_report(
+                not_found_equip) if not_found_equip else None,
+            'overflow_report': ReportGenerator._generate_overflow_report
+            (overflow_data) if overflow_data else None
+        }
+        return reports
+
+    @staticmethod
+    def _generate_changes_report(changes):
+        """Генерация отчета об изменениях"""
+        csv_lines = [u"ID элемента;Имя параметра;Было;Стало"]
+        for change in changes:
+            line = u"{0};{1};{2};{3}".format(
+                change["element_id"],
+                change["param_name"],
+                ReportGenerator._format_value
+                (change["old_value"], change["param_name"]),
+                ReportGenerator._format_value
+                (change["new_value"], change["param_name"])
+            )
+            csv_lines.append(line)
+        return u"\n".join(csv_lines)
+
     @staticmethod
     def generate_area_overflow_report(auditor_equipment_list, revit_equipment_list):
         """
@@ -513,7 +548,8 @@ class ReportGenerator:
 
             if len(equipment_in_area) > 1:
                 for eq in equipment_in_area:
-                    equipment_to_areas[eq.Id].append(auditor_equipment.original_coords)
+                    (equipment_to_areas[eq.Id].append
+                     (auditor_equipment.original_coords))
         return equipment_to_areas
 
     @staticmethod
@@ -571,7 +607,13 @@ def calculate_z_correction(doc):
     return UnitConverter.to_millimeters(z_difference)
 
 
-def find_section(lines, title, start_offset, parse_func, z_correction, angle, audytor_version):
+def find_section(lines,
+                 title,
+                 start_offset,
+                 parse_func,
+                 z_correction,
+                 angle,
+                 audytor_version):
     result = []
     i = 0
     while i < len(lines):
@@ -579,7 +621,10 @@ def find_section(lines, title, start_offset, parse_func, z_correction, angle, au
             i += start_offset
 
             while i < len(lines) and lines[i].strip():
-                parsed_item = parse_func(lines[i], z_correction, angle, audytor_version)
+                parsed_item = parse_func(lines[i],
+                                         z_correction,
+                                         angle,
+                                         audytor_version)
 
                 if parsed_item is not None:
                     result.append(parsed_item)
@@ -683,10 +728,13 @@ def process_start_up():
     return angle, filepath, audytor_version
 
 
-def process_audytor_revit_matching(auditor_equipment_list, revit_equipment_list, data_cache):
+def process_audytor_revit_matching(auditor_equipment_list,
+                                   revit_equipment_list,
+                                   data_cache):
     for ayditor_equipment in auditor_equipment_list:
         equipment_in_area = [
-            eq for eq in revit_equipment_list if ayditor_equipment.is_in_data_area(eq)
+            eq for eq in revit_equipment_list
+            if ayditor_equipment.is_in_data_area(eq)
         ]
         ayditor_equipment.processed = len(equipment_in_area) >= 1
 
@@ -699,7 +747,8 @@ def process_audytor_revit_matching(auditor_equipment_list, revit_equipment_list,
         revit_equipment_list
     )
     ReportGenerator.print_area_overflow_report(overflow_data)
-    not_found_equipment = ReportGenerator.generate_not_found_report(auditor_equipment_list)
+    not_found_equipment = (ReportGenerator.generate_not_found_report
+                           (auditor_equipment_list))
     ReportGenerator.print_not_found_report(not_found_equipment)
 
     # Запись данных в Revit
@@ -732,7 +781,8 @@ def read_auditor_file(file_path, angle, audytor_version, doc):
     equipment.extend(valves)
 
     if not equipment:
-        forms.alert("Не найдено оборудование в импортируемом файле.", "Ошибка", exitscript=True)
+        forms.alert("Не найдено оборудование в импортируемом файле.",
+                    "Ошибка", exitscript=True)
 
     return equipment
 
@@ -745,17 +795,24 @@ if DEBUG_MODE:
 @log_plugin(EXEC_PARAMS.command_name)
 def script_execute(plugin_logger):
     angle, filepath, audytor_version = process_start_up()
-    ayditror_equipment_elements = read_auditor_file(filepath, angle, audytor_version, doc)
+    ayditror_equipment_elements = read_auditor_file(filepath,
+                                                    angle,
+                                                    audytor_version,
+                                                    doc)
     # собираем высоты цилиндров в которых будем искать данные
-    level_cylinders = LevelCylinderGenerator.create_cylinders(ayditror_equipment_elements)
+    level_cylinders = (LevelCylinderGenerator.
+                       create_cylinders(ayditror_equipment_elements))
 
     with revit.Transaction("BIM: Импорт приборов"):
         for ayditor_equipment in ayditror_equipment_elements:
             ayditor_equipment.set_level_cylinder(level_cylinders)
 
-        equipment = get_elements_by_family_name(BuiltInCategory.OST_MechanicalEquipment)
+        equipment = get_elements_by_family_name(
+            BuiltInCategory.OST_MechanicalEquipment)
         data_cache = EquipmentDataCache()
-        process_audytor_revit_matching(ayditror_equipment_elements, equipment, data_cache)
+        process_audytor_revit_matching(ayditror_equipment_elements,
+                                       equipment,
+                                       data_cache)
         changes = data_cache.get_changes()
 
         # Если есть изменения - предлагаем сохранить отчет
@@ -774,7 +831,6 @@ def script_execute(plugin_logger):
 
                 if save_path:
                     try:
-                        # Сохраняем файл с BOM (для корректного открытия в Excel)
                         with open(save_path, 'wb') as f:
                             f.write(csv_content)
 
