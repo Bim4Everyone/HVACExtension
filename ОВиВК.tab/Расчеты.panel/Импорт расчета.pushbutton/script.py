@@ -56,6 +56,44 @@ FAMILY_NAME_CONST = 'Обр_ОП_Универсальный'
 DEBUG_MODE = False
 EPSILON = 1e-9
 
+JSON_CONFIG = 'config.json'
+JSON_VERSION = 'version.json'
+
+
+class CSVReportGenerator(object):
+    @staticmethod
+    def generate_report(changes):
+        """Генерация отчета без столбца с единицами измерения"""
+        csv_lines = [u"ID элемента;Имя параметра;Было;Стало"]
+
+        for change in changes:
+            param_name = change["param_name"]
+
+            # Функция форматирования значений
+            def format_value(value, is_power=False):
+                if value is None:
+                    return u""
+                try:
+                    num = float(value)
+                    if is_power:
+                        # Для мощности конвертируем внутренние единицы Revit в ватты
+                        num = UnitUtils.ConvertFromInternalUnits(num, UnitTypeId.Watts)
+                    return u"{:.1f}".format(round(num, 1))
+                except (ValueError, TypeError):
+                    return unicode(value)
+
+            # Определяем тип параметра для специального форматирования
+            is_power = "Мощность" in param_name or "ADSK_Тепловая мощность" in param_name
+
+            line = u"{0};{1};{2};{3}".format(
+                unicode(change["element_id"]),
+                unicode(param_name),
+                format_value(change["old_value"], is_power),
+                format_value(change["new_value"], is_power)
+            )
+            csv_lines.append(line)
+
+        return u"\n".join(csv_lines).encode('utf-8-sig')
 
 class CylinderZ:
     def __init__(self, z_min, z_max):
@@ -90,6 +128,11 @@ class UnitConverter:
         """Конвертирует метры в миллиметры."""
         return UnitUtils.Convert(value, UnitTypeId.Meters, UnitTypeId.Millimeters)
 
+    @staticmethod
+    def from_millimeters(value):
+        """Конвертирует миллиметры во внутренние единицы Revit"""
+        return UnitUtils.ConvertToInternalUnits(value, UnitTypeId.Millimeters)
+
 
 class TextParser:
     @staticmethod
@@ -104,6 +147,16 @@ class TextParser:
             return 0
 
         return TextParser.parse_float(value)
+
+    @staticmethod
+    def format_rounded(value, decimals=1):
+        """Округляет значение до указанного количества знаков"""
+        if value is None:
+            return u""
+        try:
+            return u"{:.{dec}f}".format(round(float(value), decimals), dec=decimals)
+        except (ValueError, TypeError):
+            return unicode(value)
 
 
 class LevelCylinderGenerator:
@@ -144,7 +197,8 @@ class BasePointHelper:
     def get_base_point_z(cls, doc):
         if cls._base_point_z is None:
             base_point = cls.get_base_point(doc)
-            cls._base_point_z = base_point.GetParamValue(BuiltInParameter.BASEPOINT_ELEVATION_PARAM)
+            cls._base_point_z = (
+                base_point.GetParamValue(BuiltInParameter.BASEPOINT_ELEVATION_PARAM))
 
         return cls._base_point_z
 
@@ -213,12 +267,17 @@ class AuditorEquipment:
             UnitConverter.to_millimeters(revit_bb_center.Z)
         )
         radius = self.level_cylinder.radius
-        if ((abs(self.level_cylinder.z_min - revit_coords.Z) <= EPSILON or self.level_cylinder.z_min < revit_coords.Z)
+
+        if ((abs(self.level_cylinder.z_min - revit_coords.Z) <= EPSILON
+             or self.level_cylinder.z_min < revit_coords.Z)
                 and (abs(revit_coords.Z - self.level_cylinder.z_max) <= EPSILON
                      or revit_coords.Z < self.level_cylinder.z_max)):
-            distance_to_location_center = self.rotated_coords.DistanceTo(revit_coords)
-            distance_to_bb_center = self.rotated_coords.DistanceTo(revit_bb_coords)
-            distance = min(distance_to_bb_center, distance_to_location_center)
+            distance_to_location_center = (
+                self.rotated_coords.DistanceTo(revit_coords))
+            distance_to_bb_center = (
+                self.rotated_coords.DistanceTo(revit_bb_coords))
+            distance = (
+                min(distance_to_bb_center, distance_to_location_center))
 
             return distance <= radius
 
@@ -252,6 +311,7 @@ class AuditorEquipment:
 class EquipmentDataCache:
     def __init__(self):
         self._cache = {}
+        self._changes = []
 
     def collect_data(self, element, auditor_data):
         """Собирает данные в кэш. Запись в Revit произойдёт позже."""
@@ -267,28 +327,91 @@ class EquipmentDataCache:
                 self._cache[element.Id]["setting"] = auditor_data.setting
 
     def write_all(self):
-        """Пишет все данные в Revit — один раз для каждого элемента"""
+        """Записывает все данные из кэша в элементы Revit"""
+
         for item in self._cache.values():
             element = item["element"]
             data = item["data"]
             setting = item["setting"]
 
             if data.type_name == EQUIPMENT_TYPE_NAME:
-                real_power_watts = UnitConverter.to_watts(data.real_power)
-                len_millimeters = UnitConverter.from_meters(data.equipment_len)
-                element.SetParamValue('ADSK_Размер_Длина', len_millimeters)
-                element.SetParamValue('ADSK_Код изделия', data.code)
-                element.SetParamValue('ADSK_Тепловая мощность', real_power_watts)
-            # В любом случае, если есть настройка — записываем
+                # 1. Код изделия
+                old_code = str(element.GetParamValue('ADSK_Код изделия') or "")
+                new_code = str(data.code or "")
+                if old_code != new_code:
+                    element.SetParamValue('ADSK_Код изделия', new_code)
+                    self._changes.append({
+                        "element_id": element.Id,
+                        "param_name": "ADSK_Код изделия",
+                        "old_value": old_code,
+                        "new_value": new_code
+                    })
+                # 2. Длина
+                old_length = (UnitConverter.to_millimeters
+                              (element.GetParamValue('ADSK_Размер_Длина') or 0))
+                new_length = data.equipment_len
+                if abs(old_length - new_length) > EPSILON:
+                    element.SetParamValue('ADSK_Размер_Длина',
+                                          UnitConverter.from_millimeters(new_length))
+                    self._changes.append({
+                        "element_id": element.Id,
+                        "param_name": "ADSK_Размер_Длина",
+                        "old_value": old_length,
+                        "new_value": new_length
+                    })
 
-            if setting:
-                element.SetParamValue('ADSK_Настройка', setting)
+                # 3. Мощность
+                old_power = element.GetParamValue('ADSK_Тепловая мощность') or 0
+                new_power = UnitConverter.to_watts(data.real_power)
+                if abs(old_power - new_power) > EPSILON:
+                    element.SetParamValue('ADSK_Тепловая мощность', new_power)
+                    self._changes.append({
+                        "element_id": element.Id,
+                        "param_name": "ADSK_Тепловая мощность",
+                        "old_value": old_power,
+                        "new_value": new_power
+                    })
+
+            # Обработка клапанов
+            if setting is not None:
+                old_setting = element.GetParamValue('ADSK_Настройка') or 0
+                if abs(old_setting - setting) > EPSILON:
+                    element.SetParamValue('ADSK_Настройка', setting)
+                    self._changes.append({
+                        "element_id": element.Id,
+                        "param_name": "ADSK_Настройка",
+                        "old_value": old_setting,
+                        "new_value": setting
+                    })
+
+    def get_changes(self):
+        """Возвращает список изменений"""
+        return self._changes
+        real_power_watts = UnitConverter.to_watts(data.real_power)
+        len_millimeters = UnitConverter.from_meters(data.equipment_len)
+        element.SetParamValue('ADSK_Размер_Длина', len_millimeters)
+        element.SetParamValue('ADSK_Код изделия', data.code)
+        element.SetParamValue('ADSK_Тепловая мощность', real_power_watts)
+
+        # В любом случае, если есть настройка — записываем
+        if setting:
+            element.SetParamValue('ADSK_Настройка', setting)
 
 
 class ReadingRulesForEquipment:
     '''
     Класс используется для интерпретиции данных по Приборам
     '''
+    def __init__(self, audytor_version):
+        self.audytor_version = audytor_version
+
+    @staticmethod
+    def versioning_setting(audytor_version):
+        versioning_setting_index = 28
+        if audytor_version == "Audytor SET 7.3":
+            versioning_setting_index = 29
+        return versioning_setting_index
+
     connection_type_index = 2
     x_index = 3
     y_index = 4
@@ -297,7 +420,11 @@ class ReadingRulesForEquipment:
     code_index = 16
     real_power_index = 20
     nominal_power_index = 22
-    setting_index = 28
+
+    @property
+    def setting_index(self):
+        return self.versioning_setting(self.audytor_version)
+
     maker_index = 30
     full_name_index = 31
 
@@ -317,9 +444,10 @@ class ReadingRulesForValve:
 class AuditorFileParser:
     """Отвечает только за парсинг строк файла в объекты"""
     @staticmethod
-    def parse_heating_device(line, z_correction, angle):
+    def parse_heating_device(line, z_correction, angle, audytor_version):
         data = line.strip().split(';')
-        rr = ReadingRulesForEquipment()
+        rr = ReadingRulesForEquipment(audytor_version)
+
         # Получаем оба набора координат
         original_point, rotated_point = AuditorFileParser._parse_coordinates(
             data=data,
@@ -333,7 +461,8 @@ class AuditorFileParser:
             connection_type=data[rr.connection_type_index],
             rotated_coords=rotated_point,
             original_coords=original_point,
-            equipment_len=TextParser.parse_float(data[rr.equipment_len_index]),
+            equipment_len=TextParser.parse_float(
+                data[rr.equipment_len_index])*1000,
             code=data[rr.code_index],
             real_power=TextParser.parse_float(data[rr.real_power_index]),
             nominal_power=TextParser.parse_float(data[rr.nominal_power_index]),
@@ -344,7 +473,7 @@ class AuditorFileParser:
         )
 
     @staticmethod
-    def parse_valve(line, z_correction, angle):
+    def parse_valve(line, z_correction, angle, audytor_version):
         data = line.strip().split(';')
         rr = ReadingRulesForValve()
 
@@ -370,9 +499,12 @@ class AuditorFileParser:
     @staticmethod
     def _parse_coordinates(data, x_idx, y_idx, z_idx, z_correction, angle):
         """Парсит и возвращает как оригинальные, так и повернутые координаты"""
-        x = UnitConverter.meters_to_millimeters(TextParser.parse_float(data[x_idx]))
-        y = UnitConverter.meters_to_millimeters(TextParser.parse_float(data[y_idx]))
-        z = UnitConverter.meters_to_millimeters(TextParser.parse_float(data[z_idx])) + z_correction
+        x = (UnitConverter.meters_to_millimeters
+             (TextParser.parse_float(data[x_idx])))
+        y = (UnitConverter.meters_to_millimeters
+             (TextParser.parse_float(data[y_idx])))
+        z = (UnitConverter.meters_to_millimeters
+             (TextParser.parse_float(data[z_idx])) + z_correction)
 
         # Получаем повернутые координаты
         original_point = XYZ(x, y, z)
@@ -384,6 +516,35 @@ class AuditorFileParser:
 
 class ReportGenerator:
     @staticmethod
+    def generate_all_reports(changes, not_found_equip=None, overflow_data=None):
+        """Генерирует все типы отчетов"""
+        reports = {
+            'changes_report': ReportGenerator._generate_changes_report(changes),
+            'not_found_report': ReportGenerator._generate_not_found_report(
+                not_found_equip) if not_found_equip else None,
+            'overflow_report': ReportGenerator._generate_overflow_report
+            (overflow_data) if overflow_data else None
+        }
+        return reports
+
+    @staticmethod
+    def _generate_changes_report(changes):
+        """Генерация отчета об изменениях"""
+        csv_lines = [u"ID элемента;Имя параметра;Было;Стало"]
+        for change in changes:
+            line = u"{0};{1};{2};{3}".format(
+                change["element_id"],
+                change["param_name"],
+                ReportGenerator._format_value
+                (change["old_value"], change["param_name"]),
+                ReportGenerator._format_value
+                (change["new_value"], change["param_name"])
+            )
+            csv_lines.append(line)
+        return u"\n".join(csv_lines)
+
+    @staticmethod
+
     def generate_area_overflow_report(auditor_equipment_list, revit_equipment_list):
         """
         Анализирует и возвращает данные о перекрытии областей оборудования
@@ -458,7 +619,13 @@ def calculate_z_correction(doc):
     return UnitConverter.to_millimeters(z_difference)
 
 
-def find_section(lines, title, start_offset, parse_func, z_correction, angle):
+def find_section(lines,
+                 title,
+                 start_offset,
+                 parse_func,
+                 z_correction,
+                 angle,
+                 audytor_version):
     result = []
     i = 0
     while i < len(lines):
@@ -466,14 +633,16 @@ def find_section(lines, title, start_offset, parse_func, z_correction, angle):
             i += start_offset
 
             while i < len(lines) and lines[i].strip():
-                parsed_item = parse_func(lines[i], z_correction, angle)
+                parsed_item = parse_func(lines[i],
+                                         z_correction,
+                                         angle,
+                                         audytor_version)
 
                 if parsed_item is not None:
                     result.append(parsed_item)
                 i += 1
         i += 1
     return result
-
 
 def get_bb_center(revit_bb):
     '''
@@ -536,7 +705,9 @@ def process_start_up():
     operator = JsonOperatorLib.JsonAngleOperator(doc, uiapp)
 
     # Получаем данные из последнего по дате редактирования файла
-    old_angle = operator.get_json_data()
+
+    old_angle = operator.get_json_data(JSON_CONFIG)
+    old_version = operator.get_json_data(JSON_VERSION)
 
     angle = forms.ask_for_string(
         default=str(old_angle),
@@ -556,16 +727,26 @@ def process_start_up():
     if angle is None:
         sys.exit()
 
-    operator.send_json_data(angle)
-    return angle, filepath
+    operator.send_json_data(angle, JSON_CONFIG)
+
+    audytor_version = forms.ask_for_one_item(
+        ['Audytor SET 7.2', 'Audytor SET 7.3'],
+        default= old_version,
+        prompt='Выберите версию Аудитора',
+        title='Импорт расчетов'
+    )
+    operator.send_json_data(audytor_version, JSON_VERSION)
+
+    return angle, filepath, audytor_version
 
 
-def process_audytor_revit_matching(auditor_equipment_list, revit_equipment_list):
-    data_cache = EquipmentDataCache()
-
+def process_audytor_revit_matching(auditor_equipment_list,
+                                   revit_equipment_list,
+                                   data_cache):
     for ayditor_equipment in auditor_equipment_list:
         equipment_in_area = [
-            eq for eq in revit_equipment_list if ayditor_equipment.is_in_data_area(eq)
+            eq for eq in revit_equipment_list
+            if ayditor_equipment.is_in_data_area(eq)
         ]
         ayditor_equipment.processed = len(equipment_in_area) >= 1
 
@@ -578,14 +759,15 @@ def process_audytor_revit_matching(auditor_equipment_list, revit_equipment_list)
         revit_equipment_list
     )
     ReportGenerator.print_area_overflow_report(overflow_data)
-    not_found_equipment = ReportGenerator.generate_not_found_report(auditor_equipment_list)
+    not_found_equipment = (ReportGenerator.generate_not_found_report
+                           (auditor_equipment_list))
     ReportGenerator.print_not_found_report(not_found_equipment)
 
     # Запись данных в Revit
     data_cache.write_all()
 
 
-def read_auditor_file(file_path, angle, doc):
+def read_auditor_file(file_path, angle, audytor_version, doc):
     with codecs.open(file_path, 'r', encoding='utf-8') as file:
         lines = file.readlines()
 
@@ -596,7 +778,8 @@ def read_auditor_file(file_path, angle, doc):
         3,
         AuditorFileParser.parse_heating_device,
         z_correction,
-        angle
+        angle,
+        audytor_version
     )
     valves = find_section(
         lines,
@@ -604,12 +787,14 @@ def read_auditor_file(file_path, angle, doc):
         3,
         AuditorFileParser.parse_valve,
         z_correction,
-        angle
+        angle,
+        audytor_version
     )
     equipment.extend(valves)
 
     if not equipment:
-        forms.alert("Не найдено оборудование в импортируемом файле.", "Ошибка", exitscript=True)
+        forms.alert("Не найдено оборудование в импортируемом файле.",
+                    "Ошибка", exitscript=True)
 
     return equipment
 
@@ -617,21 +802,54 @@ def read_auditor_file(file_path, angle, doc):
 if DEBUG_MODE:
     debug_placer = DebugPlacerLib.DebugPlacer(doc, diameter=2000)
 
-
 @notification()
 @log_plugin(EXEC_PARAMS.command_name)
 def script_execute(plugin_logger):
-    angle, filepath = process_start_up()
-    ayditror_equipment_elements = read_auditor_file(filepath, angle, doc)
+    angle, filepath, audytor_version = process_start_up()
+    ayditror_equipment_elements = read_auditor_file(filepath,
+                                                    angle,
+                                                    audytor_version,
+                                                    doc)
     # собираем высоты цилиндров в которых будем искать данные
-    level_cylinders = LevelCylinderGenerator.create_cylinders(ayditror_equipment_elements)
+    level_cylinders = (LevelCylinderGenerator.
+                       create_cylinders(ayditror_equipment_elements))
 
     with revit.Transaction("BIM: Импорт приборов"):
         for ayditor_equipment in ayditror_equipment_elements:
             ayditor_equipment.set_level_cylinder(level_cylinders)
 
-        equipment = get_elements_by_family_name(BuiltInCategory.OST_MechanicalEquipment)
-        process_audytor_revit_matching(ayditror_equipment_elements, equipment)
+        equipment = get_elements_by_family_name(
+            BuiltInCategory.OST_MechanicalEquipment)
+        data_cache = EquipmentDataCache()
+        process_audytor_revit_matching(ayditror_equipment_elements,
+                                       equipment,
+                                       data_cache)
+        changes = data_cache.get_changes()
 
+        # Если есть изменения - предлагаем сохранить отчет
+        if changes:
+            if forms.alert(u"Хотите сохранить отчет в формате CSV?",
+                           title=u"Создание отчета",
+                           ok=False, yes=True, no=True):
+                # Генерируем CSV содержимое
+                csv_content = CSVReportGenerator.generate_report(changes)
+
+                # Получаем путь для сохранения
+                save_path = forms.save_file(
+                    u"Сохранить отчет как...",
+                    u"CSV Files|*.csv",
+                    doc.PathName if doc.IsWorkshared else u"")
+
+                if save_path:
+                    try:
+                        with open(save_path, 'wb') as f:
+                            f.write(csv_content)
+
+                        forms.alert(u"Отчет успешно сохранен по пути: {}".format(save_path),
+                                    title=u"Отчет сохранен")
+                    except Exception as e:
+                        forms.alert(u"Ошибка при сохранении отчета: {}".format(unicode(e)),
+                                    title=u"Ошибка",
+                                    exitscript=True)
 
 script_execute()
