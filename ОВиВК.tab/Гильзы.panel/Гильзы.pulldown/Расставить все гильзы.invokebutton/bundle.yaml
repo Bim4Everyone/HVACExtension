@@ -1,0 +1,38 @@
+title:
+  ru: Расставить все гильзы
+  en_us: Place all sleeves
+
+tooltip:
+  ru: >-
+    Расстановка всех гильз с заданными настройками.
+    
+    
+    Для запуска плагина необходимо, чтобы активный документ и все связанные документы удовлетворяли требованиям к именованию файлов моделей BIM-стандарта.
+    Также необходимо наличие в активном документе семейства для гильз:
+
+    ТрСд_Авт_Гильза
+    
+    
+    1. Открыть документ и запустить плагин.
+
+  en_us: >-
+    Places all sleeves with configured settings.
+    
+    
+    Before you start the plugin, make sure your active document and all linked documents satisfy all naming rules of BIM-standard.
+    Also make sure you have required family in active document:
+    
+    ТрСд_Авт_Гильза
+    
+    
+    1. Open document and start the plugin.
+
+assembly: RevitSleeves.dll
+command_class: PlaceAllSleevesCommand
+
+is_beta: true
+
+author: vlastroG
+
+min_revit_version: 2022
+max_revit_version: 2024
