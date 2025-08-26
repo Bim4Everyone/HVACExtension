@@ -10,7 +10,7 @@ tooltip:
     Для запуска плагина необходимо, чтобы активный документ и все связанные документы удовлетворяли требованиям к именованию файлов моделей BIM-стандарта.
     Также необходимо наличие в активном документе семейства для гильз:
 
-    ТрСд_Авт_Гильза
+    АрмТр_Авт_Гильза
 
 
     1. Открыть документ и запустить плагин.
@@ -25,7 +25,7 @@ tooltip:
     Before you start the plugin, make sure your active document and all linked documents satisfy all naming rules of BIM-standard.
     Also make sure you have required family in active document:
     
-    ТрСд_Авт_Гильза
+    АрмТр_Авт_Гильза
 
 
     1. Open document and start the plugin.
