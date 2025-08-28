@@ -53,11 +53,49 @@ EQUIPMENT_TYPE_NAME = "Оборудование"
 VALVE_TYPE_NAME = "Клапан"
 OUTER_VALVE_NAME = "ZAWTERM"
 FAMILY_NAME_CONST = 'Обр_ОП_Универсальный'
+AUDYTOR_V72 = "Audytor SET 7.2"
+AUDYTOR_V73 = "Audytor SET 7.3"
 DEBUG_MODE = False
 EPSILON = 1e-9
 
 JSON_CONFIG = 'config.json'
 JSON_VERSION = 'version.json'
+
+class RevitParamNames:
+    """Класс для хранения имен параметров Revit, используемых в скрипте"""
+    CODE = 'ADSK_Код изделия'
+    LENGHT = 'ADSK_Размер_Длина'
+    POWER = 'ADSK_Тепловая мощность'
+    SETTING = 'ADSK_Настройка'
+
+class AudytorReadingRules:
+    """Класс для хранения правил чтения данных из результата расчета Audytor
+    Содержит индексы столбцов и пояснения к ним"""
+
+    #Общие правила для оборудования клапанов
+    EQ_CONNECTION_TYPE = 2
+    X_COORD = 3
+    Y_COORD = 4
+    Z_COORD = 5
+
+    #Правила специфичные для оборудования
+    EQUIPMENT_LENGHT = 12
+    CODE = 16
+    REAL_POWER = 20
+    NOMINAL_POWER = 22
+
+    # Настройка имеет разный индекс в разных версиях Audytor
+    # Выбор индекса реализован через метод versioning_setting()
+    SETTING_7_2 = 28       # Индекс столбца с настройкой для Audytor SET 7.2
+    SETTING_7_3 = 29       # Индекс столбца с настройкой для Audytor SET 7.3
+
+    MAKER = 30  # Индекс столбца с производителем
+    FULL_NAME = 31  # Индекс столбца с полным наименованием
+
+    # Правила специфичные для КЛАПАНОВ
+    VALVE_TYPE = 1 # Индекс стобца с типом клапана
+    VALVE_MAKER = 2  # Индекс столбца с производителем клапана
+    VALVE_SETTING = 17  # Индекс столбца с настройкой клапана
 
 
 class CSVReportGenerator(object):
@@ -83,7 +121,7 @@ class CSVReportGenerator(object):
                     return unicode(value)
 
             # Определяем тип параметра для специального форматирования
-            is_power = "Мощность" in param_name or "ADSK_Тепловая мощность" in param_name
+            is_power = RevitParamNames.POWER in param_name
 
             line = u"{0};{1};{2};{3}".format(
                 unicode(change["element_id"]),
@@ -336,50 +374,50 @@ class EquipmentDataCache:
 
             if data.type_name == EQUIPMENT_TYPE_NAME:
                 # 1. Код изделия
-                old_code = str(element.GetParamValue('ADSK_Код изделия') or "")
+                old_code = str(element.GetParamValue(RevitParamNames.CODE) or "")
                 new_code = str(data.code or "")
                 if old_code != new_code:
-                    element.SetParamValue('ADSK_Код изделия', new_code)
+                    element.SetParamValue(RevitParamNames.CODE, new_code)
                     self._changes.append({
                         "element_id": element.Id,
-                        "param_name": "ADSK_Код изделия",
+                        "param_name": RevitParamNames.CODE,
                         "old_value": old_code,
                         "new_value": new_code
                     })
                 # 2. Длина
                 old_length = (UnitConverter.to_millimeters
-                              (element.GetParamValue('ADSK_Размер_Длина') or 0))
+                              (element.GetParamValue(RevitParamNames.LENGHT) or 0))
                 new_length = data.equipment_len
                 if abs(old_length - new_length) > EPSILON:
-                    element.SetParamValue('ADSK_Размер_Длина',
+                    element.SetParamValue(RevitParamNames.LENGHT,
                                           UnitConverter.from_millimeters(new_length))
                     self._changes.append({
                         "element_id": element.Id,
-                        "param_name": "ADSK_Размер_Длина",
+                        "param_name": RevitParamNames.LENGHT,
                         "old_value": old_length,
                         "new_value": new_length
                     })
 
                 # 3. Мощность
-                old_power = element.GetParamValue('ADSK_Тепловая мощность') or 0
+                old_power = element.GetParamValue(RevitParamNames.POWER) or 0
                 new_power = UnitConverter.to_watts(data.real_power)
                 if abs(old_power - new_power) > EPSILON:
-                    element.SetParamValue('ADSK_Тепловая мощность', new_power)
+                    element.SetParamValue(RevitParamNames.POWER, new_power)
                     self._changes.append({
                         "element_id": element.Id,
-                        "param_name": "ADSK_Тепловая мощность",
+                        "param_name": RevitParamNames.POWER,
                         "old_value": old_power,
                         "new_value": new_power
                     })
 
             # Обработка клапанов
             if setting is not None:
-                old_setting = element.GetParamValue('ADSK_Настройка') or 0
+                old_setting = element.GetParamValue(RevitParamNames.SETTING) or 0
                 if abs(old_setting - setting) > EPSILON:
-                    element.SetParamValue('ADSK_Настройка', setting)
+                    element.SetParamValue(RevitParamNames.SETTING, setting)
                     self._changes.append({
                         "element_id": element.Id,
-                        "param_name": "ADSK_Настройка",
+                        "param_name": RevitParamNames.SETTING,
                         "old_value": old_setting,
                         "new_value": setting
                     })
@@ -389,13 +427,13 @@ class EquipmentDataCache:
         return self._changes
         real_power_watts = UnitConverter.to_watts(data.real_power)
         len_millimeters = UnitConverter.from_meters(data.equipment_len)
-        element.SetParamValue('ADSK_Размер_Длина', len_millimeters)
-        element.SetParamValue('ADSK_Код изделия', data.code)
-        element.SetParamValue('ADSK_Тепловая мощность', real_power_watts)
+        element.SetParamValue(RevitParamNames.LENGHT, len_millimeters)
+        element.SetParamValue(RevitParamNames.CODE, data.code)
+        element.SetParamValue(RevitParamNames.POWER, real_power_watts)
 
         # В любом случае, если есть настройка — записываем
         if setting:
-            element.SetParamValue('ADSK_Настройка', setting)
+            element.SetParamValue(RevitParamNames.SETTING, setting)
 
 
 class ReadingRulesForEquipment:
@@ -405,40 +443,39 @@ class ReadingRulesForEquipment:
     def __init__(self, audytor_version):
         self.audytor_version = audytor_version
 
-    @staticmethod
-    def versioning_setting(audytor_version):
-        versioning_setting_index = 28
-        if audytor_version == "Audytor SET 7.3":
-            versioning_setting_index = 29
+    def versioning_setting(self):
+        versioning_setting_index = AudytorReadingRules.SETTING_7_2
+        if self.audytor_version == AUDYTOR_V73:
+            versioning_setting_index = AudytorReadingRules.SETTING_7_3
         return versioning_setting_index
 
-    connection_type_index = 2
-    x_index = 3
-    y_index = 4
-    z_index = 5
-    equipment_len_index = 12
-    code_index = 16
-    real_power_index = 20
-    nominal_power_index = 22
+    connection_type_index = AudytorReadingRules.EQ_CONNECTION_TYPE
+    x_index = AudytorReadingRules.X_COORD
+    y_index = AudytorReadingRules.Y_COORD
+    z_index = AudytorReadingRules.Z_COORD
+    equipment_len_index = AudytorReadingRules.EQUIPMENT_LENGHT
+    code_index = AudytorReadingRules.CODE
+    real_power_index = AudytorReadingRules.REAL_POWER
+    nominal_power_index = AudytorReadingRules.NOMINAL_POWER
 
     @property
     def setting_index(self):
-        return self.versioning_setting(self.audytor_version)
+        return self.versioning_setting()
 
-    maker_index = 30
-    full_name_index = 31
+    maker_index =  AudytorReadingRules.MAKER
+    full_name_index =  AudytorReadingRules.FULL_NAME
 
 
 class ReadingRulesForValve:
     '''
     Класс используется для интерпретиции данных по Клапанам
     '''
-    connection_type_index = 1
-    maker_index = 2
-    x_index = 3
-    y_index = 4
-    z_index = 5
-    setting_index = 17
+    connection_type_index = AudytorReadingRules.VALVE_TYPE
+    maker_index = AudytorReadingRules.VALVE_MAKER
+    x_index = AudytorReadingRules.X_COORD
+    y_index = AudytorReadingRules.Y_COORD
+    z_index = AudytorReadingRules.Z_COORD
+    setting_index = AudytorReadingRules.VALVE_SETTING
 
 
 class AuditorFileParser:
@@ -730,7 +767,7 @@ def process_start_up():
     operator.send_json_data(angle, JSON_CONFIG)
 
     audytor_version = forms.ask_for_one_item(
-        ['Audytor SET 7.2', 'Audytor SET 7.3'],
+        [AUDYTOR_V72, AUDYTOR_V73],
         default= old_version,
         prompt='Выберите версию Аудитора',
         title='Импорт расчетов'
