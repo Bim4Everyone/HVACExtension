@@ -183,11 +183,11 @@ def change_level(element, new_level, new_offset, offset_param, height_param):
     return element
 
 def get_selected_mode():
-    method = forms.SelectFromList.show(["Все элементы на активном виде к ближайшим уровням",
-                                        "Все элементы на активном виде к выбранному уровню",
-                                        "Выбранные элементы к выбранному уровню"],
-                                       title="Выберите метод привязки",
-                                       button_name="Применить")
+    method = forms.alert("Выберите метод привязки",
+                      options=["Все элементы на активном виде к ближайшим уровням",
+                               "Все элементы на активном виде к выбранному уровню",
+                               "Выбранные элементы к выбранному уровню"])
+
     if method is None:
         forms.alert("Метод не выбран", "Ошибка", exitscript=True)
     return method
@@ -203,6 +203,8 @@ def get_selected_level(method):
 
         for levelEl in levelCol:
             levels.append(levelEl.Name)
+
+        levels.sort()
 
         level_name = forms.SelectFromList.show(levels,
                                                title="Выберите уровень",
