@@ -123,10 +123,18 @@ def script_execute(plugin_logger):
         if system is None:
             system = unmodeling_factory.OUT_OF_SYSTEM_VALUE
 
-        try:
-            number = float(number)
-        except ValueError:
-            error = "Значение количества в строке '{}' не является числом.".format(row)
+        if number is None:
+            error = "В строке '{}' нет значения количества.".format(row)
+            forms.alert(error, "Ошибка", exitscript=True)
+        else:
+            try:
+                number = float(number)
+            except ValueError:
+                error = "Значение количества в строке '{}' не является числом.".format(row)
+                forms.alert(error, "Ошибка", exitscript=True)
+
+        if type(mass) is not str and mass is not None:
+            error = "Значение массы в строке '{}' не является текстом.".format(row)
             forms.alert(
                 error,
                 "Ошибка",
