@@ -30,7 +30,6 @@ tooltip:
 assembly: RevitSleeves.dll
 command_class: UpdateSleevesCommand
 
-is_beta: true
 
 author: vlastroG
 

@@ -37,7 +37,6 @@ tooltip:
 assembly: RevitSleeves.dll
 command_class: PlaceSelectedSleevesCommand
 
-is_beta: true
 
 author: vlastroG
 

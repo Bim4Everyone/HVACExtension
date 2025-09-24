@@ -30,7 +30,6 @@ tooltip:
 assembly: RevitSleeves.dll
 command_class: PlaceAllSleevesCommand
 
-is_beta: true
 
 author: vlastroG
 

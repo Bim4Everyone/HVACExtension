@@ -23,7 +23,6 @@ tooltip:
 assembly: RevitSleeves.dll
 command_class: ShowNavigatorCommand
 
-is_beta: true
 
 author: vlastroG
 

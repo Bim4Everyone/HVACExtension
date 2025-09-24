@@ -25,7 +25,6 @@ tooltip:
 assembly: RevitSleeves.dll
 command_class: SleevesSettingsCommand
 
-is_beta: true
 
 author: vlastroG
 
