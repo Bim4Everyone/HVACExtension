@@ -188,9 +188,8 @@ def get_selected_mode():
                                "Все элементы на активном виде к выбранному уровню",
                                "Выбранные элементы к выбранному уровню"])
 
-    if method is None:
-        forms.alert("Метод не выбран", "Ошибка", exitscript=True)
-    return method
+    if method is False:
+        sys.exit()
 
 def get_selected_level(method):
     """ Возвращаем выбранный уровень или False, если режим работы не подразумевает такого """
