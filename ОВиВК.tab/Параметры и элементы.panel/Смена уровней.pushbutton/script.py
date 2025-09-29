@@ -189,7 +189,7 @@ def get_selected_mode():
                                "Выбранные элементы к выбранному уровню"])
 
     if method is False:
-        sys.exit()
+        script.exit()
 
 def get_selected_level(method):
     """ Возвращаем выбранный уровень или False, если режим работы не подразумевает такого """
