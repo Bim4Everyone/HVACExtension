@@ -191,6 +191,8 @@ def get_selected_mode():
     if method is False:
         script.exit()
 
+    return method
+
 def get_selected_level(method):
     """ Возвращаем выбранный уровень или False, если режим работы не подразумевает такого """
     if method != 'Все элементы на активном виде к ближайшим уровням':
