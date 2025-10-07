@@ -954,6 +954,16 @@ class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCal
 
         """
 
+        def is_open_end_exists(last_section_ids):
+            """ Проверяем существует ли открытый коннектор воздуховода на последней секции """
+            for last_element_id in last_section_ids:
+                el = self.doc.GetElement(last_element_id)
+                if el.Category.IsId(BuiltInCategory.OST_DuctCurves):
+                    if any(not conn.IsConnected for conn in self.get_connectors(el)):
+                        return True
+            return False
+
+
         element_id = terminal.Id
 
         terminal_critical = False
@@ -972,7 +982,6 @@ class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCal
 
         local_coefficient = terminal.GetParamValueOrDefault(SharedParamsConfig.Instance.VISLocalResistanceCoef, 0.0)
 
-
         connector_element = self.get_connectors(terminal)[0]
 
         # Если терминал на первом участке или не является
@@ -982,8 +991,9 @@ class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCal
             self.element_names[terminal.Id] =  self.START_TERMINAL_NAME
             return local_coefficient
 
-        # Если терминал на последнем участке - это выбор или забор, а не боковое отверстие
-        if element_id in last_elements_ids:
+        # Если терминал на последнем участке и не существует открытого конца - это выброс
+        # или забор, а не боковое отверстие
+        if element_id in last_elements_ids and not is_open_end_exists(last_elements_ids):
             # элемент есть в последнем сечении
             if self.system_is_supply:
                 name = self.END_TERMINAL_NAME_SUPPLY
