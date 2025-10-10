@@ -1,0 +1,15 @@
+title:
+  ru: "Абсолютная\nотметка"
+  en_us: "Absolute\nelevation"
+
+tooltip:
+  ru: Обновляет абсолютную отметку трубопроводов и воздуховодов в соответствующих общих параметрах.
+
+  en_us: Updates the absolute elevation of pipes and ducts in the corresponding shared parameters.
+
+
+author: Redomine
+
+min_revit_version: 2022
+max_revit_version: 2024
+
