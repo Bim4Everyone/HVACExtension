@@ -28,6 +28,14 @@ from pyrevit import EXEC_PARAMS
 doc = __revit__.ActiveUIDocument.Document  # type: Document
 view = doc.ActiveView
 
+
+class AttitudeParametersSet:
+    absolute_mid = 0
+    absolute_bot = 0
+    level_elevation = 0
+    from_level_offset = 0
+
+
 class EditorReport:
     def __init__(self, doc):
         self.doc = doc
@@ -67,17 +75,46 @@ class EditorReport:
             message += self.edited_report
             forms.alert(message, "Ошибка")
 
+
 def setup_params():
     """Настраивает параметры проекта."""
     revit_params = [mark_bottom_to_zero_param, mark_axis_to_zero_param]
     project_parameters = ProjectParameters.Create(doc.Application)
     project_parameters.SetupRevitParams(doc, revit_params)
 
+
+def sort_parameters_to_group():
+    """Сортирует все параметры в группу размеры"""
+    group = GroupTypeId.Geometry
+
+    param_names = [
+        mark_bottom_to_zero_param.Name,
+        mark_axis_to_zero_param.Name,
+        ADSK_BOT_PARAM_NAME,
+        ADSK_MID_PARAM_NAME,
+        ADSK_HOLE_CUR_BOT_PARAM_NAME,
+        ADSK_HOLE_CUR_OFFSET_PARAM_NAME,
+        ADSK_LEVEL_CUR_OFFSET_PARAM_NAME,
+        ADSK_HOLE_BOT_PARAM_NAME,
+        ADSK_HOLE_OFFSET_PARAM_NAME,
+        ADSK_LEVEL_OFFSET_PARAM_NAME
+    ]
+
+    with revit.Transaction("BIM: Настройка параметров"):
+        for param_name in param_names:
+            param = doc.GetSharedParam(param_name)
+            if param is None:
+                continue
+            definition = param.GetDefinition()
+            definition.ReInsertToGroup(doc, group)
+
+
 def get_elements():
-    """ Забираем список элементов арматуры и оборудования """
+    """ Забирает список труб, воздуховодов и шаблонизированных семейств обобщенных моделей"""
     categories = [
         BuiltInCategory.OST_PipeCurves,
-        BuiltInCategory.OST_DuctCurves
+        BuiltInCategory.OST_DuctCurves,
+        BuiltInCategory.OST_GenericModel
     ]
 
     category_ids = List[ElementId]([ElementId(int(category)) for category in categories])
@@ -89,9 +126,20 @@ def get_elements():
         .WhereElementIsNotElementType() \
         .ToElements()
 
-    return elements
+    filtered_elements = [
+        el for el in elements
+        if not (
+                el.Category.IsId(BuiltInCategory.OST_GenericModel) and
+                HOLE_NAME_KEY not in el.GetParam(BuiltInParameter.ELEM_FAMILY_PARAM).AsValueString()
+        )
+    ]
 
-def get_element_attitude(element):
+    return filtered_elements
+
+
+def get_line_elevations(element):
+    """Возвращает смещения воздуховодов и трубопроводов"""
+
     level_id = element.GetParam(BuiltInParameter.RBS_START_LEVEL_PARAM).AsElementId()
     level = doc.GetElement(level_id)
     level_elevation = level.GetParamValue(BuiltInParameter.LEVEL_ELEV)
@@ -111,51 +159,123 @@ def get_element_attitude(element):
 
         element_bot_elevation = element_mid_elevation - center_offset
 
-    def to_meters(value):
-        return UnitUtils.ConvertFromInternalUnits(value, UnitTypeId.Meters)
+    return element_bot_elevation, element_mid_elevation, level_elevation
 
-    level_elevation = to_meters(level_elevation)
-    element_mid_elevation = to_meters(element_mid_elevation)
-    element_bot_elevation = to_meters(element_bot_elevation)
+
+def get_generic_elevations(element):
+    """Возвращает смещения обобщенных моделей"""
+
+    level_id = element.GetParam(BuiltInParameter.FAMILY_LEVEL_PARAM).AsElementId()
+    level = doc.GetElement(level_id)
+    level_elevation = level.GetParamValue(BuiltInParameter.LEVEL_ELEV)
+
+    is_in_wall = "В стене" in element.GetParam(BuiltInParameter.ELEM_FAMILY_PARAM).AsValueString()
+
+    # Для круглых отверстий смещаемся в центр
+    element_bot_elevation = element.GetParamValue(BuiltInParameter.INSTANCE_ELEVATION_PARAM)
+
+    if is_in_wall:
+        diameter = element.GetParamValueOrDefault("ADSK_Размер_Диаметр", 0.0)
+        element_bot_elevation + diameter/2
+
+    # у отверстий нет параметра отметки оси
+    return element_bot_elevation, element_bot_elevation, level_elevation
+
+
+def from_millimeters(value):
+    """Конвертация из внутренних значений в мм"""
+    return UnitUtils.ConvertFromInternalUnits(value, UnitTypeId.Millimeters)
+
+
+def to_millimeters(value):
+    """Конвертация во внутренние значения мм"""
+    return UnitUtils.ConvertToInternalUnits(value, UnitTypeId.Millimeters)
+
+
+def get_element_attitude(element):
+    """Возвращает данные по отметке элементов"""
+    if element.Category.IsId(BuiltInCategory.OST_GenericModel):
+        element_bot_elevation, element_mid_elevation, level_elevation  = get_generic_elevations(element)
+    else:
+        element_bot_elevation, element_mid_elevation, level_elevation = get_line_elevations(element)
+
+    level_elevation = from_millimeters(level_elevation)
+    element_mid_elevation = from_millimeters(element_mid_elevation)
+    element_bot_elevation = from_millimeters(element_bot_elevation)
 
     absolute_bot = level_elevation + element_bot_elevation
     absolute_mid = level_elevation + element_mid_elevation
+    offset = element_mid_elevation # Смещение от уровня
 
-    return absolute_mid, absolute_bot
+    return (
+        absolute_mid, # Абсолютная отметка центра
+        absolute_bot, # Абсолютная отметка низа
+        level_elevation, # Отметка уровня
+        offset # Смещение от уровня
+    )
 
-def set_elevation_value(element, absolute_mid, absolute_bot):
-    # ADSK версии идут в длине, ФОП_ВИС_ в числе. Нужно конвертировать
+
+def set_elevation_value(element, absolute_mid, absolute_bot, level_elevation, offset):
+    """Устанавливает значения параметров отметок """
+
+    # Имя параметра - функция преобразования
     convert_set = {
-        ADSK_BOT_PARAM_NAME: UnitTypeId.Meters,
-        ADSK_MID_PARAM_NAME: UnitTypeId.Meters
+        ADSK_BOT_PARAM_NAME: lambda v: to_millimeters(v),
+        ADSK_MID_PARAM_NAME: lambda v: to_millimeters(v),
+        ADSK_HOLE_BOT_PARAM_NAME: lambda v: to_millimeters(v),
+        ADSK_HOLE_OFFSET_PARAM_NAME: lambda v: to_millimeters(v),
+        ADSK_LEVEL_OFFSET_PARAM_NAME: lambda v: to_millimeters(v)
     }
 
-    operations_set = {
-        absolute_bot: [ADSK_BOT_PARAM_NAME, mark_bottom_to_zero_param],
-        absolute_mid: [ADSK_MID_PARAM_NAME, mark_axis_to_zero_param]
+    # параметр - значение
+    param_value_map = {
+        ADSK_MID_PARAM_NAME: absolute_mid,
+        mark_axis_to_zero_param: absolute_mid,
+
+        ADSK_BOT_PARAM_NAME: absolute_bot,
+        mark_bottom_to_zero_param: absolute_bot,
+        ADSK_HOLE_CUR_BOT_PARAM_NAME: absolute_bot,
+        ADSK_HOLE_BOT_PARAM_NAME: absolute_bot,
+
+        ADSK_LEVEL_OFFSET_PARAM_NAME: level_elevation,
+        ADSK_LEVEL_CUR_OFFSET_PARAM_NAME: level_elevation,
+
+        ADSK_HOLE_OFFSET_PARAM_NAME: offset,
+        ADSK_HOLE_CUR_OFFSET_PARAM_NAME: offset
     }
 
-    for value, param_names in operations_set.items():
-        for param_name in param_names:
-            if not element.IsExistsParam(param_name):
-                continue
+    for param_name, value in param_value_map.items():
+        if not element.IsExistsParam(param_name):
+            continue
 
-            convert_type = convert_set.get(param_name)
-            if convert_type is not None:
-                param_value = UnitUtils.ConvertToInternalUnits(value, convert_type)
-            else:
-                param_value = value
+        converter = convert_set.get(param_name, lambda x: x)
+        param_value = converter(value)
 
-            element.SetParamValue(param_name, param_value)
+        element.SetParamValue(param_name, param_value)
+
 
 mark_bottom_to_zero_param = SharedParamsConfig.Instance.VISMarkBottomToZero
 mark_axis_to_zero_param = SharedParamsConfig.Instance.VISMarkAxisToZero
+
 ADSK_BOT_PARAM_NAME = "ADSK_Отметка низа от нуля"
 ADSK_MID_PARAM_NAME = "ADSK_Отметка оси от нуля"
+
+ADSK_HOLE_CUR_BOT_PARAM_NAME = "ADSK_Отверстие_ОтметкаОтНуля"
+ADSK_HOLE_CUR_OFFSET_PARAM_NAME = "ADSK_Отверстие_ОтметкаОтЭтажа"
+ADSK_LEVEL_CUR_OFFSET_PARAM_NAME = "ADSK_Отверстие_ОтметкаЭтажа"
+ADSK_HOLE_BOT_PARAM_NAME = "ADSK_Отверстие_Отметка от нуля"
+ADSK_HOLE_OFFSET_PARAM_NAME = "ADSK_Отверстие_Отметка от этажа"
+ADSK_LEVEL_OFFSET_PARAM_NAME = "ADSK_Отверстие_Отметка этажа"
+
+HOLE_NAME_KEY = "ОбщМд_Отв_Отверстие_"
+
 
 @notification()
 @log_plugin(EXEC_PARAMS.command_name)
 def script_execute(plugin_logger):
+    setup_params()
+    sort_parameters_to_group()
+
     elements = get_elements()
     editor_report = EditorReport(doc)
 
@@ -163,9 +283,9 @@ def script_execute(plugin_logger):
         for element in elements:
             if editor_report.is_element_edited(element):
                 continue
-            absolute_mid, absolute_bot = get_element_attitude(element)
 
-            set_elevation_value(element, absolute_mid, absolute_bot)
+            absolute_mid, absolute_bot, level_elevation, offset = get_element_attitude(element)
+            set_elevation_value(element, absolute_mid, absolute_bot, level_elevation, offset)
 
     editor_report.show_report()
 
