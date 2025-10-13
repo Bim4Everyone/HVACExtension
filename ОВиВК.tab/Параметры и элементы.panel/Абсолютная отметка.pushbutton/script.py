@@ -80,7 +80,14 @@ def setup_params():
     """Настраивает параметры проекта."""
     revit_params = [mark_bottom_to_zero_param, mark_axis_to_zero_param]
     project_parameters = ProjectParameters.Create(doc.Application)
-    project_parameters.SetupRevitParams(doc, revit_params)
+
+    try:
+        project_parameters.SetupRevitParams(doc, revit_params)
+    except Exception as e:
+        if "Copying one or more elements failed." in str(e):
+            pass
+        else:
+            raise
 
 
 def sort_parameters_to_group():
