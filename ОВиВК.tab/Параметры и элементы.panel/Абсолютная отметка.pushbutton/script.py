@@ -231,7 +231,9 @@ def set_elevation_value(element, absolute_mid, absolute_bot, level_elevation, of
         ADSK_MID_PARAM_NAME: lambda v: to_millimeters(v),
         ADSK_HOLE_BOT_PARAM_NAME: lambda v: to_millimeters(v),
         ADSK_HOLE_OFFSET_PARAM_NAME: lambda v: to_millimeters(v),
-        ADSK_LEVEL_OFFSET_PARAM_NAME: lambda v: to_millimeters(v)
+        ADSK_LEVEL_OFFSET_PARAM_NAME: lambda v: to_millimeters(v),
+        mark_bottom_to_zero_param: lambda v: round(v / 1000, 3),
+        mark_axis_to_zero_param: lambda v: round(v / 1000, 3)
     }
 
     # параметр - значение
