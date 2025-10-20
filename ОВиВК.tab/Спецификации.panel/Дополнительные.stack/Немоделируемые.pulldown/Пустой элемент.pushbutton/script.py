@@ -19,6 +19,7 @@ clr.ImportExtensions(dosymep.Revit)
 clr.ImportExtensions(dosymep.Bim4Everyone)
 
 from pyrevit import forms
+from pyrevit import script
 from dosymep.Bim4Everyone.SharedParams import SharedParamsConfig
 from dosymep.Bim4Everyone import *
 from dosymep.Bim4Everyone.SharedParams import *
@@ -94,6 +95,9 @@ def script_execute(plugin_logger):
         title=unmodeling_factory.EMPTY_DESCRIPTION
     )
 
+    if rows_number is None:
+        script.exit()
+
     try:
         rows_number = int(rows_number)
     except ValueError:
@@ -101,6 +105,7 @@ def script_execute(plugin_logger):
             "Нужно ввести число.",
             "Ошибка",
             exitscript=True)
+
 
     with revit.Transaction("BIM: Добавление пустого элемента"):
         family_symbol.Activate()
