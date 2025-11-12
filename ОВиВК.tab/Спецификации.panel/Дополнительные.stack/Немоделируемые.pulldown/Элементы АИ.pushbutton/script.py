@@ -533,6 +533,6 @@ def script_execute(plugin_logger):
             if not unmodeling_factory.is_elemet_edited(data.element):
                 update_element(data.element, data.data)
 
-            unmodeling_factory.show_report()
+        unmodeling_factory.show_report()
 
 script_execute()
