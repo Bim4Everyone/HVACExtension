@@ -21,23 +21,18 @@ clr.ImportExtensions(Revit.GeometryConversion)
 
 import System
 from System.Collections.Generic import *
+from math import hypot
 
 from Autodesk.Revit.DB import *
 from Autodesk.Revit.UI.Selection import Selection
 from Autodesk.DesignScript.Geometry import *
 
-from collections import defaultdict
 import RevitServices
 from RevitServices.Persistence import DocumentManager
 from RevitServices.Transactions import TransactionManager
 
-from pyrevit import forms
-from pyrevit import revit
-from pyrevit import script
-from pyrevit import HOST_APP
-from pyrevit import EXEC_PARAMS
+from pyrevit import forms, DB, revit, script, HOST_APP, EXEC_PARAMS
 from rpw.ui.forms import SelectFromList
-from rpw.ui.forms import select_file
 
 clr.ImportExtensions(dosymep.Revit)
 clr.ImportExtensions(dosymep.Bim4Everyone)
@@ -47,6 +42,8 @@ from dosymep.Bim4Everyone.SharedParams import SharedParamsConfig
 
 
 doc = __revit__.ActiveUIDocument.Document
+view = doc.ActiveView
+uidoc = __revit__.ActiveUIDocument
 
 
 class EditorReport:
@@ -114,139 +111,51 @@ class EditorReport:
             forms.alert(report_message, "Ошибка", exitscript=True)
 
 
-class FireCabinet:
-    position_number = 0
-    angle = 0
-    def __init__(self, element):
-        self.element = element
-        revit_xyz = element.Location.Point
-        x = convert_to_mms(revit_xyz.X)
-        y = convert_to_mms(revit_xyz.Y)
-        z = convert_to_mms(revit_xyz.Z)
+def select_start_cab(cabinets, point):
+    """
+    Возвращает шкаф, ближайший к point по координатам X и Y.
+    """
+    def distance_2d(cab):
+        dx = cab.Location.Point.X - point.X
+        dy = cab.Location.Point.Y - point.Y
+        return math.sqrt(dx*dx + dy*dy)
 
-        level_id = element.GetParamValue(BuiltInParameter.FAMILY_LEVEL_PARAM)
-
-        self.level_name = doc.GetElement(level_id).Name
-        self.xyz = XYZ(x, y, z)
+    nearest_cab = min(cabinets, key=distance_2d)
+    return nearest_cab
 
 
-def convert_to_mms(value):
-    """Конвертирует из внутренних значений ревита в миллиметры"""
-    result = UnitUtils.ConvertFromInternalUnits(value,
-                                                UnitTypeId.Millimeters)
-    return result
-
-
-def get_relative_angle(cab, center_point, start_cab):
-    dx = cab.xyz.X - center_point.X
-    dy = cab.xyz.Y - center_point.Y
-    cab_angle = math.atan2(dy, dx)
-
-    ref_dx = start_cab.xyz.X - center_point.X
-    ref_dy = start_cab.xyz.Y - center_point.Y
-    start_angle = math.atan2(ref_dy, ref_dx)
-
-    # Относительный угол, приведение к [0, 2π)
-    relative = (cab_angle - start_angle) % (2 * math.pi)
-    return relative
-
-
-def get_geo_params(cabinets):
-    """Получаем основные параметры массива шкафов - их центр и крайние точки"""
-    # Центр — по X середина, по Y верхняя граница
-    min_x = min(cab.xyz.X for cab in cabinets)
-    max_x = max(cab.xyz.X for cab in cabinets)
-    min_y = min(cab.xyz.Y for cab in cabinets)
-    max_y = max(cab.xyz.Y for cab in cabinets)
-    center_x = (min_x + max_x) / 2
-    center_y = (min_y + max_y) / 2
-    return min_x, max_x, min_y, max_y, center_x, center_y
-
-
-def select_start_cab(selected_mode, cabinets):
-    """Получаем стартовый шкаф в зависимости от выбранного мода"""
-    if selected_mode in [MIN_Y_CLOCKWISE, MIN_Y_COUNTERCLOCKWISE]:
-        # минимальный Y
-        start_cab = min(cabinets, key=lambda cab: cab.xyz.Y)
-    elif selected_mode in [MIN_X_CLOCKWISE, MIN_X_COUNTERCLOCKWISE]:
-        # минимальный X
-        start_cab = min(cabinets, key=lambda cab: cab.xyz.X)
-    elif selected_mode in [MAX_X_CLOCKWISE, MAX_X_COUNTERCLOCKWISE]:
-        # максимальный X
-        start_cab = max(cabinets, key=lambda cab: cab.xyz.X)
-    else:
-        start_cab = max(cabinets, key=lambda cab: cab.xyz.Y)
-
-    return start_cab
-
-
-def group_by_rows(cabinets, selected_mode, y_tolerance=2000, type_building_width_millimeters = 20000):
-    """Группирует шкафы в ряды по Y, начиная строго слева от центра и далее по окружности"""
+def sort_cabs(cabinets, point):
+    """Группирует шкафы по удаленности от точки старта"""
 
     if not cabinets:
         return []
+    start_cab = select_start_cab(cabinets, point)
+    sorted_cabs = [start_cab]
 
-    min_x, max_x, min_y, max_y, center_x, center_y = get_geo_params(cabinets)
+    # Создаём множество/список необработанных шкафов
+    remaining = [cab for cab in cabinets if cab != start_cab]
 
-    has_y_elbow = max_y - min_y < type_building_width_millimeters
-    has_x_elbow = max_x - min_x < type_building_width_millimeters
+    current = start_cab
+    while remaining:
+        cx, cy = current.Location.Point.X, current.Location.Point.Y
 
-    start_cab = select_start_cab(selected_mode, cabinets)
+        # Находим ближайший шкаф по евклидовой дистанции
+        next_cab = min(remaining, key=lambda c: hypot(c.Location.Point.X - cx, c.Location.Point.Y - cy))
 
-    # Смещение общего центра для ситуации когда корпус идет по прямой, чтобы обеспечить корректную нумерацию
-    CENTRAL_POINT_OFFSET = 10000
+        sorted_cabs.append(next_cab)
+        remaining.remove(next_cab)
+        current = next_cab
 
-    # Центр поворота
-    if has_x_elbow and not has_y_elbow:
-        center_point = XYZ(max_x + CENTRAL_POINT_OFFSET, center_y, 0)
-    elif not has_x_elbow and has_y_elbow:
-        center_point = XYZ(center_x, max_y + CENTRAL_POINT_OFFSET, 0)
-    else:
-        center_point = XYZ(center_x, center_y, 0)
-
-    reverse = selected_mode not in [MIN_Y_COUNTERCLOCKWISE,
-                                    MIN_X_COUNTERCLOCKWISE,
-                                    MAX_Y_COUNTERCLOCKWISE,
-                                    MAX_X_COUNTERCLOCKWISE]
-
-    sorted_cabs = sorted(
-        cabinets,
-        key=lambda cab: get_relative_angle(cab, center_point, start_cab),
-        reverse=reverse
-    )
-    if reverse:
-        # Переносим последний элемент в начало
-        sorted_cabs = [sorted_cabs[-1]] + sorted_cabs[:-1]
-
-    # Группировка по расстоянию от центра (вдоль луча)
-    rows = []
-    for cab in sorted_cabs:
-        placed = False
-        for row in rows:
-            ref_cab = row[0]
-            vec = XYZ(cab.xyz.X - center_point.X, cab.xyz.Y - center_point.Y, 0)
-            ref_vec = XYZ(ref_cab.xyz.X - center_point.X, ref_cab.xyz.Y - center_point.Y, 0)
-
-            diff = vec - ref_vec
-            dist = diff.GetLength()
-
-            if dist <= y_tolerance:
-                row.append(cab)
-                placed = True
-                break
-        if not placed:
-            rows.append([cab])
-
-    return rows
+    return sorted_cabs
 
 
-def get_fire_cabinet_equipment():
+def get_fire_cabinets_by_view(view):
     """
     Возвращает список элементов механического оборудования, название семейства которых содержит 'Обр_Шпк'.
     """
     editor_report = EditorReport()
 
-    collector = FilteredElementCollector(doc) \
+    collector = FilteredElementCollector(doc, view.Id) \
         .OfClass(FamilyInstance) \
         .WherePasses(ElementCategoryFilter(BuiltInCategory.OST_MechanicalEquipment))
 
@@ -263,98 +172,71 @@ def get_fire_cabinet_equipment():
     return result
 
 
-def get_cabinets_by_levels(elements):
-    fire_cabinets = []
-
-    for element in elements:
-        # Не хочется сначала выполнять IsExists а потом пытаться получить параметр для проверки на рид онли.
-        param = element.LookupParameter(ADSK_POSITION_PARAM_NAME)
-
-        if param is None or param.IsReadOnly:
-            forms.alert(
-                "Параметр экземпляра ADSK_Позиция в части оборудования не существует "
-                "или недоступен для редактирования. ID: {}".format(str(element.Id)),
-                "Ошибка",
-                exitscript=True)
-
-    for element in elements:
-        fire_cabinet = FireCabinet(element)
-        fire_cabinets.append(fire_cabinet)
-
-    cabinets_by_level = {}
-    for cabinet in fire_cabinets:
-        level = cabinet.level_name
-        cabinets_by_level.setdefault(level, []).append(cabinet)
-
-    sorted_cabinets_by_level = dict(sorted(cabinets_by_level.items(), key=lambda item: item[0]))
-    return sorted_cabinets_by_level
-
-
-def split_elements_by_systems(elements):
-    """Делим шкафы по системам"""
-    system_param = SharedParamsConfig.Instance.VISSystemName
-
-    systems_dict = defaultdict(list)
-
-    for element in elements:
-        system_name = element.GetParamValueOrDefault(system_param)
-
-        if system_name in [None, "", "!Нет системы"]:
-            forms.alert(
-                "У части шкафов не заполнен параметр ФОП_ВИС_Имя системы. Выполните полное обновление.",
-                "Ошибка",
-                exitscript=True)
-
-        systems_dict[system_name].append(element)
-
-    return list(systems_dict.values())
-
-
-MIN_Y_CLOCKWISE = "Минимальным Y, по часовой стрелке"
-MIN_Y_COUNTERCLOCKWISE = "Минимальным Y, против часовой стрелки"
-MIN_X_CLOCKWISE = "Минимальным X, по часовой стрелке"
-MIN_X_COUNTERCLOCKWISE = "Минимальным X, против часовой стрелки"
-MAX_Y_CLOCKWISE = "Максимальным Y, по часовой стрелке"
-MAX_Y_COUNTERCLOCKWISE = "Максимальным Y, против часовой стрелки"
-MAX_X_CLOCKWISE = "Максимальным X, по часовой стрелке"
-MAX_X_COUNTERCLOCKWISE = "Максимальным X, против часовой стрелки"
+BY_VIEW = "Этажная"
+CONTINUOUS = "Сквозная"
 ADSK_POSITION_PARAM_NAME = "ADSK_Позиция"
 
 
 @notification()
 @log_plugin(EXEC_PARAMS.command_name)
 def script_execute(plugin_logger):
-    selected_mode = SelectFromList('Нумерация от шкафа с:',
-                                   [MIN_Y_CLOCKWISE,
-                                    MIN_Y_COUNTERCLOCKWISE,
-                                    MIN_X_CLOCKWISE,
-                                    MIN_X_COUNTERCLOCKWISE,
-                                    MAX_Y_CLOCKWISE,
-                                    MAX_Y_COUNTERCLOCKWISE,
-                                    MAX_X_CLOCKWISE,
-                                    MAX_X_COUNTERCLOCKWISE])
+    views = [uidoc.Document.GetElement(elem_id) for elem_id in uidoc.Selection.GetElementIds()]
+
+    views = sorted(views, key=lambda v: v.Name)
+
+    if not views:
+        forms.alert("Выделите планы на которых выполняется нумерация шкафов.", "Ошибка", exitscript=True)
+
+    invalid = [
+        v for v in views
+        if not isinstance(v, DB.View) or v.ViewType != DB.ViewType.FloorPlan
+    ]
+
+    if invalid:
+        forms.alert(
+            "Все выбранные элементы должны быть планами этажа.",
+            "Ошибка",
+            exitscript=True
+        )
+
+    uidoc.ActiveView = views[0]
+
+    point = uidoc.Selection.PickPoint("Выберите стартовую точку для нумерации")
+
+    if point is None:
+        script.exit()
+
+    selected_mode = SelectFromList('Вид нумерации:',
+                                   [CONTINUOUS,
+                                    BY_VIEW])
 
     if selected_mode is None:
-        sys.exit()
-
-    elements = get_fire_cabinet_equipment()
-    split_elements  = split_elements_by_systems(elements)
+        script.exit()
 
     with revit.Transaction("BIM: Нумерация шкафов"):
-        for system_elements in split_elements:
-            sorted_cabinets_by_level = get_cabinets_by_levels(system_elements)
+        number = 1
+        exception_list = []
 
-            for level_name in sorted(sorted_cabinets_by_level.keys()):
+        for view_element in views:
+            cabinets = get_fire_cabinets_by_view(view_element)
+
+            sorted_cabs = sort_cabs(cabinets, point)
+
+            for cabinet in sorted_cabs:
+                try:
+                    cabinet.SetParamValue(ADSK_POSITION_PARAM_NAME, str(number))
+                    number += 1
+                except Exception:
+                    # Тут могут быть либо ридонли параметры, либо отсутствие параметра. В любом случае нужен список
+                    # таких элементов, чтобы обратить внимание пользователя
+                    exception_list.append(cabinet.Id.IntegerValue)
+
+            if selected_mode == BY_VIEW:
                 number = 1
-                cabinets = sorted_cabinets_by_level[level_name]
-                rows = group_by_rows(cabinets, selected_mode)
 
-                for row in rows:
-                    # В ряду сортируем слева направо по X
-                    sorted_row = sorted(row, key=lambda c: c.xyz.X)
-                    for cabinet in sorted_row:
-                        cabinet.element.SetParamValue(ADSK_POSITION_PARAM_NAME, str(number))
-                        number += 1
+    if exception_list:
+        print "Следующим шкафам не удалось присвоить нумерацию:"
+        print exception_list
 
 
 script_execute()
