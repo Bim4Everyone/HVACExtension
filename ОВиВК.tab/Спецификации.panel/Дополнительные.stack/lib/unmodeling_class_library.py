@@ -735,6 +735,37 @@ class UnmodelingFactory:
             ##PIPE_TYPES_CLAMPS##
             ##DUCT_TYPES_METALL##
             ##UNMODELING_REGION_END##
+            
+            ##CONSUMABLE1_NAMES##
+            ##CONSUMABLE2_NAMES##
+            ##CONSUMABLE3_NAMES##
+            ##CONSUMABLE4_NAMES##
+            ##CONSUMABLE1_MARKS##
+            ##CONSUMABLE2_MARKS##
+            ##CONSUMABLE3_MARKS##
+            ##CONSUMABLE4_MARKS##
+            ##CONSUMABLE1_CODES##
+            ##CONSUMABLE2_CODES##
+            ##CONSUMABLE3_CODES##
+            ##CONSUMABLE4_CODES##
+            ##CONSUMABLE1_MAKER##
+            ##CONSUMABLE2_MAKER##
+            ##CONSUMABLE3_MAKER##
+            ##CONSUMABLE4_MAKER##
+            ##CONSUMABLE1_UNIT##
+            ##CONSUMABLE2_UNIT##
+            ##CONSUMABLE3_UNIT##
+            ##CONSUMABLE4_UNIT##
+            ##CONSUMABLE1_RATE##
+            ##CONSUMABLE2_RATE##
+            ##CONSUMABLE3_RATE##
+            ##CONSUMABLE4_RATE##
+            ##CONSUMABLE1_RATE_BY_SQUARE##
+            ##CONSUMABLE2_RATE_BY_SQUARE##
+            ##CONSUMABLE3_RATE_BY_SQUARE##
+            ##CONSUMABLE4_RATE_BY_SQUARE##
+            
+            
             """
             self.info.SetParamValue("ФОП_ВИС_Настройки немоделируемых", def_sets)
 

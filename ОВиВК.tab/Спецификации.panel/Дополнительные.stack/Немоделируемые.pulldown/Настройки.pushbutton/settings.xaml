@@ -243,6 +243,166 @@
                     </DataGrid.Columns>
                 </DataGrid>
             </TabItem>
+
+            <TabItem Header="Изоляция - трубы">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <ItemsControl x:Name="PipeInsulationItems" Margin="4">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Expander IsExpanded="False" Margin="0 0 0 6">
+                                    <Expander.Header>
+                                        <TextBlock>
+                                            <TextBlock.Text>
+                                                <MultiBinding StringFormat="{}{0} - {1}">
+                                                    <Binding Path="Id" />
+                                                    <Binding Path="TypeName" />
+                                                </MultiBinding>
+                                            </TextBlock.Text>
+                                        </TextBlock>
+                                    </Expander.Header>
+                                    <ItemsControl ItemsSource="{Binding Consumables}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <StackPanel Margin="0 4 0 8">
+                                                    <TextBlock Text="{Binding Index, StringFormat=Расходник {0}}" FontWeight="Bold" Margin="0 0 0 4"/>
+                                                    <Grid Margin="0 0 0 4">
+                                                        <Grid.RowDefinitions>
+                                                            <RowDefinition Height="Auto"/>
+                                                            <RowDefinition Height="Auto"/>
+                                                            <RowDefinition Height="Auto"/>
+                                                            <RowDefinition Height="Auto"/>
+                                                            <RowDefinition Height="Auto"/>
+                                                            <RowDefinition Height="Auto"/>
+                                                            <RowDefinition Height="Auto"/>
+                                                            <RowDefinition Height="Auto"/>
+                                                        </Grid.RowDefinitions>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="180"/>
+                                                            <ColumnDefinition Width="*"/>
+                                                        </Grid.ColumnDefinitions>
+
+                                                        <TextBlock Text="{Binding Index, StringFormat=Расходник {0} имя}" Grid.Row="0" Grid.Column="0" VerticalAlignment="Center"/>
+                                                        <TextBox Text="{Binding Name}" Grid.Row="0" Grid.Column="1" Margin="4 0 0 4"/>
+
+                                                        <TextBlock Text="{Binding Index, StringFormat=Расходник {0} марка}" Grid.Row="1" Grid.Column="0" VerticalAlignment="Center"/>
+                                                        <TextBox Text="{Binding Mark}" Grid.Row="1" Grid.Column="1" Margin="4 0 0 4"/>
+
+                                                        <TextBlock Text="{Binding Index, StringFormat=Расходник {0} код}" Grid.Row="2" Grid.Column="0" VerticalAlignment="Center"/>
+                                                        <TextBox Text="{Binding Code}" Grid.Row="2" Grid.Column="1" Margin="4 0 0 4"/>
+
+                                                        <TextBlock Text="{Binding Index, StringFormat=Расходник {0} артикул}" Grid.Row="3" Grid.Column="0" VerticalAlignment="Center"/>
+                                                        <TextBox Text="{Binding Article}" Grid.Row="3" Grid.Column="1" Margin="4 0 0 4"/>
+
+                                                        <TextBlock Text="{Binding Index, StringFormat=Расходник {0} завод}" Grid.Row="4" Grid.Column="0" VerticalAlignment="Center"/>
+                                                        <TextBox Text="{Binding Factory}" Grid.Row="4" Grid.Column="1" Margin="4 0 0 4"/>
+
+                                                        <TextBlock Text="{Binding Index, StringFormat=Расходник {0} единица}" Grid.Row="5" Grid.Column="0" VerticalAlignment="Center"/>
+                                                        <TextBox Text="{Binding Unit}" Grid.Row="5" Grid.Column="1" Margin="4 0 0 4"/>
+
+                                                        <TextBlock Text="{Binding Index, StringFormat=Расходник {0} расход на м.п.}" Grid.Row="6" Grid.Column="0" VerticalAlignment="Center"/>
+                                                        <TextBox Text="{Binding RatePerMeter}" Grid.Row="6" Grid.Column="1" Margin="4 0 0 4"/>
+
+                                                        <StackPanel Grid.Row="7"
+                                                                    Grid.Column="1"
+                                                                    Orientation="Horizontal"
+                                                                    Margin="4 4 0 0">
+                                                            <TextBlock Text="{Binding Index, StringFormat=Расход {0} по м2}"
+                                                                       VerticalAlignment="Center"
+                                                                       Margin="0 0 8 0"/>
+                                                            <CheckBox IsChecked="{Binding RatePerSqm}"
+                                                                      VerticalAlignment="Center"/>
+                                                        </StackPanel>
+                                                    </Grid>
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </Expander>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </TabItem>
+
+            <TabItem Header="Изоляция - воздуховоды">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <ItemsControl x:Name="DuctInsulationItems" Margin="4">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Expander IsExpanded="False" Margin="0 0 0 6">
+                                    <Expander.Header>
+                                        <TextBlock>
+                                            <TextBlock.Text>
+                                                <MultiBinding StringFormat="{}{0} - {1}">
+                                                    <Binding Path="Id" />
+                                                    <Binding Path="TypeName" />
+                                                </MultiBinding>
+                                            </TextBlock.Text>
+                                        </TextBlock>
+                                    </Expander.Header>
+                                    <ItemsControl ItemsSource="{Binding Consumables}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <StackPanel Margin="0 4 0 8">
+                                                    <TextBlock Text="{Binding Index, StringFormat=Расходник {0}}" FontWeight="Bold" Margin="0 0 0 4"/>
+                                                    <Grid Margin="0 0 0 4">
+                                                        <Grid.RowDefinitions>
+                                                            <RowDefinition Height="Auto"/>
+                                                            <RowDefinition Height="Auto"/>
+                                                            <RowDefinition Height="Auto"/>
+                                                            <RowDefinition Height="Auto"/>
+                                                            <RowDefinition Height="Auto"/>
+                                                            <RowDefinition Height="Auto"/>
+                                                            <RowDefinition Height="Auto"/>
+                                                            <RowDefinition Height="Auto"/>
+                                                        </Grid.RowDefinitions>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="180"/>
+                                                            <ColumnDefinition Width="*"/>
+                                                        </Grid.ColumnDefinitions>
+
+                                                        <TextBlock Text="{Binding Index, StringFormat=Расходник {0} имя}" Grid.Row="0" Grid.Column="0" VerticalAlignment="Center"/>
+                                                        <TextBox Text="{Binding Name}" Grid.Row="0" Grid.Column="1" Margin="4 0 0 4"/>
+
+                                                        <TextBlock Text="{Binding Index, StringFormat=Расходник {0} марка}" Grid.Row="1" Grid.Column="0" VerticalAlignment="Center"/>
+                                                        <TextBox Text="{Binding Mark}" Grid.Row="1" Grid.Column="1" Margin="4 0 0 4"/>
+
+                                                        <TextBlock Text="{Binding Index, StringFormat=Расходник {0} код}" Grid.Row="2" Grid.Column="0" VerticalAlignment="Center"/>
+                                                        <TextBox Text="{Binding Code}" Grid.Row="2" Grid.Column="1" Margin="4 0 0 4"/>
+
+                                                        <TextBlock Text="{Binding Index, StringFormat=Расходник {0} артикул}" Grid.Row="3" Grid.Column="0" VerticalAlignment="Center"/>
+                                                        <TextBox Text="{Binding Article}" Grid.Row="3" Grid.Column="1" Margin="4 0 0 4"/>
+
+                                                        <TextBlock Text="{Binding Index, StringFormat=Расходник {0} завод}" Grid.Row="4" Grid.Column="0" VerticalAlignment="Center"/>
+                                                        <TextBox Text="{Binding Factory}" Grid.Row="4" Grid.Column="1" Margin="4 0 0 4"/>
+
+                                                        <TextBlock Text="{Binding Index, StringFormat=Расходник {0} единица}" Grid.Row="5" Grid.Column="0" VerticalAlignment="Center"/>
+                                                        <TextBox Text="{Binding Unit}" Grid.Row="5" Grid.Column="1" Margin="4 0 0 4"/>
+
+                                                        <TextBlock Text="{Binding Index, StringFormat=Расходник {0} расход на м.п.}" Grid.Row="6" Grid.Column="0" VerticalAlignment="Center"/>
+                                                        <TextBox Text="{Binding RatePerMeter}" Grid.Row="6" Grid.Column="1" Margin="4 0 0 4"/>
+
+                                                        <StackPanel Grid.Row="7"
+                                                                    Grid.Column="1"
+                                                                    Orientation="Horizontal"
+                                                                    Margin="4 4 0 0">
+                                                            <TextBlock Text="{Binding Index, StringFormat=Расход {0} по м2}"
+                                                                       VerticalAlignment="Center"
+                                                                       Margin="0 0 8 0"/>
+                                                            <CheckBox IsChecked="{Binding RatePerSqm}"
+                                                                      VerticalAlignment="Center"/>
+                                                        </StackPanel>
+                                                    </Grid>
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </Expander>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </TabItem>
         </TabControl>
 
         <StackPanel Grid.Row="1"
