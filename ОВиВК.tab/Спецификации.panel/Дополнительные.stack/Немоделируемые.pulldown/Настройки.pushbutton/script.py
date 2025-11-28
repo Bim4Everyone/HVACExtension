@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+﻿#! /usr/bin/env python
 # -*- coding: utf-8 -*-
 
 import clr
@@ -170,70 +170,77 @@ def _region_values_from_rows(rows, attr_name):
 def _collect_consumable_regions(ins_rows):
     regions = defaultdict(list)
 
+    def _has_value(val):
+        try:
+            return bool(val) and bool(val.strip())
+        except Exception:
+            return bool(val)
+
     for ins in ins_rows:
         base_id = ins.Id
 
         for idx, cons in enumerate(ins.Consumables, start=1):
             prefix = "CONSUMABLE{0}".format(idx)
 
-            regions[prefix + "_NAMES"].append("{0} - {1}".format(base_id, cons.Name))
-            regions[prefix + "_MARKS"].append("{0} - {1}".format(base_id, cons.Mark))
-            regions[prefix + "_CODES"].append("{0} - {1}".format(base_id, cons.Code))
-            regions[prefix + "_MAKER"].append("{0} - {1}".format(base_id, cons.Factory))
-            regions[prefix + "_UNIT"].append("{0} - {1}".format(base_id, cons.Unit))
-            regions[prefix + "_RATE"].append("{0} - {1}".format(base_id, cons.RatePerMeter))
-            regions[prefix + "_RATE_BY_SQUARE"].append("{0} - {1}".format(base_id, cons.RatePerSqm))
+            if _has_value(cons.Name):
+                regions[prefix + "_NAMES"].append("{0} - {1}".format(base_id, cons.Name))
+            if _has_value(cons.Mark):
+                regions[prefix + "_MARKS"].append("{0} - {1}".format(base_id, cons.Mark))
+            if _has_value(cons.Code):
+                regions[prefix + "_CODES"].append("{0} - {1}".format(base_id, cons.Code))
+            if _has_value(cons.Factory):
+                regions[prefix + "_MAKER"].append("{0} - {1}".format(base_id, cons.Factory))
+            if _has_value(cons.Unit):
+                regions[prefix + "_UNIT"].append("{0} - {1}".format(base_id, cons.Unit))
+            if _has_value(cons.RatePerMeter):
+                regions[prefix + "_RATE"].append("{0} - {1}".format(base_id, cons.RatePerMeter))
+            if cons.RatePerSqm:
+                regions[prefix + "_RATE_BY_SQUARE"].append("{0} - {1}".format(base_id, cons.RatePerSqm))
+
+    for idx in range(1, 5):
+        prefix = "CONSUMABLE{0}".format(idx)
+        for suffix in ("_NAMES", "_MARKS", "_CODES", "_MAKER", "_UNIT", "_RATE", "_RATE_BY_SQUARE"):
+            key = prefix + suffix
+            if not regions.get(key):
+                regions[key] = [""]
 
     return regions
 
 
-def _apply_consumable_region(rows, region_entries, attr_name, is_bool=False):
+def _apply_consumable_region(rows, region_entries, attr_name, cons_index, is_bool=False):
     truthy = ("true", "1", "yes", u"да", u"истина")
     values = {}
     for entry in region_entries:
         if not entry:
             continue
         normalized = entry.strip()
-        # поддерживаем форматы "Id - value", "Id value", "Id\tvalue"
         if " - " in normalized:
             elem_id, value = [p.strip() for p in normalized.split(" - ", 1)]
         elif "-" in normalized:
             elem_id, value = [p.strip() for p in normalized.split("-", 1)]
         else:
-            first_split = normalized.split(None, 1)
-            elem_id = first_split[0].strip() if first_split else ""
-            value = first_split[1].strip() if len(first_split) > 1 else ""
-
+            parts = normalized.split(None, 1)
+            elem_id = parts[0].strip() if parts else ""
+            value = parts[1].strip() if len(parts) > 1 else ""
         if not elem_id:
             continue
+        if isinstance(value, basestring) and not value.strip():
+            continue
         values[elem_id] = value
+
     for row in rows:
         val = values.get(row.Id)
         if val is None:
             continue
         if isinstance(val, basestring) and not val.strip():
             continue
+        if cons_index < 1 or cons_index > len(row.Consumables):
+            continue
+        target = row.Consumables[cons_index - 1]
         if is_bool:
-            setattr(row, attr_name, val.strip().lower() in truthy)
+            setattr(target, attr_name, val.strip().lower() in truthy)
         else:
-            setattr(row, attr_name, val.strip())
-
-
-def _ensure_regions(settings, region_names):
-    finish_marker = "##UNMODELING_REGION_FINISH##"
-    finish_index = settings.find(finish_marker)
-    if finish_index == -1:
-        return settings
-    missing = []
-    for name in region_names:
-        tag = "##{0}##".format(name)
-        if tag not in settings:
-            missing.append(tag + "\n")
-    if not missing:
-        return settings
-    insert = "".join(missing)
-    return settings[:finish_index] + insert + settings[finish_index:]
-
+            setattr(target, attr_name, val.strip())
 
 def get_types_by_category(category):
     return FilteredElementCollector(doc) \
@@ -269,13 +276,13 @@ def script_execute():
 
     all_ins_rows = pipe_ins_rows + duct_ins_rows
     for idx in range(1, 5):
-        _apply_consumable_region(all_ins_rows, unmodeling_factory.get_setting_region("CONSUMABLE{0}_NAMES".format(idx)), "Name")
-        _apply_consumable_region(all_ins_rows, unmodeling_factory.get_setting_region("CONSUMABLE{0}_MARKS".format(idx)), "Mark")
-        _apply_consumable_region(all_ins_rows, unmodeling_factory.get_setting_region("CONSUMABLE{0}_CODES".format(idx)), "Code")
-        _apply_consumable_region(all_ins_rows, unmodeling_factory.get_setting_region("CONSUMABLE{0}_MAKER".format(idx)), "Factory")
-        _apply_consumable_region(all_ins_rows, unmodeling_factory.get_setting_region("CONSUMABLE{0}_UNIT".format(idx)), "Unit")
-        _apply_consumable_region(all_ins_rows, unmodeling_factory.get_setting_region("CONSUMABLE{0}_RATE".format(idx)), "RatePerMeter")
-        _apply_consumable_region(all_ins_rows, unmodeling_factory.get_setting_region("CONSUMABLE{0}_RATE_BY_SQUARE".format(idx)), "RatePerSqm", is_bool=True)
+        _apply_consumable_region(all_ins_rows, unmodeling_factory.get_setting_region("CONSUMABLE{0}_NAMES".format(idx)), "Name", idx)
+        _apply_consumable_region(all_ins_rows, unmodeling_factory.get_setting_region("CONSUMABLE{0}_MARKS".format(idx)), "Mark", idx)
+        _apply_consumable_region(all_ins_rows, unmodeling_factory.get_setting_region("CONSUMABLE{0}_CODES".format(idx)), "Code", idx)
+        _apply_consumable_region(all_ins_rows, unmodeling_factory.get_setting_region("CONSUMABLE{0}_MAKER".format(idx)), "Factory", idx)
+        _apply_consumable_region(all_ins_rows, unmodeling_factory.get_setting_region("CONSUMABLE{0}_UNIT".format(idx)), "Unit", idx)
+        _apply_consumable_region(all_ins_rows, unmodeling_factory.get_setting_region("CONSUMABLE{0}_RATE".format(idx)), "RatePerMeter", idx)
+        _apply_consumable_region(all_ins_rows, unmodeling_factory.get_setting_region("CONSUMABLE{0}_RATE_BY_SQUARE".format(idx)), "RatePerSqm", idx, is_bool=True)
 
     window.set_type_rows(ducts=duct_rows, pipes=pipe_rows)
     window.set_insulation_rows(pipe_ins_rows, duct_ins_rows)
@@ -324,23 +331,17 @@ def script_execute():
         ]
 
         regions.extend([(region_name, values) for region_name, values in consumable_regions.items()])
-        #print regions
 
-        print "Изначальные настройки"
-        base_settings = unmodeling_factory.info.GetParamValueOrDefault(u"ФОП_ВИС_Настройки немоделируемых", "")
-        print base_settings
-        print "Конец изначальных настроек"
-        #base_settings = _ensure_regions(base_settings, [r[0] for r in regions] + consumable_region_names)
+
+        base_settings = unmodeling_factory.info.GetParamValueOrDefault("ФОП_ВИС_Настройки немоделируемых", "")
 
         for region_name, values in regions:
             base_settings = unmodeling_factory.edit_setting_region(base_settings, region_name, values, append=False)
 
         corrected_settings = base_settings
 
-        print corrected_settings
-
-        with revit.Transaction("BIM: запись настроек"):
-            unmodeling_factory.info.SetParamValue(u"ФОП_ВИС_Настройки немоделируемых", corrected_settings)
+        with revit.Transaction("BIM: Обновление настроек немоделируемых"):
+            unmodeling_factory.info.SetParamValue("ФОП_ВИС_Настройки немоделируемых", corrected_settings)
 
 
 script_execute()
