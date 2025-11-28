@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
 import math
+
 from System import Environment
 import os
 import clr
+import re
 
 clr.AddReference("dosymep.Revit.dll")
 clr.AddReference("dosymep.Bim4Everyone.dll")
@@ -228,6 +230,7 @@ class InsulationConsumables:
 class UnmodelingFactory:
     """ Класс, оперирующий созданием немоделируемых элементов """
     doc = None
+    info = None
 
     COORDINATE_STEP = 0.01  # Шаг координаты на который разносим немоделируемые. ~3 мм, чтоб они не стояли в одном месте и чтоб не растягивали чертеж своим существованием
     DESCRIPTION_PARAM_NAME = 'ФОП_ВИС_Назначение'  # Пока нет в платформе, будет добавлено и перенесено в RevitParams
@@ -267,6 +270,7 @@ class UnmodelingFactory:
 
     def __init__(self, doc):
         self.doc = doc
+        self.info = self.doc.ProjectInformation
 
     def get_elements_types_by_category(self, category):
         """
@@ -704,6 +708,100 @@ class UnmodelingFactory:
         description_param = family_inst.GetParam(self.DESCRIPTION_PARAM_NAME)
         description_param.Set(description)
 
+    def prepare_settings(self):
+        settings =  self.info.GetParamValueOrDefault("ФОП_ВИС_Настройки немоделируемых", "")
+
+        if settings == "":
+            def_sets = """
+            ##UNMODELING_REGION_START##
+            ##ENAMEL_NAME##
+            Краска антикоррозионная, покрытие в два слоя. Расход - 0.2 кг на м²;
+            ##ENAMEL_MARK##
+            БТ-177;
+            ##ENAMEL_CODE##
+            ##ENAMEL_CREATOR##
+            ##ENAMEL_UNIT##
+            кг.;
+            ##PRIMER_NAME##
+            Грунтовка для стальных труб, покрытие в один слой. Расход - 0.1 кг на м²;
+            ##PRIMER_MARK##
+            ГФ-031;
+            ##PRIMER_CODE##
+            ##PRIMER_UNIT##
+            кг.;
+            ##PRIMER_CREATOR#
+            ##PIPE_TYPES_METALL##
+            ##PIPE_TYPES_COLOR##
+            ##PIPE_TYPES_CLAMPS##
+            ##DUCT_TYPES_METALL##
+            ##UNMODELING_REGION_END##
+            """
+            self.info.SetParamValue("ФОП_ВИС_Настройки немоделируемых", def_sets)
+
+    def get_setting_region(self, region_name):
+        settings = self.info.GetParamValueOrDefault("ФОП_ВИС_Настройки немоделируемых", "")
+
+        # Ищем текст между двумя тегами вида ##REGION_NAME##
+        pattern = r"##" + re.escape(region_name) + r"##\s*(.*?)\s*##"
+        match = re.search(pattern, settings, flags=re.DOTALL)
+
+        if not match:
+            return []
+
+        region_text = match.group(1)
+
+        # Разбиваем по ';'
+        parts = [p.strip() for p in region_text.split(";")]
+
+        # Убираем пустые элементы
+        return [p for p in parts if p]
+
+
+    def edit_setting_region(self, settings, region_name, new_value_list, append=True):
+        if not new_value_list:
+            return settings
+
+
+        pattern = r"(##" + re.escape(region_name) + r"##\s*)(.*?)(\s*##[A-Z_]+##)"
+        match = re.search(pattern, settings, flags=re.DOTALL)
+
+        if not match:
+            return settings
+
+        start_tag = match.group(1)
+        old_value = match.group(2).strip()
+        end_tag = match.group(3)
+
+        # Преобразуем старое значение в список
+        if old_value:
+            old_list = [x.strip() for x in old_value.split(";") if x.strip()]
+        else:
+            old_list = []
+
+        # Новый список значений
+        new_list = [x.strip() for x in new_value_list if x.strip()]
+
+        # Обновление региона
+        if append:
+            final_list = old_list + new_list
+        else:
+            final_list = new_list
+
+        # Формируем текст — через ";" и пробел
+        combined = "; ".join(final_list)
+
+        # Склеиваем обратно
+        new_settings = (
+                settings[:match.start()] +
+                start_tag +
+                combined +
+                end_tag +
+                settings[match.end():]
+        )
+
+        return new_settings
+
+
     def startup_checks(self):
         """
         Выполняет начальные проверки файла и семейства.
@@ -722,9 +820,12 @@ class UnmodelingFactory:
                         SharedParamsConfig.Instance.BuildingWorksLevel]
 
 
-        with revit.Transaction("BIM: Настройка групп"):
+        with revit.Transaction("BIM: Настройка параметров"):
             for param in revit_params:
                 self.sort_parameter_to_group(param.Name, GroupTypeId.Data)
+
+            self.prepare_settings()
+
 
         project_parameters = ProjectParameters.Create(self.doc.Application)
         project_parameters.SetupRevitParams(self.doc, revit_params)
@@ -739,6 +840,8 @@ class UnmodelingFactory:
 
         self.check_family(family_symbol)
         self.check_worksets()
+
+
 
 
 
