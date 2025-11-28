@@ -711,7 +711,7 @@ class UnmodelingFactory:
     def prepare_settings(self):
         settings =  self.info.GetParamValueOrDefault("ФОП_ВИС_Настройки немоделируемых", "")
 
-        if settings == "":
+        if settings:
             def_sets = """
             ##UNMODELING_REGION_START##
             ##ENAMEL_NAME##
@@ -729,13 +729,11 @@ class UnmodelingFactory:
             ##PRIMER_CODE##
             ##PRIMER_UNIT##
             кг.;
-            ##PRIMER_CREATOR#
+            ##PRIMER_CREATOR##
             ##PIPE_TYPES_METALL##
             ##PIPE_TYPES_COLOR##
             ##PIPE_TYPES_CLAMPS##
             ##DUCT_TYPES_METALL##
-            ##UNMODELING_REGION_END##
-            
             ##CONSUMABLE1_NAMES##
             ##CONSUMABLE2_NAMES##
             ##CONSUMABLE3_NAMES##
@@ -764,10 +762,10 @@ class UnmodelingFactory:
             ##CONSUMABLE2_RATE_BY_SQUARE##
             ##CONSUMABLE3_RATE_BY_SQUARE##
             ##CONSUMABLE4_RATE_BY_SQUARE##
-            
-            
+            ##UNMODELING_REGION_END##
             """
             self.info.SetParamValue("ФОП_ВИС_Настройки немоделируемых", def_sets)
+
 
     def get_setting_region(self, region_name):
         settings = self.info.GetParamValueOrDefault("ФОП_ВИС_Настройки немоделируемых", "")
@@ -787,51 +785,33 @@ class UnmodelingFactory:
         # Убираем пустые элементы
         return [p for p in parts if p]
 
-
-    def edit_setting_region(self, settings, region_name, new_value_list, append=True):
+    def edit_setting_region(self, base_settings, region_name, new_value_list, append=True):
         if not new_value_list:
-            return settings
+            return base_settings
 
-
-        pattern = r"(##" + re.escape(region_name) + r"##\s*)(.*?)(\s*##[A-Z_]+##)"
-        match = re.search(pattern, settings, flags=re.DOTALL)
+        pattern = r"(##" + re.escape(region_name) + r"##\s*)(.*?)(?=\s*##[^#]+##)"
+        match = re.search(pattern, base_settings, flags=re.DOTALL)
 
         if not match:
-            return settings
+            return base_settings
 
         start_tag = match.group(1)
         old_value = match.group(2).strip()
-        end_tag = match.group(3)
 
-        # Преобразуем старое значение в список
-        if old_value:
-            old_list = [x.strip() for x in old_value.split(";") if x.strip()]
-        else:
-            old_list = []
-
-        # Новый список значений
+        old_list = [x.strip() for x in old_value.split(";") if x.strip()] if old_value else []
         new_list = [x.strip() for x in new_value_list if x.strip()]
 
-        # Обновление региона
-        if append:
-            final_list = old_list + new_list
-        else:
-            final_list = new_list
-
-        # Формируем текст — через ";" и пробел
+        final_list = old_list + new_list if append else new_list
         combined = "; ".join(final_list)
 
-        # Склеиваем обратно
         new_settings = (
-                settings[:match.start()] +
+                base_settings[:match.start()] +
                 start_tag +
                 combined +
-                end_tag +
-                settings[match.end():]
+                base_settings[match.end():]
         )
 
         return new_settings
-
 
     def startup_checks(self):
         """
@@ -871,10 +851,6 @@ class UnmodelingFactory:
 
         self.check_family(family_symbol)
         self.check_worksets()
-
-
-
-
 
         return family_symbol
 

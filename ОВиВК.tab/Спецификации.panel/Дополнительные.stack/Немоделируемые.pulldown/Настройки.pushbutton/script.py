@@ -180,20 +180,7 @@ def _collect_consumable_regions(ins_rows):
             regions["CONSUMABLE{0}_RATE".format(idx)].append("{0} {1}".format(base_id, cons.RatePerMeter))
             regions["CONSUMABLE{0}_RATE_BY_SQUARE".format(idx)].append("{0} {1}".format(base_id, cons.RatePerSqm))
 
-    all_keys = [
-        "CONSUMABLE1_NAMES", "CONSUMABLE2_NAMES", "CONSUMABLE3_NAMES", "CONSUMABLE4_NAMES",
-        "CONSUMABLE1_MARKS", "CONSUMABLE2_MARKS", "CONSUMABLE3_MARKS", "CONSUMABLE4_MARKS",
-        "CONSUMABLE1_CODES", "CONSUMABLE2_CODES", "CONSUMABLE3_CODES", "CONSUMABLE4_CODES",
-        "CONSUMABLE1_MAKER", "CONSUMABLE2_MAKER", "CONSUMABLE3_MAKER", "CONSUMABLE4_MAKER",
-        "CONSUMABLE1_UNIT", "CONSUMABLE2_UNIT", "CONSUMABLE3_UNIT", "CONSUMABLE4_UNIT",
-        "CONSUMABLE1_RATE", "CONSUMABLE2_RATE", "CONSUMABLE3_RATE", "CONSUMABLE4_RATE",
-        "CONSUMABLE1_RATE_BY_SQUARE", "CONSUMABLE2_RATE_BY_SQUARE", "CONSUMABLE3_RATE_BY_SQUARE", "CONSUMABLE4_RATE_BY_SQUARE",
-    ]
-    for key in all_keys:
-        if key not in regions or not regions[key]:
-            regions[key] = [""]
-
-    return regions, all_keys
+    return regions
 
 
 def _apply_consumable_region(rows, region_entries, attr_name, is_bool=False):
@@ -209,6 +196,8 @@ def _apply_consumable_region(rows, region_entries, attr_name, is_bool=False):
     for row in rows:
         val = values.get(row.Id)
         if val is None:
+            continue
+        if isinstance(val, basestring) and not val.strip():
             continue
         if is_bool:
             setattr(row, attr_name, val.strip().lower() in truthy)
@@ -241,6 +230,8 @@ def get_types_by_category(category):
 
 def script_execute():
     unmodeling_factory.startup_checks()
+
+
     pipe_types = get_types_by_category(BuiltInCategory.OST_PipeCurves)
     duct_types = get_types_by_category(BuiltInCategory.OST_DuctCurves)
     pipe_insulation_types = get_types_by_category(BuiltInCategory.OST_PipeInsulations)
@@ -257,13 +248,11 @@ def script_execute():
 
     window = SettingsWindow(xaml_path)
 
-    # load existing checkbox regions
     _apply_region_to_rows(duct_rows, _parse_bool_region(unmodeling_factory.get_setting_region("DUCT_TYPES_METALL")), "CalcMetal")
     _apply_region_to_rows(pipe_rows, _parse_bool_region(unmodeling_factory.get_setting_region("PIPE_TYPES_METALL")), "CalcMetal")
     _apply_region_to_rows(pipe_rows, _parse_bool_region(unmodeling_factory.get_setting_region("PIPE_TYPES_COLOR")), "CalcPaintFixings")
     _apply_region_to_rows(pipe_rows, _parse_bool_region(unmodeling_factory.get_setting_region("PIPE_TYPES_CLAMPS")), "CalcClamps")
 
-    # load consumable regions into insulation rows
     all_ins_rows = pipe_ins_rows + duct_ins_rows
     for idx in range(1, 5):
         _apply_consumable_region(all_ins_rows, unmodeling_factory.get_setting_region("CONSUMABLE{0}_NAMES".format(idx)), "Name")
@@ -293,7 +282,7 @@ def script_execute():
     window.PrimerUnitTextBox.Text = first_or_empty(unmodeling_factory.get_setting_region("PRIMER_UNIT"))
 
     result = window.ShowDialog()
-
+    
     corrected_settings = ""
     if result:
         duct_region_values = _region_values_from_rows(duct_rows, "CalcMetal")
@@ -301,7 +290,7 @@ def script_execute():
         pipe_region_color = _region_values_from_rows(pipe_rows, "CalcPaintFixings")
         pipe_region_clamps = _region_values_from_rows(pipe_rows, "CalcClamps")
 
-        consumable_regions, consumable_region_names = _collect_consumable_regions(pipe_ins_rows + duct_ins_rows)
+        #consumable_regions = _collect_consumable_regions(pipe_ins_rows + duct_ins_rows)
 
         regions = [
             ("ENAMEL_NAME", [window.EnamelNameTextBox.Text]),
@@ -320,20 +309,24 @@ def script_execute():
             ("PIPE_TYPES_CLAMPS", pipe_region_clamps),
         ]
 
-        for region_name, values in consumable_regions.items():
-            regions.append((region_name, values))
+        #regions.extend([(region_name, values) for region_name, values in consumable_regions.items()])
+        #print regions
 
-        base_settings = unmodeling_factory.info.GetParamValue("ФОП_ВИС_Настройки немоделируемых")
-        base_settings = _ensure_regions(base_settings, [r[0] for r in regions] + consumable_region_names)
+        print "Изначальные настройки"
+        base_settings = unmodeling_factory.info.GetParamValueOrDefault(u"ФОП_ВИС_Настройки немоделируемых", "")
+        print base_settings
+        print "Конец изначальных настроек"
+        #base_settings = _ensure_regions(base_settings, [r[0] for r in regions] + consumable_region_names)
 
         for region_name, values in regions:
             base_settings = unmodeling_factory.edit_setting_region(base_settings, region_name, values, append=False)
 
         corrected_settings = base_settings
 
-        with revit.Transaction("BIM: Обновление настроек"):
-            print corrected_settings
-            unmodeling_factory.info.SetParamValue("ФОП_ВИС_Настройки немоделируемых", corrected_settings)
+        print corrected_settings
+
+        with revit.Transaction("BIM: запись настроек"):
+            unmodeling_factory.info.SetParamValue(u"ФОП_ВИС_Настройки немоделируемых", corrected_settings)
 
 
 script_execute()
