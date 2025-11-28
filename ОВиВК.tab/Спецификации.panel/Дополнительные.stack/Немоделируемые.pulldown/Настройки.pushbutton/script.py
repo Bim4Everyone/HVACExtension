@@ -143,7 +143,7 @@ class InsulationTypeRow(object):
 
 
 def _parse_bool_region(entries):
-    truthy = ("true", "1", "yes", u"да", u"истина")
+    truthy = ("true")
     result = set()
     for entry in entries:
         if not entry:
@@ -169,16 +169,20 @@ def _region_values_from_rows(rows, attr_name):
 
 def _collect_consumable_regions(ins_rows):
     regions = defaultdict(list)
+
     for ins in ins_rows:
         base_id = ins.Id
+
         for idx, cons in enumerate(ins.Consumables, start=1):
-            regions["CONSUMABLE{0}_NAMES".format(idx)].append("{0} {1}".format(base_id, cons.Name))
-            regions["CONSUMABLE{0}_MARKS".format(idx)].append("{0} {1}".format(base_id, cons.Mark))
-            regions["CONSUMABLE{0}_CODES".format(idx)].append("{0} {1}".format(base_id, cons.Code))
-            regions["CONSUMABLE{0}_MAKER".format(idx)].append("{0} {1}".format(base_id, cons.Factory))
-            regions["CONSUMABLE{0}_UNIT".format(idx)].append("{0} {1}".format(base_id, cons.Unit))
-            regions["CONSUMABLE{0}_RATE".format(idx)].append("{0} {1}".format(base_id, cons.RatePerMeter))
-            regions["CONSUMABLE{0}_RATE_BY_SQUARE".format(idx)].append("{0} {1}".format(base_id, cons.RatePerSqm))
+            prefix = "CONSUMABLE{0}".format(idx)
+
+            regions[prefix + "_NAMES"].append("{0} - {1}".format(base_id, cons.Name))
+            regions[prefix + "_MARKS"].append("{0} - {1}".format(base_id, cons.Mark))
+            regions[prefix + "_CODES"].append("{0} - {1}".format(base_id, cons.Code))
+            regions[prefix + "_MAKER"].append("{0} - {1}".format(base_id, cons.Factory))
+            regions[prefix + "_UNIT"].append("{0} - {1}".format(base_id, cons.Unit))
+            regions[prefix + "_RATE"].append("{0} - {1}".format(base_id, cons.RatePerMeter))
+            regions[prefix + "_RATE_BY_SQUARE"].append("{0} - {1}".format(base_id, cons.RatePerSqm))
 
     return regions
 
@@ -189,10 +193,20 @@ def _apply_consumable_region(rows, region_entries, attr_name, is_bool=False):
     for entry in region_entries:
         if not entry:
             continue
-        parts = entry.split(" ", 1)
-        if len(parts) != 2:
+        normalized = entry.strip()
+        # поддерживаем форматы "Id - value", "Id value", "Id\tvalue"
+        if " - " in normalized:
+            elem_id, value = [p.strip() for p in normalized.split(" - ", 1)]
+        elif "-" in normalized:
+            elem_id, value = [p.strip() for p in normalized.split("-", 1)]
+        else:
+            first_split = normalized.split(None, 1)
+            elem_id = first_split[0].strip() if first_split else ""
+            value = first_split[1].strip() if len(first_split) > 1 else ""
+
+        if not elem_id:
             continue
-        values[parts[0]] = parts[1]
+        values[elem_id] = value
     for row in rows:
         val = values.get(row.Id)
         if val is None:
@@ -290,7 +304,7 @@ def script_execute():
         pipe_region_color = _region_values_from_rows(pipe_rows, "CalcPaintFixings")
         pipe_region_clamps = _region_values_from_rows(pipe_rows, "CalcClamps")
 
-        #consumable_regions = _collect_consumable_regions(pipe_ins_rows + duct_ins_rows)
+        consumable_regions = _collect_consumable_regions(pipe_ins_rows + duct_ins_rows)
 
         regions = [
             ("ENAMEL_NAME", [window.EnamelNameTextBox.Text]),
@@ -309,7 +323,7 @@ def script_execute():
             ("PIPE_TYPES_CLAMPS", pipe_region_clamps),
         ]
 
-        #regions.extend([(region_name, values) for region_name, values in consumable_regions.items()])
+        regions.extend([(region_name, values) for region_name, values in consumable_regions.items()])
         #print regions
 
         print "Изначальные настройки"

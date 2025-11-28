@@ -711,7 +711,8 @@ class UnmodelingFactory:
     def prepare_settings(self):
         settings =  self.info.GetParamValueOrDefault("ФОП_ВИС_Настройки немоделируемых", "")
 
-        if settings:
+        if settings == "":
+            print "СБРОС НАСТРОЕК"
             def_sets = """
             ##UNMODELING_REGION_START##
             ##ENAMEL_NAME##
