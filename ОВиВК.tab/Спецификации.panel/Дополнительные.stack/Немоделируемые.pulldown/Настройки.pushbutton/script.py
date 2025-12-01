@@ -242,6 +242,7 @@ def _apply_consumable_region(rows, region_entries, attr_name, cons_index, is_boo
         else:
             setattr(target, attr_name, val.strip())
 
+
 def get_types_by_category(category):
     return FilteredElementCollector(doc) \
         .OfCategory(category) \
@@ -252,91 +253,58 @@ def get_types_by_category(category):
 def script_execute():
     unmodeling_factory.startup_checks()
 
-
-    pipe_types = get_types_by_category(BuiltInCategory.OST_PipeCurves)
-    duct_types = get_types_by_category(BuiltInCategory.OST_DuctCurves)
-    pipe_insulation_types = get_types_by_category(BuiltInCategory.OST_PipeInsulations)
-    duct_insulation_types = get_types_by_category(BuiltInCategory.OST_DuctInsulations)
-
-    duct_rows = [TypeRow(el) for el in duct_types]
-    pipe_rows = [TypeRow(el) for el in pipe_types]
-    pipe_ins_rows = [InsulationTypeRow(el) for el in pipe_insulation_types]
-    duct_ins_rows = [InsulationTypeRow(el) for el in duct_insulation_types]
-
     xaml_path = script.get_bundle_file("settings.xaml")
     if not xaml_path:
         forms.alert("settings.xaml was not found next to the script.", exitscript=True)
 
     window = SettingsWindow(xaml_path)
 
-    _apply_region_to_rows(duct_rows, _parse_bool_region(unmodeling_factory.get_setting_region("DUCT_TYPES_METALL")), "CalcMetal")
-    _apply_region_to_rows(pipe_rows, _parse_bool_region(unmodeling_factory.get_setting_region("PIPE_TYPES_METALL")), "CalcMetal")
-    _apply_region_to_rows(pipe_rows, _parse_bool_region(unmodeling_factory.get_setting_region("PIPE_TYPES_COLOR")), "CalcPaintFixings")
-    _apply_region_to_rows(pipe_rows, _parse_bool_region(unmodeling_factory.get_setting_region("PIPE_TYPES_CLAMPS")), "CalcClamps")
+    print unmodeling_factory.info.GetParamValueOrDefault("ФОП_ВИС_Настройки немоделируемых", "")
 
-    all_ins_rows = pipe_ins_rows + duct_ins_rows
-    for idx in range(1, 5):
-        _apply_consumable_region(all_ins_rows, unmodeling_factory.get_setting_region("CONSUMABLE{0}_NAMES".format(idx)), "Name", idx)
-        _apply_consumable_region(all_ins_rows, unmodeling_factory.get_setting_region("CONSUMABLE{0}_MARKS".format(idx)), "Mark", idx)
-        _apply_consumable_region(all_ins_rows, unmodeling_factory.get_setting_region("CONSUMABLE{0}_CODES".format(idx)), "Code", idx)
-        _apply_consumable_region(all_ins_rows, unmodeling_factory.get_setting_region("CONSUMABLE{0}_MAKER".format(idx)), "Factory", idx)
-        _apply_consumable_region(all_ins_rows, unmodeling_factory.get_setting_region("CONSUMABLE{0}_UNIT".format(idx)), "Unit", idx)
-        _apply_consumable_region(all_ins_rows, unmodeling_factory.get_setting_region("CONSUMABLE{0}_RATE".format(idx)), "RatePerMeter", idx)
-        _apply_consumable_region(all_ins_rows, unmodeling_factory.get_setting_region("CONSUMABLE{0}_RATE_BY_SQUARE".format(idx)), "RatePerSqm", idx, is_bool=True)
+    window.EnamelNameTextBox.Text = unmodeling_factory.get_setting_value(
+        ["UNMODELING", "ENAMEL", "NAME"])
+    window.EnamelBrandTextBox.Text = unmodeling_factory.get_setting_value(
+        ["UNMODELING", "ENAMEL", "MARK"])
+    window.EnamelCodeTextBox.Text = unmodeling_factory.get_setting_value(
+        ["UNMODELING", "ENAMEL", "CODE"])
+    window.EnamelFactoryTextBox.Text = unmodeling_factory.get_setting_value(
+        ["UNMODELING", "ENAMEL", "CREATOR"])
+    window.EnamelUnitTextBox.Text = unmodeling_factory.get_setting_value(
+        ["UNMODELING", "ENAMEL", "UNIT"])
 
-    window.set_type_rows(ducts=duct_rows, pipes=pipe_rows)
-    window.set_insulation_rows(pipe_ins_rows, duct_ins_rows)
-
-    def first_or_empty(lst):
-        return lst[0] if lst else ""
-
-    window.EnamelNameTextBox.Text = first_or_empty(unmodeling_factory.get_setting_region("ENAMEL_NAME"))
-    window.EnamelBrandTextBox.Text = first_or_empty(unmodeling_factory.get_setting_region("ENAMEL_MARK"))
-    window.EnamelCodeTextBox.Text = first_or_empty(unmodeling_factory.get_setting_region("ENAMEL_CODE"))
-    window.EnamelFactoryTextBox.Text = first_or_empty(unmodeling_factory.get_setting_region("ENAMEL_CREATOR"))
-    window.EnamelUnitTextBox.Text = first_or_empty(unmodeling_factory.get_setting_region("ENAMEL_UNIT"))
-
-    window.PrimerNameTextBox.Text = first_or_empty(unmodeling_factory.get_setting_region("PRIMER_NAME"))
-    window.PrimerBrandTextBox.Text = first_or_empty(unmodeling_factory.get_setting_region("PRIMER_MARK"))
-    window.PrimerCodeTextBox.Text = first_or_empty(unmodeling_factory.get_setting_region("PRIMER_CODE"))
-    window.PrimerFactoryTextBox.Text = first_or_empty(unmodeling_factory.get_setting_region("PRIMER_CREATOR"))
-    window.PrimerUnitTextBox.Text = first_or_empty(unmodeling_factory.get_setting_region("PRIMER_UNIT"))
+    window.PrimerNameTextBox.Text = unmodeling_factory.get_setting_value(
+        ["UNMODELING", "PRIMER", "NAME"])
+    window.PrimerBrandTextBox.Text = unmodeling_factory.get_setting_value(
+        ["UNMODELING", "PRIMER", "MARK"])
+    window.PrimerCodeTextBox.Text = unmodeling_factory.get_setting_value(
+        ["UNMODELING", "PRIMER", "CODE"])
+    window.PrimerFactoryTextBox.Text = unmodeling_factory.get_setting_value(
+        ["UNMODELING", "PRIMER", "CREATOR"])
+    window.PrimerUnitTextBox.Text = unmodeling_factory.get_setting_value(
+        ["UNMODELING", "PRIMER", "UNIT"])
 
     result = window.ShowDialog()
     
     corrected_settings = ""
     if result:
-        duct_region_values = _region_values_from_rows(duct_rows, "CalcMetal")
-        pipe_region_metall = _region_values_from_rows(pipe_rows, "CalcMetal")
-        pipe_region_color = _region_values_from_rows(pipe_rows, "CalcPaintFixings")
-        pipe_region_clamps = _region_values_from_rows(pipe_rows, "CalcClamps")
+        setting_values = [
+            (["UNMODELING", "ENAMEL", "NAME"], window.EnamelNameTextBox.Text),
+            (["UNMODELING", "ENAMEL", "MARK"], window.EnamelBrandTextBox.Text),
+            (["UNMODELING", "ENAMEL", "CODE"], window.EnamelCodeTextBox.Text),
+            (["UNMODELING", "ENAMEL", "CREATOR"], window.EnamelFactoryTextBox.Text),
+            (["UNMODELING", "ENAMEL", "UNIT"], window.EnamelUnitTextBox.Text),
 
-        consumable_regions = _collect_consumable_regions(pipe_ins_rows + duct_ins_rows)
-
-        regions = [
-            ("ENAMEL_NAME", [window.EnamelNameTextBox.Text]),
-            ("ENAMEL_MARK", [window.EnamelBrandTextBox.Text]),
-            ("ENAMEL_CODE", [window.EnamelCodeTextBox.Text]),
-            ("ENAMEL_CREATOR", [window.EnamelFactoryTextBox.Text]),
-            ("ENAMEL_UNIT", [window.EnamelUnitTextBox.Text]),
-            ("PRIMER_NAME", [window.PrimerNameTextBox.Text]),
-            ("PRIMER_MARK", [window.PrimerBrandTextBox.Text]),
-            ("PRIMER_CODE", [window.PrimerCodeTextBox.Text]),
-            ("PRIMER_UNIT", [window.PrimerUnitTextBox.Text]),
-            ("PRIMER_CREATOR", [window.PrimerFactoryTextBox.Text]),
-            ("DUCT_TYPES_METALL", duct_region_values),
-            ("PIPE_TYPES_METALL", pipe_region_metall),
-            ("PIPE_TYPES_COLOR", pipe_region_color),
-            ("PIPE_TYPES_CLAMPS", pipe_region_clamps),
+            (["UNMODELING", "PRIMER", "NAME"], window.PrimerNameTextBox.Text),
+            (["UNMODELING", "PRIMER", "MARK"], window.PrimerBrandTextBox.Text),
+            (["UNMODELING", "PRIMER", "CODE"], window.PrimerCodeTextBox.Text),
+            (["UNMODELING", "PRIMER", "UNIT"], window.PrimerUnitTextBox.Text),
+            (["UNMODELING", "PRIMER", "CREATOR"], window.PrimerFactoryTextBox.Text),
         ]
-
-        regions.extend([(region_name, values) for region_name, values in consumable_regions.items()])
-
 
         base_settings = unmodeling_factory.info.GetParamValueOrDefault("ФОП_ВИС_Настройки немоделируемых", "")
 
-        for region_name, values in regions:
-            base_settings = unmodeling_factory.edit_setting_region(base_settings, region_name, values, append=False)
+        for setting_key, values in setting_values:
+            base_settings = unmodeling_factory.set_setting_value(base_settings, setting_key, values)
 
         corrected_settings = base_settings
 

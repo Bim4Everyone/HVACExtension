@@ -5,6 +5,8 @@ from System import Environment
 import os
 import clr
 import re
+import json
+
 
 clr.AddReference("dosymep.Revit.dll")
 clr.AddReference("dosymep.Bim4Everyone.dll")
@@ -255,6 +257,7 @@ class UnmodelingFactory:
     RAPID_CLAMPS_RULE_NAME = 'Хомут соединительный Rapid'
     PIN_RULE_NAME = 'Шпилька М8 1м/1шт'
 
+    SETTINGS_REGION = "UNMODELING_REGION_START"
     FAMILY_NAME = '_Якорный элемент'
     OUT_OF_SYSTEM_VALUE = '!Нет системы'
     OUT_OF_FUNCTION_VALUE = '!Нет функции'
@@ -271,6 +274,17 @@ class UnmodelingFactory:
     def __init__(self, doc):
         self.doc = doc
         self.info = self.doc.ProjectInformation
+
+        self.COLOR_RULE_NAME = (
+                self.get_setting_value(["UNMODELING", "ENAMEL", "NAME"])
+                or 'Краска антикоррозионная, покрытие в два слоя. Расход - 0.2 кг на м²'
+        )
+
+        self.GRUNT_RULE_NAME = (
+                self.get_setting_value(["UNMODELING", "PRIMER", "NAME"])
+                or 'Грунтовка для стальных труб, покрытие в один слой. Расход - 0.1 кг на м²'
+        )
+
 
     def get_elements_types_by_category(self, category):
         """
@@ -472,21 +486,24 @@ class UnmodelingFactory:
             GenerationRuleSet(
                 group=self.MATERIAL_GROUP,
                 name=self.COLOR_RULE_NAME,
-                mark="БТ-177",
-                code="",
-                unit="кг.",
-                maker="",
+                mark=self.get_setting_value(["UNMODELING", "ENAMEL", "MARK"]),
+                code=self.get_setting_value(["UNMODELING", "ENAMEL", "CODE"]),
+                unit=self.get_setting_value(["UNMODELING", "ENAMEL", "UNIT"]),
+                maker=self.get_setting_value(["UNMODELING", "ENAMEL", "CREATOR"]),
                 method_name=SharedParamsConfig.Instance.VISIsPaintCalculation.Name,
-                category=BuiltInCategory.OST_PipeCurves),
+                category=BuiltInCategory.OST_PipeCurves
+            ),
+
             GenerationRuleSet(
                 group=self.MATERIAL_GROUP,
                 name=self.GRUNT_RULE_NAME,
-                mark="ГФ-031",
-                code="",
-                unit="кг.",
-                maker="",
+                mark=self.get_setting_value(["UNMODELING", "PRIMER", "MARK"]),
+                code=self.get_setting_value(["UNMODELING", "PRIMER", "CODE"]),
+                unit=self.get_setting_value(["UNMODELING", "PRIMER", "UNIT"]),
+                maker=self.get_setting_value(["UNMODELING", "PRIMER", "CREATOR"]),
                 method_name=SharedParamsConfig.Instance.VISIsPaintCalculation.Name,
-                category=BuiltInCategory.OST_PipeCurves),
+                category=BuiltInCategory.OST_PipeCurves
+            ),
             GenerationRuleSet(
                 group=self.MATERIAL_GROUP,
                 name=self.CLAMPS_RULE_NAME,
@@ -713,105 +730,74 @@ class UnmodelingFactory:
 
         if settings == "":
             def_sets = """
-            ##UNMODELING_REGION_START##
-            ##ENAMEL_NAME##
-            Краска антикоррозионная, покрытие в два слоя. Расход - 0.2 кг на м²;
-            ##ENAMEL_MARK##
-            БТ-177;
-            ##ENAMEL_CODE##
-            ##ENAMEL_CREATOR##
-            ##ENAMEL_UNIT##
-            кг.;
-            ##PRIMER_NAME##
-            Грунтовка для стальных труб, покрытие в один слой. Расход - 0.1 кг на м²;
-            ##PRIMER_MARK##
-            ГФ-031;
-            ##PRIMER_CODE##
-            ##PRIMER_UNIT##
-            кг.;
-            ##PRIMER_CREATOR##
-            ##PIPE_TYPES_METALL##
-            ##PIPE_TYPES_COLOR##
-            ##PIPE_TYPES_CLAMPS##
-            ##DUCT_TYPES_METALL##
-            ##CONSUMABLE1_NAMES##
-            ##CONSUMABLE2_NAMES##
-            ##CONSUMABLE3_NAMES##
-            ##CONSUMABLE4_NAMES##
-            ##CONSUMABLE1_MARKS##
-            ##CONSUMABLE2_MARKS##
-            ##CONSUMABLE3_MARKS##
-            ##CONSUMABLE4_MARKS##
-            ##CONSUMABLE1_CODES##
-            ##CONSUMABLE2_CODES##
-            ##CONSUMABLE3_CODES##
-            ##CONSUMABLE4_CODES##
-            ##CONSUMABLE1_MAKER##
-            ##CONSUMABLE2_MAKER##
-            ##CONSUMABLE3_MAKER##
-            ##CONSUMABLE4_MAKER##
-            ##CONSUMABLE1_UNIT##
-            ##CONSUMABLE2_UNIT##
-            ##CONSUMABLE3_UNIT##
-            ##CONSUMABLE4_UNIT##
-            ##CONSUMABLE1_RATE##
-            ##CONSUMABLE2_RATE##
-            ##CONSUMABLE3_RATE##
-            ##CONSUMABLE4_RATE##
-            ##CONSUMABLE1_RATE_BY_SQUARE##
-            ##CONSUMABLE2_RATE_BY_SQUARE##
-            ##CONSUMABLE3_RATE_BY_SQUARE##
-            ##CONSUMABLE4_RATE_BY_SQUARE##
-            ##UNMODELING_REGION_END##
+            
+            {"UNMODELING":
+                {
+                  "ENAMEL": {
+                    "NAME": "Краска антикоррозионная, покрытие в два слоя. Расход - 0.2 кг на м²",
+                    "MARK": "БТ-177",
+                    "CODE": "",
+                    "CREATOR": "",
+                    "UNIT": "кг"
+                  },
+                  "PRIMER": {
+                    "NAME": "Грунтовка для стальных труб, покрытие в один слой. Расход - 0.1 кг на м²",
+                    "MARK": "ГФ-031",
+                    "CODE": "",
+                    "CREATOR": "",
+                    "UNIT": "кг"
+                  }
+                }
+            }
             """
             self.info.SetParamValue("ФОП_ВИС_Настройки немоделируемых", def_sets)
 
+    def get_setting_value(self, key_path):
+        """
+        key_path — список ключей, например:
+        ["UNMODELING", "ENAMEL", "NAME"]
+        """
 
-    def get_setting_region(self, region_name):
         settings = self.info.GetParamValueOrDefault("ФОП_ВИС_Настройки немоделируемых", "")
 
-        # Ищем текст между двумя тегами вида ##REGION_NAME##
-        pattern = r"##" + re.escape(region_name) + r"##\s*(.*?)\s*##"
-        match = re.search(pattern, settings, flags=re.DOTALL)
+        try:
+            data = json.loads(settings)
+        except Exception:
+            return None
 
-        if not match:
-            return []
+        node = data
+        for key in key_path:
+            if isinstance(node, dict) and key in node:
+                node = node[key]
+            else:
+                return None
 
-        region_text = match.group(1)
+        return node
 
-        # Разбиваем по ';'
-        parts = [p.strip() for p in region_text.split(";")]
+    def set_setting_value(self, settings_text, key_path, new_value):
+        """
+        key_path — путь к полю в JSON
+        new_value — новое значение
+        """
 
-        # Убираем пустые элементы
-        return [p for p in parts if p]
+        try:
+            data = json.loads(settings_text)
+        except Exception:
+            # если JSON сломан, пересоздаём пустую структуру
+            data = {}
 
-    def edit_setting_region(self, base_settings, region_name, new_value_list, append=True):
-        if not new_value_list:
-            return base_settings
+        # Спускаемся по ключам, создавая вложенные словари при необходимости
+        node = data
+        for key in key_path[:-1]:
+            if key not in node or not isinstance(node[key], dict):
+                node[key] = {}
+            node = node[key]
 
-        pattern = r"(##" + re.escape(region_name) + r"##\s*)(.*?)(?=\s*##[^#]+##)"
-        match = re.search(pattern, base_settings, flags=re.DOTALL)
+        # Меняем конечное значение
+        node[key_path[-1]] = new_value
 
-        if not match:
-            return base_settings
-
-        start_tag = match.group(1)
-        old_value = match.group(2).strip()
-
-        old_list = [x.strip() for x in old_value.split(";") if x.strip()] if old_value else []
-        new_list = [x.strip() for x in new_value_list if x.strip()]
-
-        final_list = old_list + new_list if append else new_list
-        combined = "; ".join(final_list)
-
-        new_settings = (
-                base_settings[:match.start()] +
-                start_tag +
-                combined +
-                base_settings[match.end():]
-        )
-
-        return new_settings
+        # Сериализуем обратно
+        return json.dumps(data, ensure_ascii=False, indent=2)
 
     def startup_checks(self):
         """
