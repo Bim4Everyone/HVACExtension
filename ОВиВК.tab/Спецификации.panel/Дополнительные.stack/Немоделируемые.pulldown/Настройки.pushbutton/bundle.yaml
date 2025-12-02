@@ -3,23 +3,12 @@ title:
   en_us: Settings
 
 tooltip:
-  ru: Генерирует пустой элемент с параметром группирования по выбранной строке спецификаций.
-    
-    1. Перейдите на вид спецификации в которой нужно добавить пустую строку
-  
-    2. Выделите строку под которой нужны пустые строки
-  
-    3. Активируйте скрипт и введите количество пустых строк которые вам нужны
-  en_us: Generates an empty element with the option to group by the selected specification line.
-    
-    1. Go to the specification view in which you need to add an empty line
-  
-    2. Select the line under which you need empty lines
-  
-    3. Activate the script and enter the number of empty lines you need
+  ru: Позволяет настроить вид немоделируемых элементов.
+
+  en_us: Allows you to customize the appearance of non-modeled elements.
 
 author: Redomine
-help_url: "https://kb.a101.ru/pages/viewpage.action?pageId=110562607"
+help_url: "https://kb.a101.ru/pages/viewpage.action?pageId=157127647"
 
-min_revit_version: 2020
+min_revit_version: 2022
 max_revit_version: 2024

@@ -1,4 +1,4 @@
-﻿#! /usr/bin/env python
+#! /usr/bin/env python
 # -*- coding: utf-8 -*-
 
 import clr
@@ -113,141 +113,77 @@ class SettingsWindow(forms.WPFWindow):
             pass
 
 
-class TypeRow(object):
-    def __init__(self, element):
-        self.Id = str(element.Id)
-        self.Name = element.get_Parameter(BuiltInParameter.SYMBOL_NAME_PARAM).AsString()
-        self.CalcMetal = False
-        self.CalcPaintFixings = False
-        self.CalcClamps = False
+def _set_window_values_from_settings(window):
+    def _safe_set_text(box, value):
+        if box is not None:
+            box.Text = value if value is not None else ""
+
+    _safe_set_text(
+        getattr(window, "EnamelNameTextBox", None),
+        unmodeling_factory.get_setting_value(["UNMODELING", "ENAMEL", "NAME"]),
+    )
+    _safe_set_text(
+        getattr(window, "EnamelBrandTextBox", None),
+        unmodeling_factory.get_setting_value(["UNMODELING", "ENAMEL", "MARK"]),
+    )
+    _safe_set_text(
+        getattr(window, "EnamelCodeTextBox", None),
+        unmodeling_factory.get_setting_value(["UNMODELING", "ENAMEL", "CODE"]),
+    )
+    _safe_set_text(
+        getattr(window, "EnamelFactoryTextBox", None),
+        unmodeling_factory.get_setting_value(["UNMODELING", "ENAMEL", "CREATOR"]),
+    )
+    _safe_set_text(
+        getattr(window, "EnamelUnitTextBox", None),
+        unmodeling_factory.get_setting_value(["UNMODELING", "ENAMEL", "UNIT"]),
+    )
+    _safe_set_text(
+        getattr(window, "PrimerNameTextBox", None),
+        unmodeling_factory.get_setting_value(["UNMODELING", "PRIMER", "NAME"]),
+    )
+    _safe_set_text(
+        getattr(window, "PrimerBrandTextBox", None),
+        unmodeling_factory.get_setting_value(["UNMODELING", "PRIMER", "MARK"]),
+    )
+    _safe_set_text(
+        getattr(window, "PrimerCodeTextBox", None),
+        unmodeling_factory.get_setting_value(["UNMODELING", "PRIMER", "CODE"]),
+    )
+    _safe_set_text(
+        getattr(window, "PrimerFactoryTextBox", None),
+        unmodeling_factory.get_setting_value(["UNMODELING", "PRIMER", "CREATOR"]),
+    )
+    _safe_set_text(
+        getattr(window, "PrimerUnitTextBox", None),
+        unmodeling_factory.get_setting_value(["UNMODELING", "PRIMER", "UNIT"]),
+    )
 
 
-class ConsumableRow(object):
-    def __init__(self, index):
-        self.Index = index
-        self.Name = ""
-        self.Mark = ""
-        self.Code = ""
-        self.Article = ""
-        self.Factory = ""
-        self.Unit = ""
-        self.RatePerMeter = ""
-        self.RatePerSqm = False
-
-
-class InsulationTypeRow(object):
-    def __init__(self, element):
-        self.Id = str(element.Id)
-        self.TypeName = element.get_Parameter(BuiltInParameter.SYMBOL_NAME_PARAM).AsString()
-        self.Consumables = [ConsumableRow(i) for i in range(1, 5)]
-
-
-def _parse_bool_region(entries):
-    truthy = ("true")
-    result = set()
-    for entry in entries:
-        if not entry:
-            continue
-        parts = [p.strip() for p in entry.split("-", 1)]
-        if len(parts) != 2:
-            continue
-        elem_id, value = parts
-        if value.lower() in truthy:
-            result.add(elem_id)
-    return result
-
-
-def _apply_region_to_rows(rows, true_ids, attr_name):
-    for row in rows:
-        setattr(row, attr_name, row.Id in true_ids)
-
-
-def _region_values_from_rows(rows, attr_name):
-    values = ["{0} - True".format(r.Id) for r in rows if getattr(r, attr_name, False)]
-    return values if values else [""]
-
-
-def _collect_consumable_regions(ins_rows):
-    regions = defaultdict(list)
-
-    def _has_value(val):
+def _get_corrected_settings_from_window(window):
+    def _read_text(box):
         try:
-            return bool(val) and bool(val.strip())
+            return box.Text
         except Exception:
-            return bool(val)
+            return ""
 
-    for ins in ins_rows:
-        base_id = ins.Id
+    setting_values = [
+        (["UNMODELING", "ENAMEL", "NAME"], _read_text(getattr(window, "EnamelNameTextBox", None))),
+        (["UNMODELING", "ENAMEL", "MARK"], _read_text(getattr(window, "EnamelBrandTextBox", None))),
+        (["UNMODELING", "ENAMEL", "CODE"], _read_text(getattr(window, "EnamelCodeTextBox", None))),
+        (["UNMODELING", "ENAMEL", "CREATOR"], _read_text(getattr(window, "EnamelFactoryTextBox", None))),
+        (["UNMODELING", "ENAMEL", "UNIT"], _read_text(getattr(window, "EnamelUnitTextBox", None))),
+        (["UNMODELING", "PRIMER", "NAME"], _read_text(getattr(window, "PrimerNameTextBox", None))),
+        (["UNMODELING", "PRIMER", "MARK"], _read_text(getattr(window, "PrimerBrandTextBox", None))),
+        (["UNMODELING", "PRIMER", "CODE"], _read_text(getattr(window, "PrimerCodeTextBox", None))),
+        (["UNMODELING", "PRIMER", "UNIT"], _read_text(getattr(window, "PrimerUnitTextBox", None))),
+        (["UNMODELING", "PRIMER", "CREATOR"], _read_text(getattr(window, "PrimerFactoryTextBox", None))),
+    ]
 
-        for idx, cons in enumerate(ins.Consumables, start=1):
-            prefix = "CONSUMABLE{0}".format(idx)
-
-            if _has_value(cons.Name):
-                regions[prefix + "_NAMES"].append("{0} - {1}".format(base_id, cons.Name))
-            if _has_value(cons.Mark):
-                regions[prefix + "_MARKS"].append("{0} - {1}".format(base_id, cons.Mark))
-            if _has_value(cons.Code):
-                regions[prefix + "_CODES"].append("{0} - {1}".format(base_id, cons.Code))
-            if _has_value(cons.Factory):
-                regions[prefix + "_MAKER"].append("{0} - {1}".format(base_id, cons.Factory))
-            if _has_value(cons.Unit):
-                regions[prefix + "_UNIT"].append("{0} - {1}".format(base_id, cons.Unit))
-            if _has_value(cons.RatePerMeter):
-                regions[prefix + "_RATE"].append("{0} - {1}".format(base_id, cons.RatePerMeter))
-            if cons.RatePerSqm:
-                regions[prefix + "_RATE_BY_SQUARE"].append("{0} - {1}".format(base_id, cons.RatePerSqm))
-
-    for idx in range(1, 5):
-        prefix = "CONSUMABLE{0}".format(idx)
-        for suffix in ("_NAMES", "_MARKS", "_CODES", "_MAKER", "_UNIT", "_RATE", "_RATE_BY_SQUARE"):
-            key = prefix + suffix
-            if not regions.get(key):
-                regions[key] = [""]
-
-    return regions
-
-
-def _apply_consumable_region(rows, region_entries, attr_name, cons_index, is_bool=False):
-    truthy = ("true", "1", "yes", u"да", u"истина")
-    values = {}
-    for entry in region_entries:
-        if not entry:
-            continue
-        normalized = entry.strip()
-        if " - " in normalized:
-            elem_id, value = [p.strip() for p in normalized.split(" - ", 1)]
-        elif "-" in normalized:
-            elem_id, value = [p.strip() for p in normalized.split("-", 1)]
-        else:
-            parts = normalized.split(None, 1)
-            elem_id = parts[0].strip() if parts else ""
-            value = parts[1].strip() if len(parts) > 1 else ""
-        if not elem_id:
-            continue
-        if isinstance(value, basestring) and not value.strip():
-            continue
-        values[elem_id] = value
-
-    for row in rows:
-        val = values.get(row.Id)
-        if val is None:
-            continue
-        if isinstance(val, basestring) and not val.strip():
-            continue
-        if cons_index < 1 or cons_index > len(row.Consumables):
-            continue
-        target = row.Consumables[cons_index - 1]
-        if is_bool:
-            setattr(target, attr_name, val.strip().lower() in truthy)
-        else:
-            setattr(target, attr_name, val.strip())
-
-
-def get_types_by_category(category):
-    return FilteredElementCollector(doc) \
-        .OfCategory(category) \
-        .WhereElementIsElementType() \
-        .ToElements()
+    base_settings = unmodeling_factory.info.GetParamValueOrDefault("???_???_??????? ????????????", "")
+    for setting_key, value in setting_values:
+        base_settings = unmodeling_factory.set_setting_value(base_settings, setting_key, value)
+    return base_settings
 
 
 def script_execute():
@@ -259,57 +195,16 @@ def script_execute():
 
     window = SettingsWindow(xaml_path)
 
-    print unmodeling_factory.info.GetParamValueOrDefault("ФОП_ВИС_Настройки немоделируемых", "")
-
-    window.EnamelNameTextBox.Text = unmodeling_factory.get_setting_value(
-        ["UNMODELING", "ENAMEL", "NAME"])
-    window.EnamelBrandTextBox.Text = unmodeling_factory.get_setting_value(
-        ["UNMODELING", "ENAMEL", "MARK"])
-    window.EnamelCodeTextBox.Text = unmodeling_factory.get_setting_value(
-        ["UNMODELING", "ENAMEL", "CODE"])
-    window.EnamelFactoryTextBox.Text = unmodeling_factory.get_setting_value(
-        ["UNMODELING", "ENAMEL", "CREATOR"])
-    window.EnamelUnitTextBox.Text = unmodeling_factory.get_setting_value(
-        ["UNMODELING", "ENAMEL", "UNIT"])
-
-    window.PrimerNameTextBox.Text = unmodeling_factory.get_setting_value(
-        ["UNMODELING", "PRIMER", "NAME"])
-    window.PrimerBrandTextBox.Text = unmodeling_factory.get_setting_value(
-        ["UNMODELING", "PRIMER", "MARK"])
-    window.PrimerCodeTextBox.Text = unmodeling_factory.get_setting_value(
-        ["UNMODELING", "PRIMER", "CODE"])
-    window.PrimerFactoryTextBox.Text = unmodeling_factory.get_setting_value(
-        ["UNMODELING", "PRIMER", "CREATOR"])
-    window.PrimerUnitTextBox.Text = unmodeling_factory.get_setting_value(
-        ["UNMODELING", "PRIMER", "UNIT"])
+    _set_window_values_from_settings(window)
 
     result = window.ShowDialog()
-    
-    corrected_settings = ""
+
     if result:
-        setting_values = [
-            (["UNMODELING", "ENAMEL", "NAME"], window.EnamelNameTextBox.Text),
-            (["UNMODELING", "ENAMEL", "MARK"], window.EnamelBrandTextBox.Text),
-            (["UNMODELING", "ENAMEL", "CODE"], window.EnamelCodeTextBox.Text),
-            (["UNMODELING", "ENAMEL", "CREATOR"], window.EnamelFactoryTextBox.Text),
-            (["UNMODELING", "ENAMEL", "UNIT"], window.EnamelUnitTextBox.Text),
-
-            (["UNMODELING", "PRIMER", "NAME"], window.PrimerNameTextBox.Text),
-            (["UNMODELING", "PRIMER", "MARK"], window.PrimerBrandTextBox.Text),
-            (["UNMODELING", "PRIMER", "CODE"], window.PrimerCodeTextBox.Text),
-            (["UNMODELING", "PRIMER", "UNIT"], window.PrimerUnitTextBox.Text),
-            (["UNMODELING", "PRIMER", "CREATOR"], window.PrimerFactoryTextBox.Text),
-        ]
-
-        base_settings = unmodeling_factory.info.GetParamValueOrDefault("ФОП_ВИС_Настройки немоделируемых", "")
-
-        for setting_key, values in setting_values:
-            base_settings = unmodeling_factory.set_setting_value(base_settings, setting_key, values)
-
-        corrected_settings = base_settings
-
-        with revit.Transaction("BIM: Обновление настроек немоделируемых"):
+        corrected_settings = _get_corrected_settings_from_window(window)
+        
+        with revit.Transaction("BIM: Обновление настроек"):
             unmodeling_factory.info.SetParamValue("ФОП_ВИС_Настройки немоделируемых", corrected_settings)
+
 
 
 script_execute()
