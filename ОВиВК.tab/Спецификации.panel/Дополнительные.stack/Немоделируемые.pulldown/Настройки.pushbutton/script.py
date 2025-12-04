@@ -180,18 +180,21 @@ def _get_corrected_settings_from_window(window):
         (["UNMODELING", "PRIMER", "CREATOR"], _read_text(getattr(window, "PrimerFactoryTextBox", None))),
     ]
 
-    base_settings = unmodeling_factory.info.GetParamValueOrDefault("???_???_??????? ????????????", "")
+    base_settings = doc.ProjectInformation.GetParamValueOrDefault(SharedParamsConfig.Instance.VISSettings, "")
     for setting_key, value in setting_values:
         base_settings = unmodeling_factory.set_setting_value(base_settings, setting_key, value)
     return base_settings
 
 
+
 def script_execute():
     unmodeling_factory.startup_checks()
 
+    print doc.ProjectInformation.GetParamValueOrDefault(SharedParamsConfig.Instance.VISSettings, "")
+
     xaml_path = script.get_bundle_file("settings.xaml")
     if not xaml_path:
-        forms.alert("settings.xaml was not found next to the script.", exitscript=True)
+        forms.alert("Не найдено окно настроек.", exitscript=True)
 
     window = SettingsWindow(xaml_path)
 
@@ -201,9 +204,10 @@ def script_execute():
 
     if result:
         corrected_settings = _get_corrected_settings_from_window(window)
-        
+
+        #print corrected_settings
         with revit.Transaction("BIM: Обновление настроек"):
-            unmodeling_factory.info.SetParamValue("ФОП_ВИС_Настройки немоделируемых", corrected_settings)
+            unmodeling_factory.info.SetParamValue(SharedParamsConfig.Instance.VISSettings, corrected_settings)
 
 
 

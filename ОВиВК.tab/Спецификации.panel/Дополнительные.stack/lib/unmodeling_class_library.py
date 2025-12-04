@@ -6,12 +6,14 @@ import os
 import clr
 import re
 import json
+import copy
 
 
 clr.AddReference("dosymep.Revit.dll")
 clr.AddReference("dosymep.Bim4Everyone.dll")
 
 import dosymep
+import codecs
 
 clr.ImportExtensions(dosymep.Revit)
 clr.ImportExtensions(dosymep.Bim4Everyone)
@@ -725,32 +727,51 @@ class UnmodelingFactory:
         description_param = family_inst.GetParam(self.DESCRIPTION_PARAM_NAME)
         description_param.Set(description)
 
-    def prepare_settings(self):
-        settings =  self.info.GetParamValueOrDefault("ФОП_ВИС_Настройки немоделируемых", "")
 
-        if settings == "":
-            def_sets = """
+    def prepare_settings(self):
+        def load_default_settings():
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            defaults_path = os.path.join(os.getenv("APPDATA"),
+                                         r"pyRevit\Extensions\04.OV-VK.extension\lib\default_spec_settings.json")
             
-            {"UNMODELING":
-                {
-                  "ENAMEL": {
-                    "NAME": "Краска антикоррозионная, покрытие в два слоя. Расход - 0.2 кг на м²",
-                    "MARK": "БТ-177",
-                    "CODE": "",
-                    "CREATOR": "",
-                    "UNIT": "кг"
-                  },
-                  "PRIMER": {
-                    "NAME": "Грунтовка для стальных труб, покрытие в один слой. Расход - 0.1 кг на м²",
-                    "MARK": "ГФ-031",
-                    "CODE": "",
-                    "CREATOR": "",
-                    "UNIT": "кг"
-                  }
-                }
-            }
-            """
-            self.info.SetParamValue("ФОП_ВИС_Настройки немоделируемых", def_sets)
+            with codecs.open(defaults_path, 'r', encoding='utf-8') as json_file:
+                return json.load(json_file)
+
+
+        def merge_settings(current, defaults):
+            # На данный момент добавляем только новые ключи если появятся. В полноценной версии будем затирать лишние
+            if not isinstance(current, dict):
+                current = {}
+            for key, value in defaults.items():
+                if key not in current:
+                    current[key] = value
+                elif isinstance(value, dict) and isinstance(current[key], dict):
+                    merge_settings(current[key], value)
+            return current
+
+        settings_text = self.doc.ProjectInformation.GetParamValueOrDefault(SharedParamsConfig.Instance.VISSettings, "")
+
+        default_settings = load_default_settings()
+
+        try:
+            current_settings = json.loads(settings_text) if settings_text else {}
+        except Exception:
+            current_settings = {}
+
+        settings_before_merge = copy.deepcopy(current_settings)
+        merged_settings = merge_settings(current_settings, default_settings)
+
+        settings_changed = settings_before_merge != merged_settings or settings_text == ""
+
+        if settings_changed:
+            self.is_elemet_edited(self.info)
+            self.show_report(exit_on_report=True)
+
+            with revit.Transaction("BIM: Подготовка настроек"):
+                self.info.SetParamValue(
+                    SharedParamsConfig.Instance.VISSettings,
+                    json.dumps(merged_settings, ensure_ascii=False, indent=2))
+
 
     def get_setting_value(self, key_path):
         """
@@ -758,7 +779,7 @@ class UnmodelingFactory:
         ["UNMODELING", "ENAMEL", "NAME"]
         """
 
-        settings = self.info.GetParamValueOrDefault("ФОП_ВИС_Настройки немоделируемых", "")
+        settings = self.doc.ProjectInformation.GetParamValueOrDefault(SharedParamsConfig.Instance.VISSettings, "")
 
         try:
             data = json.loads(settings)
@@ -814,15 +835,15 @@ class UnmodelingFactory:
                         SharedParamsConfig.Instance.VISSystemName,
                         SharedParamsConfig.Instance.BuildingWorksBlock,
                         SharedParamsConfig.Instance.BuildingWorksSection,
-                        SharedParamsConfig.Instance.BuildingWorksLevel]
+                        SharedParamsConfig.Instance.BuildingWorksLevel,
+                        SharedParamsConfig.Instance.VISSettings]
 
 
         with revit.Transaction("BIM: Настройка параметров"):
             for param in revit_params:
                 self.sort_parameter_to_group(param.Name, GroupTypeId.Data)
 
-            self.prepare_settings()
-
+        self.prepare_settings()
 
         project_parameters = ProjectParameters.Create(self.doc.Application)
         project_parameters.SetupRevitParams(self.doc, revit_params)
