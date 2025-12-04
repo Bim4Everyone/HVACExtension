@@ -731,8 +731,9 @@ class UnmodelingFactory:
         """
 
         def load_default_settings():
-            defaults_path = os.path.join(os.getenv("APPDATA"),
-                                         r"pyRevit\Extensions\04.OV-VK.extension\lib\default_spec_settings.json")
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            ext_root = os.path.abspath(os.path.join(script_dir, "..", "..", "..", ".."))
+            defaults_path = os.path.join(ext_root, "lib", "default_spec_settings.json")
             
             with codecs.open(defaults_path, 'r', encoding='utf-8') as json_file:
                 return json.load(json_file)
