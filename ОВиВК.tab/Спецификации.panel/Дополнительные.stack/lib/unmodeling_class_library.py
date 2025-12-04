@@ -1,13 +1,19 @@
 # -*- coding: utf-8 -*-
 import math
+
 from System import Environment
 import os
 import clr
+import re
+import json
+import copy
+
 
 clr.AddReference("dosymep.Revit.dll")
 clr.AddReference("dosymep.Bim4Everyone.dll")
 
 import dosymep
+import codecs
 
 clr.ImportExtensions(dosymep.Revit)
 clr.ImportExtensions(dosymep.Bim4Everyone)
@@ -268,6 +274,17 @@ class UnmodelingFactory:
     def __init__(self, doc):
         self.doc = doc
 
+        self.COLOR_RULE_NAME = (
+                self.get_setting_value(["UNMODELING", "ENAMEL", "NAME"])
+                or 'Краска антикоррозионная, покрытие в два слоя. Расход - 0.2 кг на м²'
+        )
+
+        self.GRUNT_RULE_NAME = (
+                self.get_setting_value(["UNMODELING", "PRIMER", "NAME"])
+                or 'Грунтовка для стальных труб, покрытие в один слой. Расход - 0.1 кг на м²'
+        )
+
+
     def get_elements_types_by_category(self, category):
         """
         Получает типы элементов по их категории.
@@ -468,21 +485,24 @@ class UnmodelingFactory:
             GenerationRuleSet(
                 group=self.MATERIAL_GROUP,
                 name=self.COLOR_RULE_NAME,
-                mark="БТ-177",
-                code="",
-                unit="кг.",
-                maker="",
+                mark=self.get_setting_value(["UNMODELING", "ENAMEL", "MARK"]),
+                code=self.get_setting_value(["UNMODELING", "ENAMEL", "CODE"]),
+                unit=self.get_setting_value(["UNMODELING", "ENAMEL", "UNIT"]),
+                maker=self.get_setting_value(["UNMODELING", "ENAMEL", "CREATOR"]),
                 method_name=SharedParamsConfig.Instance.VISIsPaintCalculation.Name,
-                category=BuiltInCategory.OST_PipeCurves),
+                category=BuiltInCategory.OST_PipeCurves
+            ),
+
             GenerationRuleSet(
                 group=self.MATERIAL_GROUP,
                 name=self.GRUNT_RULE_NAME,
-                mark="ГФ-031",
-                code="",
-                unit="кг.",
-                maker="",
+                mark=self.get_setting_value(["UNMODELING", "PRIMER", "MARK"]),
+                code=self.get_setting_value(["UNMODELING", "PRIMER", "CODE"]),
+                unit=self.get_setting_value(["UNMODELING", "PRIMER", "UNIT"]),
+                maker=self.get_setting_value(["UNMODELING", "PRIMER", "CREATOR"]),
                 method_name=SharedParamsConfig.Instance.VISIsPaintCalculation.Name,
-                category=BuiltInCategory.OST_PipeCurves),
+                category=BuiltInCategory.OST_PipeCurves
+            ),
             GenerationRuleSet(
                 group=self.MATERIAL_GROUP,
                 name=self.CLAMPS_RULE_NAME,
@@ -704,6 +724,103 @@ class UnmodelingFactory:
         description_param = family_inst.GetParam(self.DESCRIPTION_PARAM_NAME)
         description_param.Set(description)
 
+
+    def prepare_settings(self):
+        """
+        Готовит настройки для спецификации, выдергивает их json, при необходимости добавляет новые ключи
+        """
+
+        def load_default_settings():
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            ext_root = os.path.abspath(os.path.join(script_dir, "..", "..", "..", ".."))
+            defaults_path = os.path.join(ext_root, "lib", "default_spec_settings.json")
+            
+            with codecs.open(defaults_path, 'r', encoding='utf-8') as json_file:
+                return json.load(json_file)
+
+
+        def merge_settings(current, defaults):
+            # На данный момент добавляем только новые ключи если появятся. В полноценной версии будем затирать лишние
+            if not isinstance(current, dict):
+                current = {}
+            for key, value in defaults.items():
+                if key not in current:
+                    current[key] = value
+                elif isinstance(value, dict) and isinstance(current[key], dict):
+                    merge_settings(current[key], value)
+            return current
+
+        settings_text = self.doc.ProjectInformation.GetParamValueOrDefault(SharedParamsConfig.Instance.VISSettings, "")
+
+        default_settings = load_default_settings()
+
+        try:
+            current_settings = json.loads(settings_text) if settings_text else {}
+        except Exception:
+            current_settings = {}
+
+        settings_before_merge = copy.deepcopy(current_settings)
+        merged_settings = merge_settings(current_settings, default_settings)
+
+        settings_changed = settings_before_merge != merged_settings or settings_text == ""
+
+        if settings_changed:
+            self.is_elemet_edited(self.doc.ProjectInformation)
+            self.show_report(exit_on_report=True)
+
+            with revit.Transaction("BIM: Подготовка настроек"):
+                self.doc.ProjectInformation.SetParamValue(
+                    SharedParamsConfig.Instance.VISSettings,
+                    json.dumps(merged_settings, ensure_ascii=False, indent=2))
+
+
+    def get_setting_value(self, key_path):
+        """
+        key_path — список ключей, например:
+        ["UNMODELING", "ENAMEL", "NAME"]
+        """
+
+        settings = self.doc.ProjectInformation.GetParamValueOrDefault(SharedParamsConfig.Instance.VISSettings, "")
+
+        try:
+            data = json.loads(settings)
+        except Exception:
+            return None
+
+        node = data
+        for key in key_path:
+            if isinstance(node, dict) and key in node:
+                node = node[key]
+            else:
+                return None
+
+        return node
+
+    def set_setting_value(self, settings_text, key_path, new_value):
+        """
+        key_path — путь к полю в JSON
+        new_value — новое значение
+        """
+
+        try:
+            data = json.loads(settings_text)
+        except Exception:
+            # если JSON сломан, пересоздаём пустую структуру
+            data = {}
+
+        # Спускаемся по ключам, создавая вложенные словари при необходимости
+        node = data
+        for key in key_path[:-1]:
+            if key not in node or not isinstance(node[key], dict):
+                node[key] = {}
+            node = node[key]
+
+        # Меняем конечное значение
+        node[key_path[-1]] = new_value
+
+        # Сериализуем обратно
+        return json.dumps(data, ensure_ascii=False, indent=2)
+
     def startup_checks(self):
         """
         Выполняет начальные проверки файла и семейства.
@@ -719,15 +836,18 @@ class UnmodelingFactory:
                         SharedParamsConfig.Instance.VISSystemName,
                         SharedParamsConfig.Instance.BuildingWorksBlock,
                         SharedParamsConfig.Instance.BuildingWorksSection,
-                        SharedParamsConfig.Instance.BuildingWorksLevel]
+                        SharedParamsConfig.Instance.BuildingWorksLevel,
+                        SharedParamsConfig.Instance.VISSettings]
 
 
-        with revit.Transaction("BIM: Настройка групп"):
+        with revit.Transaction("BIM: Настройка параметров"):
             for param in revit_params:
                 self.sort_parameter_to_group(param.Name, GroupTypeId.Data)
 
         project_parameters = ProjectParameters.Create(self.doc.Application)
         project_parameters.SetupRevitParams(self.doc, revit_params)
+
+        self.prepare_settings()
 
         family_symbol = self.is_family_in()
 
@@ -739,8 +859,6 @@ class UnmodelingFactory:
 
         self.check_family(family_symbol)
         self.check_worksets()
-
-
 
         return family_symbol
 
