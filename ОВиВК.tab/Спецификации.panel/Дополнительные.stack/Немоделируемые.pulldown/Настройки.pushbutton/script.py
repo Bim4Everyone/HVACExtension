@@ -204,7 +204,7 @@ def script_execute():
         corrected_settings = _get_corrected_settings_from_window(window)
 
         with revit.Transaction("BIM: Обновление настроек"):
-            unmodeling_factory.info.SetParamValue(SharedParamsConfig.Instance.VISSettings, corrected_settings)
+            doc.ProjectInformation.SetParamValue(SharedParamsConfig.Instance.VISSettings, corrected_settings)
 
 
 
