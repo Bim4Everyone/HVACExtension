@@ -190,8 +190,6 @@ def _get_corrected_settings_from_window(window):
 def script_execute():
     unmodeling_factory.startup_checks()
 
-    print doc.ProjectInformation.GetParamValueOrDefault(SharedParamsConfig.Instance.VISSettings, "")
-
     xaml_path = script.get_bundle_file("settings.xaml")
     if not xaml_path:
         forms.alert("Не найдено окно настроек.", exitscript=True)
@@ -205,7 +203,6 @@ def script_execute():
     if result:
         corrected_settings = _get_corrected_settings_from_window(window)
 
-        #print corrected_settings
         with revit.Transaction("BIM: Обновление настроек"):
             unmodeling_factory.info.SetParamValue(SharedParamsConfig.Instance.VISSettings, corrected_settings)
 

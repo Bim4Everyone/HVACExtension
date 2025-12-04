@@ -275,7 +275,6 @@ class UnmodelingFactory:
 
     def __init__(self, doc):
         self.doc = doc
-        self.info = self.doc.ProjectInformation
 
         self.COLOR_RULE_NAME = (
                 self.get_setting_value(["UNMODELING", "ENAMEL", "NAME"])
@@ -729,8 +728,11 @@ class UnmodelingFactory:
 
 
     def prepare_settings(self):
+        """
+        Готовит настройки для спецификации, выдергивает их json, при необходимости добавляет новые ключи
+        """
+
         def load_default_settings():
-            script_dir = os.path.dirname(os.path.abspath(__file__))
             defaults_path = os.path.join(os.getenv("APPDATA"),
                                          r"pyRevit\Extensions\04.OV-VK.extension\lib\default_spec_settings.json")
             
@@ -764,11 +766,11 @@ class UnmodelingFactory:
         settings_changed = settings_before_merge != merged_settings or settings_text == ""
 
         if settings_changed:
-            self.is_elemet_edited(self.info)
+            self.is_elemet_edited(self.doc.ProjectInformation)
             self.show_report(exit_on_report=True)
 
             with revit.Transaction("BIM: Подготовка настроек"):
-                self.info.SetParamValue(
+                self.doc.ProjectInformation.SetParamValue(
                     SharedParamsConfig.Instance.VISSettings,
                     json.dumps(merged_settings, ensure_ascii=False, indent=2))
 
@@ -843,10 +845,10 @@ class UnmodelingFactory:
             for param in revit_params:
                 self.sort_parameter_to_group(param.Name, GroupTypeId.Data)
 
-        self.prepare_settings()
-
         project_parameters = ProjectParameters.Create(self.doc.Application)
         project_parameters.SetupRevitParams(self.doc, revit_params)
+
+        self.prepare_settings()
 
         family_symbol = self.is_family_in()
 
