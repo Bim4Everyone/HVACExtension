@@ -258,7 +258,6 @@ class UnmodelingFactory:
     RAPID_CLAMPS_RULE_NAME = 'Хомут соединительный Rapid'
     PIN_RULE_NAME = 'Шпилька М8 1м/1шт'
 
-    SETTINGS_REGION = "UNMODELING_REGION_START"
     FAMILY_NAME = '_Якорный элемент'
     OUT_OF_SYSTEM_VALUE = '!Нет системы'
     OUT_OF_FUNCTION_VALUE = '!Нет функции'
