@@ -1,18 +1,117 @@
-{"UNMODELING":
-    {
-      "ENAMEL": {
-        "NAME": "Краска антикоррозионная, покрытие в два слоя. Расход - 0.2 кг на м²",
-        "MARK": "БТ-177",
-        "CODE": "",
-        "CREATOR": "",
-        "UNIT": "кг"
-      },
-      "PRIMER": {
-        "NAME": "Грунтовка для стальных труб, покрытие в один слой. Расход - 0.1 кг на м²",
-        "MARK": "ГФ-031",
-        "CODE": "",
-        "CREATOR": "",
-        "UNIT": "кг"
-      }
+{
+  "UNMODELING": {
+    "ENAMEL": {
+      "NAME": "Краска антикоррозионная, покрытие в два слоя. Расход - 0.2 кг на м²",
+      "MARK": "БТ-177",
+      "CODE": "",
+      "CREATOR": "",
+      "UNIT": "кг"
+    },
+    "PRIMER": {
+      "NAME": "Грунтовка для стальных труб, покрытие в один слой. Расход - 0.1 кг на м²",
+      "MARK": "ГФ-031",
+      "CODE": "",
+      "CREATOR": "",
+      "UNIT": "кг"
     }
+  },
+
+  "UNMODELING_CONFIG": {
+    "config_001": {
+      "CONFIG_NAME": "Эмаль",
+      "CATEGORY": "-2008044",
+      "GROUP": "99_Краски",
+      "NAME": "Краска антикоррозионная, покрытие в два слоя. Расход - 0.2 кг на м²",
+      "MARK": "",
+      "CODE": "",
+      "UNIT": "кг",
+      "CREATOR": "",
+
+      "VALUE_FORMULA": "PipeArea * 0.2 * 2",
+      "NOTE_FORMAT": "Окраска {Area} м², расход {Value} кг",
+
+      "ASSIGNED_ELEMENT_IDS": [
+      ]
+    },
+    "config_002": {
+      "CONFIG_NAME": "Грунтовка",
+      "CATEGORY": "-2008044",
+      "GROUP": "99_Краски",
+      "NAME": "Грунтовка для стальных труб, покрытие в один слой. Расход - 0.1 кг на м²",
+      "MARK": "ГФ-031",
+      "CODE": "",
+      "UNIT": "кг",
+      "CREATOR": "",
+
+      "VALUE_FORMULA": "PipeArea * 0.1",
+      "NOTE_FORMAT": "Окраска {Area} м², расход {Value} кг",
+
+      "ASSIGNED_ELEMENT_IDS": [
+      ]
+    },
+    "config_003": {
+      "CONFIG_NAME": "Металл для воздуховодов",
+      "CATEGORY": "-2008000",
+      "GROUP": "99_Крепления",
+      "NAME": "Металлические крепления для воздуховодов",
+      "MARK": "",
+      "CODE": "",
+      "UNIT": "кг",
+      "CREATOR": "",
+
+      "VALUE_FORMULA": "Perimeter < 1001 ? DuctArea * 0.65 : Perimeter < 1801 ? DuctArea * 1.22 : DuctArea * 2.25",
+      "NOTE_FORMAT": "",
+
+      "ASSIGNED_ELEMENT_IDS": [
+      ]
+    },
+    "config_004": {
+      "CONFIG_NAME": "Металл для трубопроводов",
+      "CATEGORY": "-2008044",
+      "GROUP": "99_Крепления",
+      "NAME": "Металлические крепления для трубопроводов",
+      "MARK": "",
+      "CODE": "",
+      "UNIT": "кг",
+      "CREATOR": "",
+
+      "VALUE_FORMULA": "(PipeDiameter <= 15 ? 0.238 : PipeDiameter <= 20 ? 0.204 : PipeDiameter <= 25 ? 0.187 : PipeDiameter <= 32 ? 0.170 : PipeDiameter <= 40 ? 0.187 : PipeDiameter <= 50 ? 0.2448 : PipeDiameter <= 65 ? 0.3315 : PipeDiameter <= 80 ? 0.3791 : PipeDiameter <= 100 ? 0.629 : PipeDiameter <= 125 ? 0.901 : PipeDiameter <= 150 ? 1.054 : PipeDiameter <= 200 ? 1.309 : 0.1564) * PipeLength",
+      "NOTE_FORMAT": "Окраска {Area} м², расход {Value} кг",
+
+      "ASSIGNED_ELEMENT_IDS": [
+      ]
+    },
+    "config_005": {
+      "CONFIG_NAME": "Хомут трубный под шпильку М8",
+      "CATEGORY": "-2008044",
+      "GROUP": "99_Хомуты и шпильки",
+      "NAME": "Хомут трубный под шпильку М8",
+      "MARK": "",
+      "CODE": "",
+      "UNIT": "шт.",
+      "CREATOR": "",
+
+      "VALUE_FORMULA": "PipeLength < 0.5 ? 0 : (PipeDiameter <= 15 ? (IsInsulated ? 1.5 : 2) : PipeDiameter <= 20 ? (IsInsulated ? 2 : 3) : PipeDiameter <= 25 ? (IsInsulated ? 2 : 3.5) : PipeDiameter <= 32 ? (IsInsulated ? 2.5 : 4) : PipeDiameter <= 40 ? (IsInsulated ? 3 : 4.5) : PipeDiameter <= 50 ? (IsInsulated ? 3 : 5) : PipeDiameter <= 65 ? (IsInsulated ? 4 : 6) : PipeDiameter <= 80 ? (IsInsulated ? 4 : 6) : PipeDiameter <= 100 ? (IsInsulated ? 4.5 : 6) : PipeDiameter <= 125 ? (IsInsulated ? 5 : 7) : (IsInsulated ? 5 : 7)) * PipeLength",
+      "NOTE_FORMAT": "",
+
+      "ASSIGNED_ELEMENT_IDS": [
+      ]
+    },
+    "config_006": {
+      "CONFIG_NAME": "Шпилька М8 1м/1шт",
+      "CATEGORY": "-2008044",
+      "GROUP": "99_Хомуты и шпильки",
+      "NAME": "Шпилька М8 1м/1шт",
+      "MARK": "",
+      "CODE": "",
+      "UNIT": "шт.",
+      "CREATOR": "",
+
+      "VALUE_FORMULA": "PipeLength < 0.5 ? 0 : (PipeDiameter <= 15 ? (IsInsulated ? 1.5 : 2) : PipeDiameter <= 20 ? (IsInsulated ? 2 : 3) : PipeDiameter <= 25 ? (IsInsulated ? 2 : 3.5) : PipeDiameter <= 32 ? (IsInsulated ? 2.5 : 4) : PipeDiameter <= 40 ? (IsInsulated ? 3 : 4.5) : PipeDiameter <= 50 ? (IsInsulated ? 3 : 5) : PipeDiameter <= 65 ? (IsInsulated ? 4 : 6) : PipeDiameter <= 80 ? (IsInsulated ? 4 : 6) : PipeDiameter <= 100 ? (IsInsulated ? 4.5 : 6) : PipeDiameter <= 125 ? (IsInsulated ? 5 : 7) : (IsInsulated ? 5 : 7)) * PipeLength",
+      "NOTE_FORMAT": "",
+
+      "ASSIGNED_ELEMENT_IDS": [
+      ]
+    }
+  }
 }
