@@ -15,7 +15,6 @@
       "UNIT": "кг"
     }
   },
-
   "UNMODELING_CONFIG": {
     "config_001": {
       "CONFIG_NAME": "Эмаль",
@@ -26,12 +25,10 @@
       "CODE": "",
       "UNIT": "кг",
       "CREATOR": "",
-
-      "VALUE_FORMULA": "PipeArea * 0.2 * 2",
-      "NOTE_FORMAT": "Окраска {Area} м², расход {Value} кг",
-
-      "ASSIGNED_ELEMENT_IDS": [
-      ]
+      "VALUE_FORMULA": "Area * 0.2 * 2",
+      "NOTE_FORMAT": "sumArea м², площадь за раз",
+      "ASSIGNED_ELEMENT_IDS": [],
+      "USE_CATEGORY_RESERVE": true
     },
     "config_002": {
       "CONFIG_NAME": "Грунтовка",
@@ -42,12 +39,10 @@
       "CODE": "",
       "UNIT": "кг",
       "CREATOR": "",
-
-      "VALUE_FORMULA": "PipeArea * 0.1",
-      "NOTE_FORMAT": "Окраска {Area} м², расход {Value} кг",
-
-      "ASSIGNED_ELEMENT_IDS": [
-      ]
+      "VALUE_FORMULA": "Area * 0.1",
+      "NOTE_FORMAT": "sumArea м², площадь за раз",
+      "ASSIGNED_ELEMENT_IDS": [],
+      "USE_CATEGORY_RESERVE": true
     },
     "config_003": {
       "CONFIG_NAME": "Металл для воздуховодов",
@@ -58,12 +53,10 @@
       "CODE": "",
       "UNIT": "кг",
       "CREATOR": "",
-
-      "VALUE_FORMULA": "Perimeter < 1001 ? DuctArea * 0.65 : Perimeter < 1801 ? DuctArea * 1.22 : DuctArea * 2.25",
+      "VALUE_FORMULA": "Perimeter < 1001 ? Area * 0.65 : Perimeter < 1801 ? Area * 1.22 : Area * 2.25",
       "NOTE_FORMAT": "",
-
-      "ASSIGNED_ELEMENT_IDS": [
-      ]
+      "ASSIGNED_ELEMENT_IDS": [],
+      "USE_CATEGORY_RESERVE": true
     },
     "config_004": {
       "CONFIG_NAME": "Металл для трубопроводов",
@@ -74,12 +67,10 @@
       "CODE": "",
       "UNIT": "кг",
       "CREATOR": "",
-
-      "VALUE_FORMULA": "(PipeDiameter <= 15 ? 0.238 : PipeDiameter <= 20 ? 0.204 : PipeDiameter <= 25 ? 0.187 : PipeDiameter <= 32 ? 0.170 : PipeDiameter <= 40 ? 0.187 : PipeDiameter <= 50 ? 0.2448 : PipeDiameter <= 65 ? 0.3315 : PipeDiameter <= 80 ? 0.3791 : PipeDiameter <= 100 ? 0.629 : PipeDiameter <= 125 ? 0.901 : PipeDiameter <= 150 ? 1.054 : PipeDiameter <= 200 ? 1.309 : 0.1564) * PipeLength",
-      "NOTE_FORMAT": "Окраска {Area} м², расход {Value} кг",
-
-      "ASSIGNED_ELEMENT_IDS": [
-      ]
+      "VALUE_FORMULA": "(Diameter <= 15 ? 0.238 : Diameter <= 20 ? 0.204 : Diameter <= 25 ? 0.187 : Diameter <= 32 ? 0.170 : Diameter <= 40 ? 0.187 : Diameter <= 50 ? 0.2448 : Diameter <= 65 ? 0.3315 : Diameter <= 80 ? 0.3791 : Diameter <= 100 ? 0.629 : Diameter <= 125 ? 0.901 : Diameter <= 150 ? 1.054 : Diameter <= 200 ? 1.309 : 0.1564) * Length/1000",
+      "NOTE_FORMAT": "",
+      "ASSIGNED_ELEMENT_IDS": [],
+      "USE_CATEGORY_RESERVE": true
     },
     "config_005": {
       "CONFIG_NAME": "Хомут трубный под шпильку М8",
@@ -90,12 +81,10 @@
       "CODE": "",
       "UNIT": "шт.",
       "CREATOR": "",
-
-      "VALUE_FORMULA": "PipeLength < 0.5 ? 0 : (PipeDiameter <= 15 ? (IsInsulated ? 1.5 : 2) : PipeDiameter <= 20 ? (IsInsulated ? 2 : 3) : PipeDiameter <= 25 ? (IsInsulated ? 2 : 3.5) : PipeDiameter <= 32 ? (IsInsulated ? 2.5 : 4) : PipeDiameter <= 40 ? (IsInsulated ? 3 : 4.5) : PipeDiameter <= 50 ? (IsInsulated ? 3 : 5) : PipeDiameter <= 65 ? (IsInsulated ? 4 : 6) : PipeDiameter <= 80 ? (IsInsulated ? 4 : 6) : PipeDiameter <= 100 ? (IsInsulated ? 4.5 : 6) : PipeDiameter <= 125 ? (IsInsulated ? 5 : 7) : (IsInsulated ? 5 : 7)) * PipeLength",
+      "VALUE_FORMULA": "Length < 0.5 ? 0 : (Diameter <= 15 ? (IsInsulated ? 1.5 : 2) : Diameter <= 20 ? (IsInsulated ? 2 : 3) : Diameter <= 25 ? (IsInsulated ? 2 : 3.5) : Diameter <= 32 ? (IsInsulated ? 2.5 : 4) : Diameter <= 40 ? (IsInsulated ? 3 : 4.5) : Diameter <= 50 ? (IsInsulated ? 3 : 5) : Diameter <= 65 ? (IsInsulated ? 4 : 6) : Diameter <= 80 ? (IsInsulated ? 4 : 6) : Diameter <= 100 ? (IsInsulated ? 4.5 : 6) : Diameter <= 125 ? (IsInsulated ? 5 : 7) : (IsInsulated ? 5 : 7)) * Length",
       "NOTE_FORMAT": "",
-
-      "ASSIGNED_ELEMENT_IDS": [
-      ]
+      "ASSIGNED_ELEMENT_IDS": [],
+      "USE_CATEGORY_RESERVE": true
     },
     "config_006": {
       "CONFIG_NAME": "Шпилька М8 1м/1шт",
@@ -106,12 +95,41 @@
       "CODE": "",
       "UNIT": "шт.",
       "CREATOR": "",
-
-      "VALUE_FORMULA": "PipeLength < 0.5 ? 0 : (PipeDiameter <= 15 ? (IsInsulated ? 1.5 : 2) : PipeDiameter <= 20 ? (IsInsulated ? 2 : 3) : PipeDiameter <= 25 ? (IsInsulated ? 2 : 3.5) : PipeDiameter <= 32 ? (IsInsulated ? 2.5 : 4) : PipeDiameter <= 40 ? (IsInsulated ? 3 : 4.5) : PipeDiameter <= 50 ? (IsInsulated ? 3 : 5) : PipeDiameter <= 65 ? (IsInsulated ? 4 : 6) : PipeDiameter <= 80 ? (IsInsulated ? 4 : 6) : PipeDiameter <= 100 ? (IsInsulated ? 4.5 : 6) : PipeDiameter <= 125 ? (IsInsulated ? 5 : 7) : (IsInsulated ? 5 : 7)) * PipeLength",
+      "VALUE_FORMULA": "Length < 0.5 ? 0 : (Diameter <= 15 ? (IsInsulated ? 1.5 : 2) : Diameter <= 20 ? (IsInsulated ? 2 : 3) : Diameter <= 25 ? (IsInsulated ? 2 : 3.5) : Diameter <= 32 ? (IsInsulated ? 2.5 : 4) : Diameter <= 40 ? (IsInsulated ? 3 : 4.5) : Diameter <= 50 ? (IsInsulated ? 3 : 5) : Diameter <= 65 ? (IsInsulated ? 4 : 6) : Diameter <= 80 ? (IsInsulated ? 4 : 6) : Diameter <= 100 ? (IsInsulated ? 4.5 : 6) : Diameter <= 125 ? (IsInsulated ? 5 : 7) : (IsInsulated ? 5 : 7)) * Length",
       "NOTE_FORMAT": "",
-
-      "ASSIGNED_ELEMENT_IDS": [
-      ]
+      "ASSIGNED_ELEMENT_IDS": [],
+      "USE_CATEGORY_RESERVE": true
+    },
+    "config_007": {
+      "CONFIG_NAME": "Комплекты заделки для трубопроводов",
+      "NAME": "Комплекты заделки для трубопроводов",
+      "CATEGORY": "-2008043",
+      "GROUP": "99_Комплекты заделки",
+      "MARK": "",
+      "CODE": "",
+      "UNIT": "шт",
+      "CREATOR": "",
+      "VALUE_FORMULA": "1",
+      "NOTE_FORMAT": "",
+      "ASSIGNED_ELEMENT_IDS": [],
+      "USE_CATEGORY_RESERVE": true
+    },
+    "config_008": {
+      "CONFIG_NAME": "Фреон для жидкостной линии",
+      "NAME": "Фреон",
+      "CATEGORY": "-2008044",
+      "GROUP": "99_Расходники",
+      "MARK": "",
+      "CODE": "",
+      "UNIT": "м3",
+      "CREATOR": "",
+      "VALUE_FORMULA": "SystemTypeName == \"Фреон_Жидкость\" ? Volume : 0",
+      "NOTE_FORMAT": "",
+      "ASSIGNED_ELEMENT_IDS": [],
+      "USE_CATEGORY_RESERVE": true
     }
+  },
+  "UNMODELING_SETTINGS": {
+    "ONLY_PROJECT_INSTANCES": true
   }
 }
