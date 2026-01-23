@@ -25,8 +25,8 @@
       "CODE": "",
       "UNIT": "кг",
       "CREATOR": "",
-      "VALUE_FORMULA": "Area * 0.2 * 2",
-      "NOTE_FORMAT": "sumArea м², площадь за раз",
+      "VALUE_FORMULA": "Area_m2 * 0.2 * 2 * ProjectStock",
+      "NOTE_FORMAT": "SumArea_m2 м², площадь за раз",
       "ASSIGNED_ELEMENT_IDS": [],
       "USE_CATEGORY_RESERVE": true
     },
@@ -39,8 +39,8 @@
       "CODE": "",
       "UNIT": "кг",
       "CREATOR": "",
-      "VALUE_FORMULA": "Area * 0.1",
-      "NOTE_FORMAT": "sumArea м², площадь за раз",
+      "VALUE_FORMULA": "Area_m2 * 0.1 * ProjectStock",
+      "NOTE_FORMAT": "SumArea_m2 м², площадь за раз",
       "ASSIGNED_ELEMENT_IDS": [],
       "USE_CATEGORY_RESERVE": true
     },
@@ -53,7 +53,7 @@
       "CODE": "",
       "UNIT": "кг",
       "CREATOR": "",
-      "VALUE_FORMULA": "Perimeter < 1001 ? Area * 0.65 : Perimeter < 1801 ? Area * 1.22 : Area * 2.25",
+      "VALUE_FORMULA": "(Perimeter_mm < 1001 ? Area_m2 * 0.65 : Perimeter_mm < 1801 ? Area_m2 * 1.22 : Area_m2 * 2.25) * ProjectStock",
       "NOTE_FORMAT": "",
       "ASSIGNED_ELEMENT_IDS": [],
       "USE_CATEGORY_RESERVE": true
@@ -67,7 +67,7 @@
       "CODE": "",
       "UNIT": "кг",
       "CREATOR": "",
-      "VALUE_FORMULA": "(Diameter <= 15 ? 0.238 : Diameter <= 20 ? 0.204 : Diameter <= 25 ? 0.187 : Diameter <= 32 ? 0.170 : Diameter <= 40 ? 0.187 : Diameter <= 50 ? 0.2448 : Diameter <= 65 ? 0.3315 : Diameter <= 80 ? 0.3791 : Diameter <= 100 ? 0.629 : Diameter <= 125 ? 0.901 : Diameter <= 150 ? 1.054 : Diameter <= 200 ? 1.309 : 0.1564) * Length/1000",
+      "VALUE_FORMULA": "((Diameter_mm <= 15 ? 0.238 : Diameter_mm <= 20 ? 0.204 : Diameter_mm <= 25 ? 0.187 : Diameter_mm <= 32 ? 0.170 : Diameter_mm <= 40 ? 0.187 : Diameter_mm <= 50 ? 0.2448 : Diameter_mm <= 65 ? 0.3315 : Diameter_mm <= 80 ? 0.3791 : Diameter_mm <= 100 ? 0.629 : Diameter_mm <= 125 ? 0.901 : Diameter_mm <= 150 ? 1.054 : Diameter_mm <= 200 ? 1.309 : 0.1564) * Length_m) * ProjectStock",
       "NOTE_FORMAT": "",
       "ASSIGNED_ELEMENT_IDS": [],
       "USE_CATEGORY_RESERVE": true
@@ -81,7 +81,7 @@
       "CODE": "",
       "UNIT": "шт.",
       "CREATOR": "",
-      "VALUE_FORMULA": "Length < 0.5 ? 0 : (Diameter <= 15 ? (IsInsulated ? 1.5 : 2) : Diameter <= 20 ? (IsInsulated ? 2 : 3) : Diameter <= 25 ? (IsInsulated ? 2 : 3.5) : Diameter <= 32 ? (IsInsulated ? 2.5 : 4) : Diameter <= 40 ? (IsInsulated ? 3 : 4.5) : Diameter <= 50 ? (IsInsulated ? 3 : 5) : Diameter <= 65 ? (IsInsulated ? 4 : 6) : Diameter <= 80 ? (IsInsulated ? 4 : 6) : Diameter <= 100 ? (IsInsulated ? 4.5 : 6) : Diameter <= 125 ? (IsInsulated ? 5 : 7) : (IsInsulated ? 5 : 7)) * Length",
+      "VALUE_FORMULA": "Floor(Length_m /(Length_m < 0.5 ? 0 : (Diameter_mm <= 15 ? (IsInsulated ? 2 : 1.5) : Diameter_mm <= 20 ? (IsInsulated ? 3 : 2) : Diameter_mm <= 25 ? (IsInsulated ? 3.5 : 2) : Diameter_mm <= 32 ? (IsInsulated ? 4 : 2.5) : Diameter_mm <= 40 ? (IsInsulated ? 4.5 : 3) : Diameter_mm <= 50 ? (IsInsulated ? 5 : 3) : Diameter_mm <= 65 ? (IsInsulated ? 6 : 4) : Diameter_mm <= 80 ? (IsInsulated ? 6 : 4) : Diameter_mm <= 100 ? (IsInsulated ? 6 : 4.5) : Diameter_mm <= 125 ? (IsInsulated ? 7 : 5) : (IsInsulated ? 7 : 5))) * ProjectStock)",
       "NOTE_FORMAT": "",
       "ASSIGNED_ELEMENT_IDS": [],
       "USE_CATEGORY_RESERVE": true
@@ -95,7 +95,7 @@
       "CODE": "",
       "UNIT": "шт.",
       "CREATOR": "",
-      "VALUE_FORMULA": "Length < 0.5 ? 0 : (Diameter <= 15 ? (IsInsulated ? 1.5 : 2) : Diameter <= 20 ? (IsInsulated ? 2 : 3) : Diameter <= 25 ? (IsInsulated ? 2 : 3.5) : Diameter <= 32 ? (IsInsulated ? 2.5 : 4) : Diameter <= 40 ? (IsInsulated ? 3 : 4.5) : Diameter <= 50 ? (IsInsulated ? 3 : 5) : Diameter <= 65 ? (IsInsulated ? 4 : 6) : Diameter <= 80 ? (IsInsulated ? 4 : 6) : Diameter <= 100 ? (IsInsulated ? 4.5 : 6) : Diameter <= 125 ? (IsInsulated ? 5 : 7) : (IsInsulated ? 5 : 7)) * Length",
+      "VALUE_FORMULA": "Floor(Length_m /(Length_m < 0.5 ? 0 : (Diameter_mm <= 15 ? (IsInsulated ? 2 : 1.5) : Diameter_mm <= 20 ? (IsInsulated ? 3 : 2) : Diameter_mm <= 25 ? (IsInsulated ? 3.5 : 2) : Diameter_mm <= 32 ? (IsInsulated ? 4 : 2.5) : Diameter_mm <= 40 ? (IsInsulated ? 4.5 : 3) : Diameter_mm <= 50 ? (IsInsulated ? 5 : 3) : Diameter_mm <= 65 ? (IsInsulated ? 6 : 4) : Diameter_mm <= 80 ? (IsInsulated ? 6 : 4) : Diameter_mm <= 100 ? (IsInsulated ? 6 : 4.5) : Diameter_mm <= 125 ? (IsInsulated ? 7 : 5) : (IsInsulated ? 7 : 5))) * ProjectStock)",
       "NOTE_FORMAT": "",
       "ASSIGNED_ELEMENT_IDS": [],
       "USE_CATEGORY_RESERVE": true
@@ -123,7 +123,7 @@
       "CODE": "",
       "UNIT": "м3",
       "CREATOR": "",
-      "VALUE_FORMULA": "SystemTypeName == \"Фреон_Жидкость\" ? Volume : 0",
+      "VALUE_FORMULA": "SystemTypeName == \"Фреон_Жидкость\" ? Volume_m3 : 0",
       "NOTE_FORMAT": "",
       "ASSIGNED_ELEMENT_IDS": [],
       "USE_CATEGORY_RESERVE": true
@@ -133,3 +133,4 @@
     "ONLY_PROJECT_INSTANCES": true
   }
 }
+
