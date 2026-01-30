@@ -1,17 +1,27 @@
 title:
   ru: Настройки немоделируемых
-  en_us: UnmodelingSettings
+  en_us: Unmodeling settings
 
 tooltip:
-  ru: >- 
-    Please Write Description
-  en_us: >- 
-    Please Write Description
+  ru: 
+    Позволяет создать новые расходные элементы и назначить их элементам модели.
+    
+      1. Откорректируйте уже существующие расходники или создайте новые на вкладке "Типы расходников"
+
+      2. Отметьте какие расходники создаются для типов элементов модели на вкладке "Назначение расходников"
+
+  en_us: 
+    Allows you to create new consumables and assign them to model elements.
+    
+      1. Edit existing consumables or create new ones on the "Consumable Types" tab.
+
+      2. Select which consumables are created for which model element types on the "Consumable Assignment" tab.
 
 assembly: RevitUnmodelingMep.dll
 command_class: RevitUnmodelingMepCommand
 
-author: Mankaev_r
+author: Redomine
+help_url: "https://kb.a101.ru/pages/viewpage.action?pageId=157127647"
 
 min_revit_version: 2022
 max_revit_version: 2024
