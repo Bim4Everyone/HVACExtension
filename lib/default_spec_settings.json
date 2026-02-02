@@ -137,7 +137,7 @@
       "CODE": "",
       "UNIT": "шт.",
       "CREATOR": "Энергофлекс",
-      "VALUE_FORMULA": "Length_m / 500",
+      "VALUE_FORMULA": "Length_m / 500 * ProjectStock",
       "NOTE_FORMAT": "",
       "ROUND_UP_TOTAL": false,
       "ASSIGNED_ELEMENT_IDS": []
@@ -165,7 +165,7 @@
       "CODE": "",
       "UNIT": "м.п.",
       "CREATOR": "BOS",
-      "VALUE_FORMULA": "2 * Area_m2",
+      "VALUE_FORMULA": "2 * Area_m2 * ProjectStock",
       "NOTE_FORMAT": "",
       "ROUND_UP_TOTAL": false,
       "ASSIGNED_ELEMENT_IDS": []
@@ -193,7 +193,7 @@
       "CODE": "",
       "UNIT": "м.п.",
       "CREATOR": "BOS",
-      "VALUE_FORMULA": "2 * Area_m2",
+      "VALUE_FORMULA": "2 * Area_m2 * ProjectStock",
       "NOTE_FORMAT": "",
       "ROUND_UP_TOTAL": false,
       "ASSIGNED_ELEMENT_IDS": []
@@ -221,7 +221,7 @@
       "CODE": "",
       "UNIT": "м.п.",
       "CREATOR": "BOS",
-      "VALUE_FORMULA": "2 * Area_m2",
+      "VALUE_FORMULA": "2 * Area_m2 * ProjectStock",
       "NOTE_FORMAT": "",
       "ROUND_UP_TOTAL": false,
       "ASSIGNED_ELEMENT_IDS": []
@@ -235,7 +235,7 @@
       "CODE": "",
       "UNIT": "м²",
       "CREATOR": "",
-      "VALUE_FORMULA": "Area_m2",
+      "VALUE_FORMULA": "Area_m2 * ProjectStock",
       "NOTE_FORMAT": "",
       "ROUND_UP_TOTAL": false,
       "ASSIGNED_ELEMENT_IDS": []
