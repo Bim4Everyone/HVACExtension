@@ -258,7 +258,26 @@ def set_elevation_value(element, absolute_mid, absolute_bot, level_elevation, of
         converter = convert_set.get(param_name, lambda x: x)
         param_value = converter(value)
 
-        element.SetParamValue(param_name, param_value)
+        if can_set_param_value(element, param_name):
+            element.SetParamValue(param_name, param_value)
+
+
+def can_set_param_value(element, param_name):
+    param = element.GetParam(param_name)
+    if param.IsReadOnly:
+        return False
+
+    in_group = element.GroupId != ElementId.InvalidElementId
+    if not in_group:
+        return True
+
+    # Элемент в группе -> проверяем VariesAcrossGroups
+    definition = param.Definition
+    if isinstance(definition, InternalDefinition):
+        return definition.VariesAcrossGroups
+
+    # Не InternalDefinition (например shared parameter) — считаем, что нельзя
+    return False
 
 
 mark_bottom_to_zero_param = SharedParamsConfig.Instance.VISMarkBottomToZero
