@@ -271,12 +271,10 @@ def can_set_param_value(element, param_name):
     if not in_group:
         return True
 
-    # Элемент в группе -> проверяем VariesAcrossGroups
     definition = param.Definition
     if isinstance(definition, InternalDefinition):
         return definition.VariesAcrossGroups
 
-    # Не InternalDefinition (например shared parameter) — считаем, что нельзя
     return False
 
 
