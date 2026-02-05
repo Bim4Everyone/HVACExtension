@@ -1,10 +1,36 @@
 #! /usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import os
+import sys
 import clr
 import re
 import System
 from collections import defaultdict
+
+
+def _add_unmodeling_lib_path():
+    """Add unmodeling library folder to sys.path (relative to this script)."""
+    try:
+        from System.IO import Path  # type: ignore
+
+        script_dir = Path.GetDirectoryName(__file__)
+        tab_dir = Path.GetFullPath(Path.Combine(script_dir, "..", "..", ".."))
+        lib_dir = Path.GetFullPath(
+            Path.Combine(tab_dir, u"Спецификации.panel", u"Дополнительные.stack", "lib")
+        )
+    except Exception:
+        script_dir = os.path.dirname(__file__)
+        tab_dir = os.path.abspath(os.path.join(script_dir, "..", "..", ".."))
+        lib_dir = os.path.abspath(
+            os.path.join(tab_dir, u"Спецификации.panel", u"Дополнительные.stack", "lib")
+        )
+
+    if lib_dir and lib_dir not in sys.path:
+        sys.path.insert(0, lib_dir)
+
+
+_add_unmodeling_lib_path()
 
 from unmodeling_class_library import UnmodelingFactory, MaterialCalculator, RowOfSpecification
 

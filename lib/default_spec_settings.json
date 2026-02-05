@@ -1,18 +1,295 @@
-{"UNMODELING":
-    {
-      "ENAMEL": {
-        "NAME": "Краска антикоррозионная, покрытие в два слоя. Расход - 0.2 кг на м²",
-        "MARK": "БТ-177",
-        "CODE": "",
-        "CREATOR": "",
-        "UNIT": "кг"
-      },
-      "PRIMER": {
-        "NAME": "Грунтовка для стальных труб, покрытие в один слой. Расход - 0.1 кг на м²",
-        "MARK": "ГФ-031",
-        "CODE": "",
-        "CREATOR": "",
-        "UNIT": "кг"
-      }
-    }
+{
+    "UnmodelingConfig":  {
+                             "config_001":  {
+                                                "ConfigName":  "Эмаль",
+                                                "Category":  "-2008044",
+                                                "Group":  "99_Краски",
+                                                "Name":  "Краска антикоррозионная, покрытие в два слоя. Расход - 0.2 кг на м²",
+                                                "Mark":  "",
+                                                "Code":  "",
+                                                "Unit":  "кг",
+                                                "Creator":  "",
+                                                "ValueFormula":  "Area_m2 * 0.2 * 2 * ProjectStock",
+                                                "NoteFormat":  "{SumAreaWithStock_m2} м², площадь за раз",
+                                                "AssignedElementIds":  [
+
+                                                                       ],
+                                                "RoundUpTotal":  false
+                                            },
+                             "config_002":  {
+                                                "ConfigName":  "Грунтовка",
+                                                "Category":  "-2008044",
+                                                "Group":  "99_Краски",
+                                                "Name":  "Грунтовка для стальных труб, покрытие в один слой. Расход - 0.1 кг на м²",
+                                                "Mark":  "ГФ-031",
+                                                "Code":  "",
+                                                "Unit":  "кг",
+                                                "Creator":  "",
+                                                "ValueFormula":  "Area_m2 * 0.1 * ProjectStock",
+                                                "NoteFormat":  "{SumAreaWithStock_m2} м², площадь за раз",
+                                                "AssignedElementIds":  [
+
+                                                                       ],
+                                                "RoundUpTotal":  false
+                                            },
+                             "config_003":  {
+                                                "ConfigName":  "Металл для воздуховодов",
+                                                "Category":  "-2008000",
+                                                "Group":  "99_Крепления",
+                                                "Name":  "Металлические крепления для воздуховодов",
+                                                "Mark":  "",
+                                                "Code":  "",
+                                                "Unit":  "кг",
+                                                "Creator":  "",
+                                                "ValueFormula":  "(Perimeter_mm < 1001 ? Area_m2 * 0.65 : Perimeter_mm < 1801 ? Area_m2 * 1.22 : Area_m2 * 2.25) * ProjectStock",
+                                                "NoteFormat":  "",
+                                                "AssignedElementIds":  [
+                                                                           523194
+                                                                       ],
+                                                "RoundUpTotal":  false
+                                            },
+                             "config_004":  {
+                                                "ConfigName":  "Металл для трубопроводов",
+                                                "Category":  "-2008044",
+                                                "Group":  "99_Крепления",
+                                                "Name":  "Металлические крепления для трубопроводов",
+                                                "Mark":  "",
+                                                "Code":  "",
+                                                "Unit":  "кг",
+                                                "Creator":  "",
+                                                "ValueFormula":  "((Diameter_mm <= 15 ? 0.238 : Diameter_mm <= 20 ? 0.204 : Diameter_mm <= 25 ? 0.187 : Diameter_mm <= 32 ? 0.170 : Diameter_mm <= 40 ? 0.187 : Diameter_mm <= 50 ? 0.2448 : Diameter_mm <= 65 ? 0.3315 : Diameter_mm <= 80 ? 0.3791 : Diameter_mm <= 100 ? 0.629 : Diameter_mm <= 125 ? 0.901 : Diameter_mm <= 150 ? 1.054 : Diameter_mm <= 200 ? 1.309 : 0.1564) * Length_m) * ProjectStock",
+                                                "NoteFormat":  "",
+                                                "AssignedElementIds":  [
+
+                                                                       ],
+                                                "RoundUpTotal":  false
+                                            },
+                             "config_005":  {
+                                                "ConfigName":  "Хомут трубный под шпильку М8",
+                                                "Category":  "-2008044",
+                                                "Group":  "99_Хомуты и шпильки",
+                                                "Name":  "Хомут трубный под шпильку М8, D={OutDiameter_mm}",
+                                                "Mark":  "",
+                                                "Code":  "",
+                                                "Unit":  "шт.",
+                                                "Creator":  "",
+                                                "ValueFormula":  "Length_m < 0.5 ? 0 : (Floor(Length_m / (Diameter_mm <= 15 ? (IsInsulated ? 2 : 1.5) : Diameter_mm <= 20 ? (IsInsulated ? 3 : 2) : Diameter_mm <= 25 ? (IsInsulated ? 3.5 : 2) : Diameter_mm <= 32 ? (IsInsulated ? 4 : 2.5) : Diameter_mm <= 40 ? (IsInsulated ? 4.5 : 3) : Diameter_mm <= 50 ? (IsInsulated ? 5 : 3) : Diameter_mm <= 65 ? (IsInsulated ? 6 : 4) : Diameter_mm <= 80 ? (IsInsulated ? 6 : 4) : Diameter_mm <= 100 ? (IsInsulated ? 6 : 4.5) : Diameter_mm <= 125 ? (IsInsulated ? 7 : 5) : (IsInsulated ? 7 : 5)) * ProjectStock) < 1 ? 1 : Floor(Length_m / (Diameter_mm <= 15 ? (IsInsulated ? 2 : 1.5) : Diameter_mm <= 20 ? (IsInsulated ? 3 : 2) : Diameter_mm <= 25 ? (IsInsulated ? 3.5 : 2) : Diameter_mm <= 32 ? (IsInsulated ? 4 : 2.5) : Diameter_mm <= 40 ? (IsInsulated ? 4.5 : 3) : Diameter_mm <= 50 ? (IsInsulated ? 5 : 3) : Diameter_mm <= 65 ? (IsInsulated ? 6 : 4) : Diameter_mm <= 80 ? (IsInsulated ? 6 : 4) : Diameter_mm <= 100 ? (IsInsulated ? 6 : 4.5) : Diameter_mm <= 125 ? (IsInsulated ? 7 : 5) : (IsInsulated ? 7 : 5)) * ProjectStock))",
+                                                "NoteFormat":  "",
+                                                "AssignedElementIds":  [
+
+                                                                       ],
+                                                "RoundUpTotal":  false
+                                            },
+                             "config_006":  {
+                                                "ConfigName":  "Шпилька М8 1м/1шт",
+                                                "Category":  "-2008044",
+                                                "Group":  "99_Хомуты и шпильки",
+                                                "Name":  "Шпилька М8 1м/1шт",
+                                                "Mark":  "",
+                                                "Code":  "",
+                                                "Unit":  "шт.",
+                                                "Creator":  "",
+                                                "ValueFormula":  "Length_m < 0.5 ? 0 : (Floor(Length_m / (Diameter_mm <= 15 ? (IsInsulated ? 2 : 1.5) : Diameter_mm <= 20 ? (IsInsulated ? 3 : 2) : Diameter_mm <= 25 ? (IsInsulated ? 3.5 : 2) : Diameter_mm <= 32 ? (IsInsulated ? 4 : 2.5) : Diameter_mm <= 40 ? (IsInsulated ? 4.5 : 3) : Diameter_mm <= 50 ? (IsInsulated ? 5 : 3) : Diameter_mm <= 65 ? (IsInsulated ? 6 : 4) : Diameter_mm <= 80 ? (IsInsulated ? 6 : 4) : Diameter_mm <= 100 ? (IsInsulated ? 6 : 4.5) : Diameter_mm <= 125 ? (IsInsulated ? 7 : 5) : (IsInsulated ? 7 : 5)) * ProjectStock) < 1 ? 1 : Floor(Length_m / (Diameter_mm <= 15 ? (IsInsulated ? 2 : 1.5) : Diameter_mm <= 20 ? (IsInsulated ? 3 : 2) : Diameter_mm <= 25 ? (IsInsulated ? 3.5 : 2) : Diameter_mm <= 32 ? (IsInsulated ? 4 : 2.5) : Diameter_mm <= 40 ? (IsInsulated ? 4.5 : 3) : Diameter_mm <= 50 ? (IsInsulated ? 5 : 3) : Diameter_mm <= 65 ? (IsInsulated ? 6 : 4) : Diameter_mm <= 80 ? (IsInsulated ? 6 : 4) : Diameter_mm <= 100 ? (IsInsulated ? 6 : 4.5) : Diameter_mm <= 125 ? (IsInsulated ? 7 : 5) : (IsInsulated ? 7 : 5)) * ProjectStock))",
+                                                "NoteFormat":  "",
+                                                "AssignedElementIds":  [
+
+                                                                       ],
+                                                "RoundUpTotal":  false
+                                            },
+                             "config_007":  {
+                                                "ConfigName":  "Комплекты заделки для трубопроводов",
+                                                "Category":  "-2008043",
+                                                "Group":  "99_Комплекты заделки",
+                                                "Name":  "Комплект заделки отверстий с восстановлением предела огнестойкости",
+                                                "Mark":  "",
+                                                "Code":  "",
+                                                "Unit":  "компл.",
+                                                "Creator":  "",
+                                                "ValueFormula":  "1",
+                                                "NoteFormat":  "",
+                                                "AssignedElementIds":  [
+
+                                                                       ],
+                                                "RoundUpTotal":  false
+                                            },
+                             "config_008":  {
+                                                "ConfigName":  "Комплекты заделки для воздуховодов",
+                                                "Category":  "-2008015",
+                                                "Group":  "99_Комплекты заделки",
+                                                "Name":  "Комплект заделки отверстий с восстановлением предела огнестойкости",
+                                                "Mark":  "",
+                                                "Code":  "",
+                                                "Unit":  "компл.",
+                                                "Creator":  "",
+                                                "ValueFormula":  "1",
+                                                "NoteFormat":  "",
+                                                "AssignedElementIds":  [
+
+                                                                       ],
+                                                "RoundUpTotal":  false
+                                            },
+                             "config_009":  {
+                                                "ConfigName":  "(Изоляция труб)Клей Energoflex",
+                                                "Category":  "-2008122",
+                                                "Group":  "99_Расходники изоляции",
+                                                "Name":  "Клей для монтажа изоляции Energoflex Extra банка - объем 0,8л",
+                                                "Mark":  "",
+                                                "Code":  "",
+                                                "Unit":  "шт.",
+                                                "Creator":  "Энергофлекс",
+                                                "ValueFormula":  "(\r\n  InsulationThikness_mm \u003e 25\r\n    ? (Area_m2 / 5.0)\r\n    : (Length_m / (\r\n        InsulationThikness_mm <= 6  ? 300.0 :\r\n        InsulationThikness_mm <= 9  ? 200.0 :\r\n        InsulationThikness_mm <= 13 ? 140.0 :\r\n        InsulationThikness_mm <= 20 ? 90.0  :\r\n        InsulationThikness_mm <= 25 ? 50.0  :\r\n        50.0\r\n      ))\r\n) / 0.8",
+                                                "NoteFormat":  "",
+                                                "AssignedElementIds":  [
+
+                                                                       ],
+                                                "RoundUpTotal":  false
+                                            },
+                             "config_010":  {
+                                                "ConfigName":  "(Изоляция труб)Очиститель Energoflex",
+                                                "Category":  "-2008122",
+                                                "Group":  "99_Расходники изоляции",
+                                                "Name":  "Очиститель Energoflex банка объем 1,0 л.",
+                                                "Mark":  "",
+                                                "Code":  "",
+                                                "Unit":  "шт.",
+                                                "Creator":  "Энергофлекс",
+                                                "ValueFormula":  "Length_m / 500 * ProjectStock",
+                                                "NoteFormat":  "",
+                                                "AssignedElementIds":  [
+
+                                                                       ],
+                                                "RoundUpTotal":  false
+                                            },
+                             "config_011":  {
+                                                "ConfigName":  "(Изоляция труб)Лента Energoflex",
+                                                "Category":  "-2008122",
+                                                "Group":  "99_Расходники изоляции",
+                                                "Name":  "Самоклеющаяся армированная лента Energoflex упаковка длина 50 м",
+                                                "Mark":  "",
+                                                "Code":  "",
+                                                "Unit":  "шт.",
+                                                "Creator":  "Энергофлекс",
+                                                "ValueFormula":  "1.45 * Length_m / 50",
+                                                "NoteFormat":  "",
+                                                "AssignedElementIds":  [
+
+                                                                       ],
+                                                "RoundUpTotal":  false
+                                            },
+                             "config_012":  {
+                                                "ConfigName":  "(Огнезащита воздуховодов)Лента самоклеющаяся",
+                                                "Category":  "-2008123",
+                                                "Group":  "99_Расходники изоляции",
+                                                "Name":  "Лента алюминиевая самоклеющаяся H=50",
+                                                "Mark":  "BOS-Master",
+                                                "Code":  "",
+                                                "Unit":  "м.п.",
+                                                "Creator":  "BOS",
+                                                "ValueFormula":  "2 * Area_m2 * ProjectStock",
+                                                "NoteFormat":  "",
+                                                "AssignedElementIds":  [
+
+                                                                       ],
+                                                "RoundUpTotal":  false
+                                            },
+                             "config_013":  {
+                                                "ConfigName":  "(Огнезащита воздуховодов)Огнезащитный клей",
+                                                "Category":  "-2008123",
+                                                "Group":  "99_Расходники изоляции",
+                                                "Name":  "Огнезащитный клеевой состав Kleber(расход 1.0 кг/м2)",
+                                                "Mark":  "",
+                                                "Code":  "",
+                                                "Unit":  "кг",
+                                                "Creator":  "BOS",
+                                                "ValueFormula":  "Area_m2",
+                                                "NoteFormat":  "",
+                                                "AssignedElementIds":  [
+
+                                                                       ],
+                                                "RoundUpTotal":  false
+                                            },
+                             "config_014":  {
+                                                "ConfigName":  "(Изоляция воздуховодов)Лента стальная",
+                                                "Category":  "-2008123",
+                                                "Group":  "99_Расходники изоляции",
+                                                "Name":  "Лента стальная со спец. покрытием Н=16-20, Расход 2п.м./1м2",
+                                                "Mark":  "BOS-Solid",
+                                                "Code":  "",
+                                                "Unit":  "м.п.",
+                                                "Creator":  "BOS",
+                                                "ValueFormula":  "2 * Area_m2 * ProjectStock",
+                                                "NoteFormat":  "",
+                                                "AssignedElementIds":  [
+
+                                                                       ],
+                                                "RoundUpTotal":  false
+                                            },
+                             "config_015":  {
+                                                "ConfigName":  "(Изоляция воздуховодов)Сетка металлическая",
+                                                "Category":  "-2008123",
+                                                "Group":  "99_Расходники изоляции",
+                                                "Name":  "Сетка металлическая, расход 1.1 м2/1м2 огнезащиты",
+                                                "Mark":  "BOS-Manie",
+                                                "Code":  "",
+                                                "Unit":  "м²",
+                                                "Creator":  "BOS",
+                                                "ValueFormula":  "Area_m2 * 1.1",
+                                                "NoteFormat":  "",
+                                                "AssignedElementIds":  [
+
+                                                                       ],
+                                                "RoundUpTotal":  false
+                                            },
+                             "config_016":  {
+                                                "ConfigName":  "(Изоляция воздуховодов)Проволока",
+                                                "Category":  "-2008123",
+                                                "Group":  "99_Расходники изоляции",
+                                                "Name":  "Проволока оцинкованная. Расход 2п.м./1м2",
+                                                "Mark":  "PRO-VOLOKA",
+                                                "Code":  "",
+                                                "Unit":  "м.п.",
+                                                "Creator":  "BOS",
+                                                "ValueFormula":  "2 * Area_m2 * ProjectStock",
+                                                "NoteFormat":  "",
+                                                "AssignedElementIds":  [
+
+                                                                       ],
+                                                "RoundUpTotal":  false
+                                            },
+                             "config_017":  {
+                                                "ConfigName":  "(Изоляция воздуховодов)Кожух",
+                                                "Category":  "-2008123",
+                                                "Group":  "99_Расходники изоляции",
+                                                "Name":  "Покровной слой из стальных алюминиевых листов толщиной 0,55мм с креплением стальными полосами 30х4.",
+                                                "Mark":  "",
+                                                "Code":  "",
+                                                "Unit":  "м²",
+                                                "Creator":  "",
+                                                "ValueFormula":  "Area_m2 * ProjectStock",
+                                                "NoteFormat":  "",
+                                                "AssignedElementIds":  [
+
+                                                                       ],
+                                                "RoundUpTotal":  false
+                                            }
+                         },
+    "UnmodelingSettings":  {
+                               "OnlyProjectInstances":  true
+                           },
+    "UNMODELING":  {
+                       "ENAMEL":  {
+                                      "UNIT":  "кг",
+                                      "CODE":  "",
+                                      "NAME":  "Краска антикоррозионная, покрытие в два слоя. Расход - 0.2 кг на м²",
+                                      "MARK":  "БТ-177",
+                                      "CREATOR":  ""
+                                  },
+                       "PRIMER":  {
+                                      "UNIT":  "кг",
+                                      "CODE":  "",
+                                      "NAME":  "Грунтовка для стальных труб, покрытие в один слой. Расход - 0.1 кг на м²",
+                                      "MARK":  "ГФ-031",
+                                      "CREATOR":  ""
+                                  }
+                   }
 }

@@ -707,6 +707,10 @@ class UnmodelingFactory:
         else:
             number_param = SharedParamsConfig.Instance.VISSpecNumbers
 
+        def set_param_value(shared_param, param_value):
+            if param_value is not None:
+                family_inst.SetParamValue(shared_param, param_value)
+
         set_param_value(SharedParamsConfig.Instance.VISSystemName, new_row_data.system)
         set_param_value(SharedParamsConfig.Instance.VISGrouping, group)
         set_param_value(SharedParamsConfig.Instance.VISCombinedName, new_row_data.name)
