@@ -7,6 +7,7 @@ clr.AddReference("RevitAPI")
 clr.AddReference("RevitAPIUI")
 clr.AddReference("dosymep.Revit.dll")
 clr.AddReference("dosymep.Bim4Everyone.dll")
+
 import dosymep
 
 clr.ImportExtensions(dosymep.Revit)
@@ -22,7 +23,13 @@ from Autodesk.Revit.DB import *
 from System.Collections.Generic import List
 from pyrevit import revit
 
+from dosymep.Bim4Everyone.SharedParams import *
+from dosymep.Bim4Everyone import ElementExtensions
+
+from dosymep.Bim4Everyone.SharedParams import SharedParamsConfig
+from dosymep.Bim4Everyone.Templates import ProjectParameters
 from dosymep_libs.bim4everyone import *
+from dosymep.Bim4Everyone import ElementExtensions
 
 class EditorReport:
     edited_reports = []
@@ -118,6 +125,16 @@ def script_execute(plugin_logger):
     editor_report = EditorReport()
 
     insulation_to_delete = []
+    insulation_to_delete_ids = set()
+
+    def add_insulation_to_delete(element):
+        element_id = element.Id.IntegerValue
+        if element_id in insulation_to_delete_ids:
+            return
+
+        insulation_to_delete_ids.add(element_id)
+        insulation_to_delete.append(element)
+
     for element in elements:
         host_element_id = element.HostElementId
 
@@ -129,7 +146,16 @@ def script_execute(plugin_logger):
 
             if host_element.InAnyCategory([BuiltInCategory.OST_PipeAccessory, BuiltInCategory.OST_DuctAccessory]):
                 if not editor_report.is_element_edited(element):
-                    insulation_to_delete.append(element)
+                    add_insulation_to_delete(element)
+
+            grouping = element.GetParamValueOrDefault(
+                SharedParamsConfig.Instance.VISGrouping, '')
+
+            number = element.GetParamValueOrDefault(
+                SharedParamsConfig.Instance.VISSpecNumbers, 0.0)
+
+            if grouping and number <= 0:
+                add_insulation_to_delete(element)
 
     insulation_number = len(insulation_to_delete)
 
