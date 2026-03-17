@@ -3,9 +3,9 @@ title:
   en_us: "Remove\ninsulations"
 
 tooltip:
-  ru: "При запуске удаляет всю изоляцию из активного документа, размещенную на арматуре трубопроводов или воздуховодов."
+  ru: "При запуске удаляет всю изоляцию из активного документа, размещенную на арматуре трубопроводов или воздуховодов, а так же изоляцию с нулевым объемом"
  
-  en_us: "Upon execution, removes all insulation from the active document that is placed on pipe or duct fittings."
+  en_us: "Upon execution, removes all insulation from the active document that is placed on pipe or duct fittings, as well as insulation with zero volume"
 
 
 author: Redomine
