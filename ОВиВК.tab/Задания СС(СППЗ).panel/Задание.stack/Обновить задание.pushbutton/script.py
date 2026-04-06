@@ -74,8 +74,13 @@ def get_floor_value(element):
     if value:
         value = value.split()[0]
 
-    if value.startswith("-"):
-        value = "П" + value[1:].zfill(2)
+    if value.startswith(("-", "П")):
+        suffix = value[1:]
+        if suffix.isdigit():
+            value = "П" + suffix.zfill(2)
+
+    if value.isdigit():
+        value = value.zfill(2)
 
     return value
 
