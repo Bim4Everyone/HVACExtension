@@ -67,14 +67,15 @@ def split_equipment_by_floors(equipment_elements, opened = False, closed = False
     return equpment_by_floors
 
 def get_floor_value(element):
-    ''' Возвращает значение ФОП_Этаж, если в нем нет дефиса. Если есть - падаем с отчетом. '''
     value = element.GetParamValueOrDefault(FLOOR_PARAM)
 
-    if "-" in value:
-        report_text = ("У части отмеченного для задания оборудования в значении этажа указан символ дефиса (-). "
-                       "Исключите такие обозначения. Для подземных этажей используйте обозначения П01, П02 и т.д")
+    value = value.strip()
 
-        forms.alert(report_text, "Ошибка", exitscript=True)
+    if value:
+        value = value.split()[0]
+
+    if value.startswith("-"):
+        value = "П" + value[1:].zfill(2)
 
     return value
 
@@ -306,7 +307,7 @@ def setup_params():
 
 
 MARK_PARAM = SharedParamsConfig.Instance.VISMarkNumber
-FLOOR_PARAM = SharedParamsConfig.Instance.Level
+FLOOR_PARAM = SharedParamsConfig.Instance.BuildingWorksLevel
 SYSTEM_PARAM = SharedParamsConfig.Instance.VISSystemName
 TASK_SS_PARAM = SharedParamsConfig.Instance.VISTaskSSMark
 DATE_SS_PARAM = SharedParamsConfig.Instance.VISTaskSSDate
