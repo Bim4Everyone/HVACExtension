@@ -79,6 +79,11 @@ class EditorReport:
 def setup_params():
     """Настраивает параметры проекта."""
     revit_params = [mark_bottom_to_zero_param, mark_axis_to_zero_param]
+    vary_by_group_param_names = [
+        ADSK_HOLE_CUR_BOT_PARAM_NAME,
+        ADSK_HOLE_CUR_OFFSET_PARAM_NAME,
+        ADSK_LEVEL_CUR_OFFSET_PARAM_NAME
+    ]
     project_parameters = ProjectParameters.Create(doc.Application)
 
     try:
@@ -88,6 +93,13 @@ def setup_params():
             pass
         else:
             raise
+
+    with revit.Transaction("BIM: Настройка параметров"):
+        iterator = doc.ParameterBindings.ForwardIterator()
+        while iterator.MoveNext():
+            definition = iterator.Key
+            if definition.Name in vary_by_group_param_names and not definition.VariesAcrossGroups:
+                definition.SetAllowVaryBetweenGroups(doc, True)
 
 
 def sort_parameters_to_group():
