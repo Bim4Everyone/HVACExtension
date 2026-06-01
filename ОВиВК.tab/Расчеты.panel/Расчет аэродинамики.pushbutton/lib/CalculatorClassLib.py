@@ -83,7 +83,8 @@ class ConnectorData:
         for reference in self.connector_element.AllRefs:
             if reference.Owner.InAnyCategory([BuiltInCategory.OST_DuctCurves,
                                               BuiltInCategory.OST_DuctFitting,
-                                              BuiltInCategory.OST_MechanicalEquipment]):
+                                              BuiltInCategory.OST_MechanicalEquipment,
+                                              BuiltInCategory.OST_DuctAccessory]):
                 self.connected_element = reference.Owner
 
 class MulticonElementCharacteristic:
