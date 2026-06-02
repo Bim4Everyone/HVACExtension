@@ -291,17 +291,20 @@ def get_type_annotation():
         .WhereElementIsNotElementType() \
         .ToElements()
 
-    target_family_name = "ТипАн_Мрк_B4E_Уровень"
-    target_floor_name = "ТипАн_Мрк_B4E_Перекрытие"
+    target_level_mark_name = "ТипАн_Мрк_B4E_Уровень"
+    target_floor_mark_name = "ТипАн_Мрк_B4E_Перекрытие"
 
-    filtered_annotations = [el for el in generic_annotations if el.Symbol.Family.Name == target_family_name]
-    if len(filtered_annotations) == 0:
+    level_annotations = [el for el in generic_annotations if el.Symbol.Family.Name == target_level_mark_name]
+    if len(level_annotations) == 0:
         forms.alert("Разместите на виде хотя бы одно шаблонное семейство {}."
-                    .format(target_family_name),
+                    .format(target_level_mark_name),
                     "Ошибка",
                     exitscript=True)
 
-    return filtered_annotations[0]
+    floor_annotations = [el for el in generic_annotations if el.Symbol.Family.Name == target_floor_mark_name]
+    floor_annotation = floor_annotations[0] if len(floor_annotations) != 0 else None
+
+    return {"level_mark": level_annotations[0], "floor_mark": floor_annotation}
 
 
 def get_first_leader_point(type_annotation):
@@ -324,9 +327,14 @@ def get_type_annotation_origin(type_annotation):
 @log_plugin(EXEC_PARAMS.command_name)
 def script_execute(plugin_logger):
     start_up_checks()
-    type_annotation = get_type_annotation()
-    type_annotation_id = type_annotation.Id
-    orig_pont = get_type_annotation_origin(type_annotation)
+    type_annotation_dict = get_type_annotation()
+    level_annotation = type_annotation_dict["level_mark"]
+    level_annotation_id = level_annotation.Id
+    level_orig_pont = get_type_annotation_origin(level_annotation)
+
+    floor_annotation = type_annotation_dict["floor_mark"]
+    floor_annotation_id = floor_annotation.Id if floor_annotation is not None else None
+    floor_orig_pont = get_type_annotation_origin(floor_annotation) if floor_annotation is not None else None
 
     elements = get_pre_selected() or get_selected()
 
@@ -348,13 +356,16 @@ def script_execute(plugin_logger):
                     continue
 
                 new_point = XYZ(connector_coord_1.X, connector_coord_1.Y, level.elevation + z_correction)
-                translation = new_point - orig_pont
-                new_tag_id = ElementTransformUtils.CopyElement(doc, type_annotation_id, translation)
+                translation = new_point - level_orig_pont
+                new_tag_id = ElementTransformUtils.CopyElement(doc, level_annotation_id, translation)
                 new_tag = doc.GetElement(new_tag_id[0])
                 new_tag.SetParamValue("Имя уровня", level.name)
                 elevation = UnitUtils.ConvertFromInternalUnits(level.elevation,
                                                    UnitTypeId.Meters)
                 string_elevation = "{:+.3f}".format(elevation)
+                if floor_annotation_id is not None:
+                    floor_translation = new_point - floor_orig_pont
+                    ElementTransformUtils.CopyElement(doc, floor_annotation_id, floor_translation)
                 new_tag.SetParamValue("Отметка уровня", string_elevation)
 
 
