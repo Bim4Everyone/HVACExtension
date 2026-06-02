@@ -141,9 +141,7 @@ def get_connector_coordinates(element):
                 break
 
     if start_point is None and end_point is None:
-        forms.alert("Не удалось получить координаты коннекторов. ID: {}".format(str(element.Id)),
-                    "Ошибка",
-                    exitscript=True)
+        return None
 
     # Если у нас встречается элемент с одним коннектором - получает bbox и добавляем его высоту к стартовой точке
     if end_point is None:
@@ -294,6 +292,7 @@ def get_type_annotation():
         .ToElements()
 
     target_family_name = "ТипАн_Мрк_B4E_Уровень"
+    target_floor_name = "ТипАн_Мрк_B4E_Перекрытие"
 
     filtered_annotations = [el for el in generic_annotations if el.Symbol.Family.Name == target_family_name]
     if len(filtered_annotations) == 0:
@@ -305,13 +304,29 @@ def get_type_annotation():
     return filtered_annotations[0]
 
 
+def get_first_leader_point(type_annotation):
+    leaders = list(type_annotation.GetLeaders())
+    if len(leaders) != 0:
+        return leaders[0].End
+
+    return None
+
+
+def get_type_annotation_origin(type_annotation):
+    leader_point = get_first_leader_point(type_annotation)
+    if leader_point is not None:
+        return leader_point
+
+    return type_annotation.Location.Point
+
+
 @notification()
 @log_plugin(EXEC_PARAMS.command_name)
 def script_execute(plugin_logger):
     start_up_checks()
     type_annotation = get_type_annotation()
     type_annotation_id = type_annotation.Id
-    orig_pont = type_annotation.Location.Point
+    orig_pont = get_type_annotation_origin(type_annotation)
 
     elements = get_pre_selected() or get_selected()
 
@@ -320,6 +335,8 @@ def script_execute(plugin_logger):
 
     for element in elements:
         coord_list = get_connector_coordinates(element)
+        if coord_list is None:
+            continue
         connector_coord_1 = coord_list[0]
         connector_coord_2 = coord_list[1]
         min_z = min(connector_coord_1.Z, connector_coord_2.Z) - z_correction
