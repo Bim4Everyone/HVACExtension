@@ -215,6 +215,12 @@ class JsonOperator:
         if self.show_dialog(report):
             os.startfile(local_path)
 
+    def write_json_data(self, data, file_path):
+        data_dicts = [item.to_dict() for item in data]
+
+        with codecs.open(file_path, 'w', encoding='utf-8') as json_file:
+            json.dump(data_dicts, json_file, ensure_ascii=False, indent=4)
+
     def send_json_data(self, data, new_file_path):
         """
         Отправляет данные в JSON файл.
@@ -227,12 +233,24 @@ class JsonOperator:
         time = self.get_utc_date()
         new_file_path = new_file_path + "/СС(СППЗ)_" + project_name + "_" + time + ".json"
 
-        data_dicts = [item.to_dict() for item in data]
+        self.write_json_data(data, new_file_path)
 
-        with codecs.open(new_file_path, 'w', encoding='utf-8') as json_file:
-            json.dump(data_dicts, json_file, ensure_ascii=False, indent=4)
+    def get_json_file_path(self, project_path, is_today=True):
+        json_files = glob.glob(os.path.join(project_path, "*.json"))
 
-    def get_json_data(self, project_path):
+        if not is_today:
+            today = self.get_utc_date()
+            json_files = [
+                json_file for json_file in json_files
+                if today not in os.path.basename(json_file)
+            ]
+
+        if not json_files:
+            return {}
+
+        return max(json_files, key=os.path.getmtime)
+
+    def get_json_data(self, project_path, is_today=True):
         """
         Получает данные из JSON файла.
 
@@ -243,14 +261,12 @@ class JsonOperator:
             list: Список объектов LowVoltageSystemData.
         """
 
-        json_files = glob.glob(os.path.join(project_path, "*.json"))
-        if not json_files:
+        actual_file = self.get_json_file_path(project_path, is_today)
+        if not actual_file:
             return {}
 
-        latest_file = max(json_files, key=os.path.getmtime)
-
-        if latest_file is not None and os.path.exists(latest_file):
-            with codecs.open(latest_file, 'r', encoding='utf-8') as json_file:
+        if os.path.exists(actual_file):
+            with codecs.open(actual_file, 'r', encoding='utf-8') as json_file:
                 existing_data = json.load(json_file)
 
                 return [

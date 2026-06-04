@@ -51,8 +51,8 @@ categories = [BuiltInCategory.OST_MechanicalEquipment,
               BuiltInCategory.OST_DuctAccessory,
               BuiltInCategory.OST_PipeAccessory]
 
-forget_all_method = "Полный сброс значений в памяти (не выдавалось задание)"
-forget_id_method = "Переопределение только ID (задание выдавалось, элемент будет помечен удаленным)"
+forget_all_method = "Элемент уже был в задании СС(СППЗ)"
+forget_id_method = "Элемента не было в задании СС(СППЗ)"
 TASK_SS_PARAM = SharedParamsConfig.Instance.VISTaskSSMark
 DATE_SS_PARAM = SharedParamsConfig.Instance.VISTaskSSDate
 
@@ -135,21 +135,25 @@ def get_selected_mode():
     return method
 
 def forget_elements(json_data, elements, method):
+    if method == forget_all_method:
+        return [
+            data for data in json_data
+            if not any(element.Id == data.id for element in elements)
+        ]
+
+    if method == forget_id_method:
+        deletion_date = operator.get_utc_date()
+        for element in elements:
+            for data in json_data:
+                if element.Id == data.id:
+                    data.id = ElementId(-abs(int(str(data.id))))
+                    data.deletion_date = deletion_date
+
+    return json_data
+
+
+def clear_element_task_params(elements):
     with revit.Transaction("BIM: Забыть элемент"):
-        if method == forget_all_method:
-            json_data = [
-                data for data in json_data
-                if not any(element.Id == data.id for element in elements)
-            ]
-
-        elif method == forget_id_method:
-            deletion_date = operator.get_utc_date()
-            for element in elements:
-                for data in json_data:
-                    if element.Id == data.id:
-                        data.id = ElementId(-abs(int(str(data.id))))
-                        data.deletion_date = deletion_date
-
         for element in elements:
             element.SetParamValue(TASK_SS_PARAM, "")
             element.SetParamValue(DATE_SS_PARAM, "")
@@ -166,16 +170,30 @@ def script_execute(plugin_logger):
     if is_path_local:
         operator.show_local_path(file_folder_path)
 
-    # Получаем данные из последнего по дате редактирования файла
-    json_data = operator.get_json_data(file_folder_path)
-
     method = get_selected_mode()
 
     elements = get_pre_selected() or get_selected()
 
-    final_json = forget_elements(json_data, elements, method)
+    old_json_file_path = operator.get_json_file_path(file_folder_path, is_today=False)
+    old_json_data = operator.get_json_data(file_folder_path, is_today=False)
+    if not old_json_data:
+        forms.alert("Данные старых заданий не были обнаружены", "Ошибка", exitscript=True)
 
-    # Записываем в json-файл
-    operator.send_json_data(final_json, file_folder_path)
+    final_old_json = forget_elements(old_json_data, elements, method)
+    operator.write_json_data(final_old_json, old_json_file_path)
+    """
+    Обновить задание работет по принципу удаления сегодняшнего задания при каждом вызове. Для корректировки необходимо
+    откорректировать последний замороженный файл с не сегодняшней датой и если сегодня выполнялось обновление и есть файл
+    необходимо продублировать изменения в нем тоже, чтоб поддерживать актуальное состояние заданий во всех актуальных
+    версиях
+    """
+    today_json_file_path = operator.get_json_file_path(file_folder_path)
+    if today_json_file_path and operator.get_utc_date() in os.path.basename(today_json_file_path):
+        today_json_data = operator.get_json_data(file_folder_path)
+        if today_json_data:
+            final_today_json = forget_elements(today_json_data, elements, method)
+            operator.write_json_data(final_today_json, today_json_file_path)
+
+    clear_element_task_params(elements)
 
 script_execute()
