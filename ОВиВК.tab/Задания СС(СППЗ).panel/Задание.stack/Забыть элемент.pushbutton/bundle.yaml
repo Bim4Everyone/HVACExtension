@@ -1,0 +1,14 @@
+title:
+  ru: Забыть элемент
+  en_us: Forget element
+
+tooltip:
+  ru: Позволяет исключить выделенный элемент из памяти скрипта и назначить его заново.
+  en_us: Shows equipment that exists in the latest revision of the job but does not exist in the model.
+
+author: Redomine
+help_url: "https://kb.a101.ru/pages/viewpage.action?pageId=155549728"
+
+min_revit_version: 2022
+max_revit_version: 2024
+
