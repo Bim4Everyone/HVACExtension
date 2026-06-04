@@ -53,6 +53,8 @@ categories = [BuiltInCategory.OST_MechanicalEquipment,
 
 forget_all_method = "Полный сброс значений в памяти (не выдавалось задание)"
 forget_id_method = "Переопределение только ID (задание выдавалось, элемент будет помечен удаленным)"
+TASK_SS_PARAM = SharedParamsConfig.Instance.VISTaskSSMark
+DATE_SS_PARAM = SharedParamsConfig.Instance.VISTaskSSDate
 
 operator = JsonOperator(doc, uiapp)
 
@@ -133,21 +135,24 @@ def get_selected_mode():
     return method
 
 def forget_elements(json_data, elements, method):
-    if method == forget_all_method:
-        return [
-            data for data in json_data
-            if not any(element.Id == data.id for element in elements)
-        ]
+    with revit.Transaction("BIM: Забыть элемент"):
+        if method == forget_all_method:
+            json_data = [
+                data for data in json_data
+                if not any(element.Id == data.id for element in elements)
+            ]
 
-    if method == forget_id_method:
-        deletion_date = operator.get_utc_date()
+        elif method == forget_id_method:
+            deletion_date = operator.get_utc_date()
+            for element in elements:
+                for data in json_data:
+                    if element.Id == data.id:
+                        data.id = ElementId(-abs(int(str(data.id))))
+                        data.deletion_date = deletion_date
+
         for element in elements:
-            for data in json_data:
-                if element.Id == data.id:
-                    data.id = ElementId(int(str(data.id) + "0000"))
-                    data.deletion_date = deletion_date
-
-    return json_data
+            element.SetParamValue(TASK_SS_PARAM, "")
+            element.SetParamValue(DATE_SS_PARAM, "")
 
 
 @notification()
