@@ -51,8 +51,8 @@ categories = [BuiltInCategory.OST_MechanicalEquipment,
               BuiltInCategory.OST_DuctAccessory,
               BuiltInCategory.OST_PipeAccessory]
 
-forget_all_method = "Элемент уже был в задании СС(СППЗ)"
-forget_id_method = "Элемента не было в задании СС(СППЗ)"
+forget_all_method = "Элемента не было в задании СС(СППЗ)"
+forget_id_method = "Элемент уже был в задании СС(СППЗ)"
 TASK_SS_PARAM = SharedParamsConfig.Instance.VISTaskSSMark
 DATE_SS_PARAM = SharedParamsConfig.Instance.VISTaskSSDate
 
