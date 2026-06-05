@@ -7,6 +7,7 @@ import re
 import sys
 import json
 import os
+import shutil
 import ctypes
 import codecs
 from datetime import datetime, timedelta
@@ -324,3 +325,23 @@ class JsonOperator:
         """
         if not os.path.exists(project_path):
             os.makedirs(project_path)
+
+    def create_backup(self, project_path):
+        actual_file = self.get_json_file_path(project_path, is_today=False)
+        if not actual_file:
+            return
+
+        backup_folder = os.path.join(project_path, "backups")
+        if not os.path.exists(backup_folder):
+            os.makedirs(backup_folder)
+
+        file_name, file_ext = os.path.splitext(os.path.basename(actual_file))
+        backup_file = os.path.join(
+            backup_folder,
+            "{}_{}{}".format(file_name, self.get_utc_date(), file_ext)
+        )
+
+        if os.path.exists(backup_file):
+            return
+
+        shutil.copy2(actual_file, backup_file)
