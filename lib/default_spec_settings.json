@@ -71,7 +71,7 @@
       "Name": "Металлические крепления для трубопроводов",
       "Mark": "",
       "Code": "",
-      "Unit": "кг",
+      "Unit": "кг.",
       "Creator": "",
       "ValueFormula": "((Diameter_mm <= 15 ? 0.238 : Diameter_mm <= 20 ? 0.204 : Diameter_mm <= 25 ? 0.187 : Diameter_mm <= 32 ? 0.170 : Diameter_mm <= 40 ? 0.187 : Diameter_mm <= 50 ? 0.2448 : Diameter_mm <= 65 ? 0.3315 : Diameter_mm <= 80 ? 0.3791 : Diameter_mm <= 100 ? 0.629 : Diameter_mm <= 125 ? 0.901 : Diameter_mm <= 150 ? 1.054 : Diameter_mm <= 200 ? 1.309 : 0.1564) * Length_m) * ProjectStock",
       "NoteValue": "",
@@ -335,6 +335,38 @@
       "ConfigName": "Хомут + шпилька(Трубы чугунные ГОСТ)",
       "Unit": "кг.",
       "ValueFormula": "ProjectStock * Length_m * (\n  OutDiameter_mm < 49.5 ? 0 :\n  OutDiameter_mm <= 65 ? 0.7307 :\n  OutDiameter_mm <= 118 ? 1.3500 :\n  2.7125\n)"
+    },
+    "config_024": {
+      "ConfigName": "Цилиндры для огнезащиты шпилек",
+      "Category": "-2008000",
+      "Group": "99_Расходники изоляции",
+      "Name": "Огнезащитные цилиндры для огнезащиты шпилек, плотность 120 кг/м³, толщина 20 мм, диаметр 10 мм, кашированные неармированной фольгой (НГ)",
+      "Mark": "PRO-PIN-VENT НФ 120-1000.10.20",
+      "Code": "",
+      "Unit": "м.п.",
+      "Creator": "БОС",
+      "ValueFormula": "IsInsulated ? Length_m / 2 * 0.8 * ProjectStock : 0",
+      "NoteValue": "",
+      "NoteFormat": "",
+      "AssignedElementIds": [],
+      "RoundUpTotal": false,
+      "RoundUpNoteTotal": false
+    },
+    "config_025": {
+      "ConfigName": "Огнезащита траверсов",
+      "Category": "-2008000",
+      "Group": "99_Расходники изоляции",
+      "Name": "Комплексная система огнезащиты траверсов PRO-МБОР-VENT R180 в составе: материал PRO-МБОР (EI 180), плотностью не менее 75 кг/м³, толщиной 13 мм, в обкладке неармированной фольгой",
+      "Mark": "PRO-МБОР-VENT-13-1НФ",
+      "Code": "",
+      "Unit": "м²",
+      "Creator": "БОС",
+      "ValueFormula": "IsInsulated ? Length_m / 2 / 3 * ProjectStock : 0",
+      "NoteValue": "",
+      "NoteFormat": "",
+      "AssignedElementIds": [],
+      "RoundUpTotal": false,
+      "RoundUpNoteTotal": false
     }
   },
   "UnmodelingSettings": {
