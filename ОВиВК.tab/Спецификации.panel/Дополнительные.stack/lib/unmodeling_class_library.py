@@ -702,11 +702,6 @@ class UnmodelingFactory:
         group = '{}_{}_{}_{}_{}'.format(
             new_row_data.group, new_row_data.name, new_row_data.mark, new_row_data.maker, new_row_data.code)
 
-        if self.doc.IsExistsParam(SharedParamsConfig.Instance.VISSpecNumbersCurrency):
-            number_param = SharedParamsConfig.Instance.VISSpecNumbersCurrency
-        else:
-            number_param = SharedParamsConfig.Instance.VISSpecNumbers
-
         def set_param_value(shared_param, param_value):
             if param_value is not None:
                 family_inst.SetParamValue(shared_param, param_value)
@@ -718,7 +713,7 @@ class UnmodelingFactory:
         set_param_value(SharedParamsConfig.Instance.VISItemCode, new_row_data.code)
         set_param_value(SharedParamsConfig.Instance.VISManufacturer, new_row_data.maker)
         set_param_value(SharedParamsConfig.Instance.VISUnit, new_row_data.unit)
-        set_param_value(number_param, new_row_data.number)
+        set_param_value(SharedParamsConfig.Instance.VISSpecNumbersCurrency, new_row_data.number)
         set_param_value(SharedParamsConfig.Instance.VISMass, new_row_data.mass)
         set_param_value(SharedParamsConfig.Instance.VISNote, new_row_data.note)
         set_param_value(SharedParamsConfig.Instance.EconomicFunction, new_row_data.function)
