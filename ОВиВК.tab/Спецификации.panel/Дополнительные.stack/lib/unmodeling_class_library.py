@@ -836,7 +836,8 @@ class UnmodelingFactory:
                         SharedParamsConfig.Instance.BuildingWorksBlock,
                         SharedParamsConfig.Instance.BuildingWorksSection,
                         SharedParamsConfig.Instance.BuildingWorksLevel,
-                        SharedParamsConfig.Instance.VISSettings]
+                        SharedParamsConfig.Instance.VISSettings,
+                        SharedParamsConfig.Instance.VISSpecNumbersCurrency]
 
 
         with revit.Transaction("BIM: Настройка параметров"):
