@@ -185,14 +185,34 @@ def set_element_workset(element, workset_id_value):
 class UngroupedGroup:
     group_name = None
     group_type_id = None
+    original_group_type_id = None
+    temporary_group_type_id = None
     workset_id_value = None
+    location_point = None
     member_ids = None
 
-    def __init__(self, group_name, group_type_id, workset_id_value, member_ids):
+    def __init__(self, group_name, group_type_id, original_group_type_id,
+                 temporary_group_type_id, workset_id_value, location_point, member_ids):
         self.group_name = group_name
         self.group_type_id = group_type_id
+        self.original_group_type_id = original_group_type_id
+        self.temporary_group_type_id = temporary_group_type_id
         self.workset_id_value = workset_id_value
+        self.location_point = location_point
         self.member_ids = member_ids
+
+class SplitGroupInfo:
+    group_id = None
+    original_group_type_id = None
+    temporary_group_type_id = None
+    location_point = None
+
+    def __init__(self, group_id, original_group_type_id, temporary_group_type_id,
+                 location_point):
+        self.group_id = group_id
+        self.original_group_type_id = original_group_type_id
+        self.temporary_group_type_id = temporary_group_type_id
+        self.location_point = location_point
 
 def is_model_group(element):
     """Returns True only for model group instances."""
@@ -290,62 +310,77 @@ def filter_elements_by_scope(elements, scope_element_ids):
 
     return result
 
-def get_group_instances_by_type_ids(group_type_ids):
-    """Returns all model group instances by group type id."""
-    result = {}
+def get_element_location_point(element):
+    try:
+        location = element.Location
+        if location is None or not hasattr(location, "Point"):
+            return None
 
-    if len(group_type_ids) == 0:
-        return result
+        point = location.Point
+        if point is None:
+            return None
 
-    all_groups = FilteredElementCollector(doc).OfClass(Group).ToElements()
-    for group in all_groups:
-        if not is_model_group(group):
-            continue
+        return XYZ(point.X, point.Y, point.Z)
+    except Exception:
+        return None
 
-        group_type_id = group.GroupType.Id.IntegerValue
-        if group_type_id not in group_type_ids:
-            continue
+def move_element_to_location_point(element, target_point):
+    if element is None or target_point is None:
+        return False
 
-        if group_type_id not in result:
-            result[group_type_id] = []
+    current_point = get_element_location_point(element)
+    if current_point is None:
+        raise Exception("Can not get current group location point")
 
-        result[group_type_id].append(group)
+    translation = XYZ(
+        target_point.X - current_point.X,
+        target_point.Y - current_point.Y,
+        target_point.Z - current_point.Z)
+    if translation.GetLength() < 0.0000001:
+        return True
 
-    return result
+    try:
+        ElementTransformUtils.MoveElement(doc, element.Id, translation)
+        doc.Regenerate()
+    except Exception as error:
+        raise Exception("Can not restore group location point: {0}".format(error))
 
-def get_group_type_ids(groups):
-    result = set()
+    current_point = get_element_location_point(element)
+    if current_point is None or current_point.DistanceTo(target_point) >= 0.0000001:
+        raise Exception("Can not restore group location point")
 
-    for group in groups:
-        result.add(group.GroupType.Id.IntegerValue)
-
-    return result
+    return True
 
 def split_multiple_group_instances(groups):
-    """Gives every instance of repeated group types its own numbered group type."""
-    group_type_ids = get_group_type_ids(groups)
-    groups_by_type = get_group_instances_by_type_ids(group_type_ids)
+    """Keeps original group types and moves processed instances to temporary types."""
+    split_group_infos = {}
 
-    for group_type_id, group_instances in groups_by_type.items():
-        if len(group_instances) < 2:
+    for group in groups:
+        if group is None or not is_model_group(group):
             continue
 
-        group_instances = sorted(group_instances, key=lambda group: group.Id.IntegerValue)
-        source_group_type = group_instances[0].GroupType
-        base_group_name = get_element_name(source_group_type)
+        original_group_type = group.GroupType
+        location_point = get_element_location_point(group)
+        if location_point is None:
+            raise Exception("Can not get source group location point")
 
-        for index, group in enumerate(group_instances):
-            group_name = get_unique_group_type_name("{} {}".format(base_group_name, index + 1))
+        base_group_name = get_element_name(original_group_type)
+        group_name = get_unique_group_type_name("{} TMP {}".format(
+            base_group_name,
+            group.Id.IntegerValue))
 
-            if hasattr(group, "Pinned") and group.Pinned:
-                group.Pinned = False
+        if hasattr(group, "Pinned") and group.Pinned:
+            group.Pinned = False
 
-            if index == 0:
-                set_element_name(source_group_type, group_name)
-                continue
+        temporary_group_type = original_group_type.Duplicate(group_name)
+        group.GroupType = temporary_group_type
+        split_group_infos[group.Id.IntegerValue] = SplitGroupInfo(
+            group.Id,
+            original_group_type.Id,
+            temporary_group_type.Id,
+            location_point)
 
-            new_group_type = source_group_type.Duplicate(group_name)
-            group.GroupType = new_group_type
+    return split_group_infos
 
 def get_groups_with_elements_in_scope(groups, scope_element_ids):
     """Keeps groups only when their instance or members are in the processing scope."""
@@ -389,63 +424,129 @@ def to_element_id_list(element_ids):
 
     return result
 
-def ungroup_model_groups(groups):
+def get_split_group_info(group, split_group_infos):
+    group_id = group.Id.IntegerValue
+    if group_id in split_group_infos:
+        return split_group_infos[group_id]
+
+    location_point = get_element_location_point(group)
+    if location_point is None:
+        raise Exception("Can not get source group location point")
+
+    return SplitGroupInfo(
+        group.Id,
+        group.GroupType.Id,
+        None,
+        location_point)
+
+def ungroup_model_groups(groups, split_group_infos):
     """Ungroups model group instances and stores data required to recreate them."""
     ungrouped_groups = []
 
     for group in groups:
         group_type = group.GroupType
-        group_name = get_element_name(group_type)
+        split_group_info = get_split_group_info(group, split_group_infos)
+        original_group_type_id = split_group_info.original_group_type_id
+        original_group_type = doc.GetElement(original_group_type_id)
+        group_name = get_element_name(original_group_type or group_type)
         group_type_id = group_type.Id
+        temporary_group_type_id = split_group_info.temporary_group_type_id
         workset_id_value = get_element_workset_id_value(group)
+        location_point = split_group_info.location_point
+
+        if (temporary_group_type_id is None
+                and group_type_id.IntegerValue != original_group_type_id.IntegerValue):
+            temporary_group_type_id = group_type_id
 
         if hasattr(group, "Pinned") and group.Pinned:
             group.Pinned = False
 
         member_ids = list(group.UngroupMembers())
-        ungrouped_groups.append(UngroupedGroup(group_name, group_type_id, workset_id_value, member_ids))
+        ungrouped_groups.append(UngroupedGroup(
+            group_name,
+            group_type_id,
+            original_group_type_id,
+            temporary_group_type_id,
+            workset_id_value,
+            location_point,
+            member_ids))
 
     return ungrouped_groups
 
-def delete_old_group_types(ungrouped_groups):
-    """Deletes old group types once all selected/visible instances are ungrouped."""
+def delete_group_types(group_type_ids):
     processed_group_type_ids = set()
 
-    for ungrouped_group in ungrouped_groups:
-        group_type_id = ungrouped_group.group_type_id
+    for group_type_id in group_type_ids:
+        if group_type_id is None:
+            continue
+
         group_type_int_id = group_type_id.IntegerValue
         if group_type_int_id in processed_group_type_ids:
             continue
 
         processed_group_type_ids.add(group_type_int_id)
         if doc.GetElement(group_type_id) is not None:
-            doc.Delete(group_type_id)
+            try:
+                doc.Delete(group_type_id)
+            except Exception as error:
+                raise Exception("Can not delete temporary group type {0}: {1}".format(
+                    group_type_int_id,
+                    error))
 
-def set_group_name(new_group, group_name, recreated_group_types):
-    """Restores the original group type name after regrouping."""
-    if group_name in recreated_group_types:
-        temp_group_type = new_group.GroupType
-        try:
-            new_group.GroupType = recreated_group_types[group_name]
-            if doc.GetElement(temp_group_type.Id) is not None:
-                doc.Delete(temp_group_type.Id)
-            return
-        except Exception:
-            pass
+def get_split_temporary_group_type_ids(split_group_infos):
+    result = []
 
-    set_element_name(new_group.GroupType, group_name)
-    recreated_group_types[group_name] = new_group.GroupType
+    for split_group_info in split_group_infos.values():
+        if split_group_info.temporary_group_type_id is not None:
+            result.append(split_group_info.temporary_group_type_id)
 
-def recreate_model_group(ungrouped_group, recreated_group_types):
+    return result
+
+def restore_group_original_type(group, original_group_type_id, target_location_point=None):
+    if group is None:
+        return None
+
+    original_group_type = doc.GetElement(original_group_type_id)
+    if original_group_type is None:
+        raise Exception("Can not find original group type {0}".format(
+            original_group_type_id.IntegerValue))
+
+    temporary_group_type_id = group.GroupType.Id
+    if temporary_group_type_id.IntegerValue == original_group_type_id.IntegerValue:
+        move_element_to_location_point(group, target_location_point)
+        return None
+
+    if hasattr(group, "Pinned") and group.Pinned:
+        group.Pinned = False
+
+    try:
+        group.GroupType = original_group_type
+    except Exception as error:
+        raise Exception("Can not restore original group type {0}: {1}".format(
+            original_group_type_id.IntegerValue,
+            error))
+
+    doc.Regenerate()
+    move_element_to_location_point(group, target_location_point)
+    if group.GroupType.Id.IntegerValue != original_group_type_id.IntegerValue:
+        raise Exception("Can not restore original group type {0}".format(
+            original_group_type_id.IntegerValue))
+
+    return temporary_group_type_id
+
+def recreate_model_group(ungrouped_group):
     """Creates a model group from previously ungrouped member ids."""
     member_ids = to_element_id_list(ungrouped_group.member_ids)
     if member_ids.Count == 0:
-        return None
+        return None, None
 
     new_group = doc.Create.NewGroup(member_ids)
+    temporary_group_type_id = restore_group_original_type(
+        new_group,
+        ungrouped_group.original_group_type_id,
+        ungrouped_group.location_point)
     set_element_workset(new_group, ungrouped_group.workset_id_value)
-    set_group_name(new_group, ungrouped_group.group_name, recreated_group_types)
-    return new_group
+    return new_group, temporary_group_type_id
 
 def filter_elements(elements):
     """Возвращает фильтрованный от вложений и от свободных от групп список элементов"""
@@ -642,10 +743,10 @@ def script_execute(plugin_logger):
     with revit.Transaction("Смена уровней"):
         change_elements_level(elements, level, target_levels, result_ok, result_error)
 
-        split_multiple_group_instances(groups)
         groups_to_process = get_groups_with_elements_in_scope(groups, scope_element_ids)
-        ungrouped_groups = ungroup_model_groups(groups_to_process)
-        delete_old_group_types(ungrouped_groups)
+        split_group_infos = split_multiple_group_instances(groups_to_process)
+        temporary_group_type_ids = get_split_temporary_group_type_ids(split_group_infos)
+        ungrouped_groups = ungroup_model_groups(groups_to_process, split_group_infos)
 
         if use_active_view_scope:
             doc.Regenerate()
@@ -653,16 +754,19 @@ def script_execute(plugin_logger):
         else:
             group_scope_element_ids = scope_element_ids
 
-        recreated_group_types = {}
         for ungrouped_group in ungrouped_groups:
             member_elements = [doc.GetElement(member_id) for member_id in ungrouped_group.member_ids]
             scoped_member_elements = filter_elements_by_scope(member_elements, group_scope_element_ids)
             filtered_members = filter_elements(scoped_member_elements)
             change_elements_level(filtered_members, level, target_levels, result_ok, result_error)
 
-            new_group = recreate_model_group(ungrouped_group, recreated_group_types)
+            new_group, temporary_group_type_id = recreate_model_group(ungrouped_group)
+            if temporary_group_type_id is not None:
+                temporary_group_type_ids.append(temporary_group_type_id)
             if new_group is not None:
                 result_ok.append(new_group)
+
+        delete_group_types(temporary_group_type_ids)
 
 if doc.IsFamilyDocument:
     forms.alert("Надстройка не предназначена для работы с семействами", "Ошибка", exitscript=True )
