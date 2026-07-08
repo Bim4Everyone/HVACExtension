@@ -182,7 +182,16 @@ def set_element_workset(element, workset_id_value):
     except Exception:
         pass
 
+# region Обработка групп
+
 class UngroupedGroup:
+    """Данные разгруппированной модели группы для последующей обратной сборки.
+
+    Объект хранит исходный тип группы, временный тип, рабочий набор,
+    исходную Location.Point, прямых участников группы и вложенные группы.
+    Для вложенных групп используется древовидная структура child_groups.
+    """
+
     group_id = None
     group_name = None
     group_type_id = None
@@ -207,6 +216,13 @@ class UngroupedGroup:
         self.child_groups = child_groups
 
 class SplitGroupInfo:
+    """Данные временного отделения экземпляра группы от исходного типоразмера.
+
+    Перед разгруппированием экземпляр переводится на временный GroupType,
+    чтобы не менять остальные экземпляры исходного типоразмера. После обратной
+    сборки группа возвращается на original_group_type_id.
+    """
+
     group_id = None
     original_group_type_id = None
     temporary_group_type_id = None
@@ -220,7 +236,11 @@ class SplitGroupInfo:
         self.location_point = location_point
 
 def is_model_group(element):
-    """Returns True only for model group instances."""
+    """Проверяет, что элемент является экземпляром модельной группы.
+
+    Прикрепленные группы исключаются, потому что они не должны участвовать
+    в алгоритме разгруппировки и обратной сборки как самостоятельные группы.
+    """
     if not isinstance(element, Group):
         return False
 
@@ -233,7 +253,12 @@ def is_model_group(element):
     return element.Category.Id.IntegerValue == ElementId(BuiltInCategory.OST_IOSModelGroups).IntegerValue
 
 def get_top_model_group(element):
-    """Returns the outer model group for a selected/visible element."""
+    """Возвращает самую верхнюю модельную группу для элемента.
+
+    Если выбран элемент внутри вложенной группы, функция поднимается по
+    GroupId до внешнего контейнера. Это гарантирует, что обработка начинается
+    с корневой группы, а вложенные группы разбираются рекурсивно.
+    """
     if element is None:
         return None
 
@@ -254,7 +279,11 @@ def get_top_model_group(element):
     return top_group
 
 def get_model_groups(elements):
-    """Collects unique selected/visible model group instances."""
+    """Собирает уникальные корневые модельные группы из набора элементов.
+
+    На вход может прийти сам экземпляр группы или любой элемент внутри нее.
+    Повторные попадания одной и той же группы отфильтровываются по ElementId.
+    """
     result = []
     processed_group_ids = set()
 
@@ -273,7 +302,12 @@ def get_model_groups(elements):
     return result
 
 def append_group_member_scope_ids(group, result):
-    """Adds group members at any nesting level to the processing scope."""
+    """Добавляет участников группы всех уровней вложенности в scope.
+
+    Используется для режима работы с выбранными группами: если пользователь
+    выбрал группу, в область допустимой смены уровня попадают ее участники,
+    включая элементы внутри вложенных групп.
+    """
     for member_id in group.GetMemberIds():
         result.add(member_id.IntegerValue)
         member = doc.GetElement(member_id)
@@ -281,7 +315,12 @@ def append_group_member_scope_ids(group, result):
             append_group_member_scope_ids(member, result)
 
 def get_scope_element_ids(elements, include_group_members):
-    """Returns ids of elements that are allowed to receive level updates."""
+    """Возвращает Id элементов, которым разрешено менять уровень.
+
+    Для выбранных групп при include_group_members=True в scope добавляются
+    также участники групп. Для режимов по активному виду scope строится по
+    видимым элементам и позднее уточняется после разгруппировки.
+    """
     result = set()
 
     for element in elements:
@@ -296,7 +335,11 @@ def get_scope_element_ids(elements, include_group_members):
     return result
 
 def get_active_view_element_ids():
-    """Returns ids of elements visible on the active view at the current transaction state."""
+    """Возвращает Id элементов, видимых на активном виде в текущем состоянии транзакции.
+
+    Вызывается после разгруппировки, потому что у участников групп появляются
+    самостоятельные Id и их нужно повторно сверить с видимостью на виде.
+    """
     result = set()
     visible_element_ids = FilteredElementCollector(doc, doc.ActiveView.Id).ToElementIds()
 
@@ -306,7 +349,7 @@ def get_active_view_element_ids():
     return result
 
 def filter_elements_by_scope(elements, scope_element_ids):
-    """Keeps only elements that belong to the selected/visible processing scope."""
+    """Оставляет только элементы, входящие в выбранный или видовой scope."""
     result = []
 
     for element in elements:
@@ -319,6 +362,11 @@ def filter_elements_by_scope(elements, scope_element_ids):
     return result
 
 def get_element_location_point(element):
+    """Возвращает копию Location.Point элемента.
+
+    Точка копируется в новый XYZ, чтобы сохранить координату даже после
+    удаления исходного экземпляра группы через UngroupMembers().
+    """
     try:
         location = element.Location
         if location is None or not hasattr(location, "Point"):
@@ -333,6 +381,12 @@ def get_element_location_point(element):
         return None
 
 def move_element_to_location_point(element, target_point):
+    """Перемещает элемент так, чтобы его Location.Point совпал с target_point.
+
+    Используется после смены GroupType и после NewGroup(), потому что Revit
+    может изменить базовую точку группы при пересборке. Если восстановить
+    точку не удалось, выбрасывается исключение и транзакция откатывается.
+    """
     if element is None or target_point is None:
         return False
 
@@ -360,7 +414,12 @@ def move_element_to_location_point(element, target_point):
     return True
 
 def split_group_instance(group):
-    """Keeps the original group type and moves one instance to a temporary type."""
+    """Переводит один экземпляр группы на временный типоразмер.
+
+    Исходный GroupType остается нетронутым. Временный тип нужен, чтобы
+    разгруппировать и менять элементы только в конкретном экземпляре группы,
+    не затрагивая остальные экземпляры исходного типоразмера.
+    """
     if group is None or not is_model_group(group):
         return None
 
@@ -387,6 +446,7 @@ def split_group_instance(group):
         location_point)
 
 def group_has_elements_in_scope(group, scope_element_ids):
+    """Проверяет, попадает ли группа или любой вложенный участник в scope."""
     if group.Id.IntegerValue in scope_element_ids:
         return True
 
@@ -401,7 +461,11 @@ def group_has_elements_in_scope(group, scope_element_ids):
     return False
 
 def get_groups_with_elements_in_scope(groups, scope_element_ids):
-    """Keeps groups when their instance or nested members are in the processing scope."""
+    """Отбирает группы, которые нужно разгруппировать и собрать обратно.
+
+    Группа попадает в обработку, если в scope находится сам экземпляр группы,
+    прямой участник или участник на любой глубине вложенности.
+    """
     result = []
 
     for group in groups:
@@ -411,6 +475,7 @@ def get_groups_with_elements_in_scope(groups, scope_element_ids):
     return result
 
 def get_unique_group_type_name(base_name):
+    """Возвращает уникальное имя временного типоразмера группы."""
     existing_names = set()
     group_types = FilteredElementCollector(doc).OfClass(GroupType).ToElements()
 
@@ -427,7 +492,11 @@ def get_unique_group_type_name(base_name):
     return result
 
 def to_element_id_list(element_ids):
-    """Converts Python/.NET enumerable to List[ElementId]."""
+    """Конвертирует набор ElementId в List[ElementId] для Revit API.
+
+    В список попадают только Id элементов, которые существуют после
+    разгруппировки и промежуточных преобразований.
+    """
     result = List[ElementId]()
 
     for element_id in element_ids:
@@ -437,7 +506,16 @@ def to_element_id_list(element_ids):
     return result
 
 def ungroup_model_group_tree(group, temporary_group_type_ids):
-    """Ungroups a model group and all nested model groups."""
+    """Рекурсивно разгруппировывает группу и все вложенные модельные группы.
+
+    Алгоритм:
+    1. Переводит текущий экземпляр на временный GroupType.
+    2. Сохраняет исходный тип, рабочий набор, Location.Point и member_ids.
+    3. Выполняет UngroupMembers().
+    4. Среди прямых участников ищет вложенные группы и повторяет процесс.
+
+    Возвращает дерево UngroupedGroup, которое затем собирается снизу вверх.
+    """
     split_group_info = split_group_instance(group)
     if split_group_info is None:
         return None
@@ -479,7 +557,7 @@ def ungroup_model_group_tree(group, temporary_group_type_ids):
         child_groups)
 
 def ungroup_model_groups(groups, temporary_group_type_ids):
-    """Ungroups model group instances and stores trees required to recreate them."""
+    """Разгруппировывает набор корневых групп и возвращает их деревья."""
     ungrouped_groups = []
 
     for group in groups:
@@ -490,6 +568,11 @@ def ungroup_model_groups(groups, temporary_group_type_ids):
     return ungrouped_groups
 
 def delete_group_types(group_type_ids):
+    """Удаляет временные типоразмеры групп после успешной обратной сборки.
+
+    Если тип не удаляется, выбрасывается исключение. Это важно, чтобы
+    служебные TMP-типы не оставались в модели незаметно.
+    """
     processed_group_type_ids = set()
 
     for group_type_id in group_type_ids:
@@ -510,6 +593,12 @@ def delete_group_types(group_type_ids):
                     error))
 
 def restore_group_original_type(group, original_group_type_id, target_location_point=None):
+    """Возвращает пересозданную группу на исходный GroupType и Location.Point.
+
+    NewGroup() создает новый служебный тип. После создания группа переводится
+    на сохраненный исходный тип, а затем перемещается в сохраненную точку,
+    чтобы координата группы до и после обработки совпадала.
+    """
     if group is None:
         return None
 
@@ -542,6 +631,12 @@ def restore_group_original_type(group, original_group_type_id, target_location_p
     return temporary_group_type_id
 
 def collect_ungrouped_member_elements(ungrouped_group):
+    """Собирает все разгруппированные негрупповые элементы из дерева группы.
+
+    Id вложенных групп исключаются из прямых участников родителя, потому что
+    после рекурсивной разгруппировки сами группы удалены. Элементы из дочерних
+    групп добавляются рекурсивно.
+    """
     result = []
     child_group_ids = set()
 
@@ -562,6 +657,11 @@ def collect_ungrouped_member_elements(ungrouped_group):
     return result
 
 def get_recreated_member_ids(ungrouped_group, recreated_child_group_ids):
+    """Готовит список участников для обратной сборки группы.
+
+    Старые Id вложенных групп заменяются на Id вновь созданных дочерних групп.
+    Остальные существующие Id добавляются без изменений.
+    """
     member_ids = List[ElementId]()
 
     for member_id in ungrouped_group.member_ids:
@@ -576,7 +676,12 @@ def get_recreated_member_ids(ungrouped_group, recreated_child_group_ids):
     return member_ids
 
 def recreate_model_group_tree(ungrouped_group):
-    """Creates a model group tree from previously ungrouped member ids."""
+    """Рекурсивно собирает дерево групп обратно.
+
+    Дочерние группы создаются первыми. Их новые Id подставляются в member_ids
+    родительской группы, после чего создается родительская NewGroup().
+    Каждая новая группа возвращается на исходный тип и исходную Location.Point.
+    """
     temporary_group_type_ids = []
     recreated_child_group_ids = {}
 
@@ -602,6 +707,8 @@ def recreate_model_group_tree(ungrouped_group):
         temporary_group_type_ids.append(temporary_group_type_id)
 
     return new_group, temporary_group_type_ids
+
+# endregion Обработка групп
 
 def filter_elements(elements):
     """Возвращает фильтрованный от вложений и от свободных от групп список элементов"""
