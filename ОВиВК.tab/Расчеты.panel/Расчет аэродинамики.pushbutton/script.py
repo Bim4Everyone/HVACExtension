@@ -870,6 +870,9 @@ passed_elements = []
 @notification()
 @log_plugin(EXEC_PARAMS.command_name)
 def script_execute(plugin_logger):
+    if doc.IsFamilyDocument:
+        forms.alert("Надстройка не предназначена для работы с семействами", "Ошибка", exitscript=True)
+    
     setup_params()
     selected_system = get_system_elements()
     process_method_setup(selected_system) # Ставим метод расчета Определенный коэффициент и заполняем его для фитингов
