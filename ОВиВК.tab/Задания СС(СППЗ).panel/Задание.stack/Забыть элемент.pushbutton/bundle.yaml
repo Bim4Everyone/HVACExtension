@@ -4,7 +4,7 @@ title:
 
 tooltip:
   ru: Позволяет исключить выделенный элемент из памяти скрипта и назначить его заново.
-  en_us: Shows equipment that exists in the latest revision of the job but does not exist in the model.
+  en_us: Allows you to remove the selected element from the script memory and assign it again..
 
 author: Redomine
 help_url: "https://kb.a101.ru/pages/viewpage.action?pageId=155549728"

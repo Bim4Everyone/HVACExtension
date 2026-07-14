@@ -309,6 +309,9 @@ HOLE_NAME_KEY = "ОбщМд_Отв_Отверстие_"
 @notification()
 @log_plugin(EXEC_PARAMS.command_name)
 def script_execute(plugin_logger):
+    if doc.IsFamilyDocument:
+        forms.alert("Надстройка не предназначена для работы с семействами", "Ошибка", exitscript=True)
+    
     setup_params()
     sort_parameters_to_group()
 

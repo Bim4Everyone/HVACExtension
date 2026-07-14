@@ -183,6 +183,10 @@ class SpecificationFiller:
             active_view (View): Активный вид, используемый для заполнения спецификаций.
         """
         self.doc = doc
+
+        if self.doc.IsFamilyDocument:
+            forms.alert("Надстройка не предназначена для работы с семействами", "Ошибка", exitscript=True)
+        
         self.active_view = active_view
         info = self.doc.ProjectInformation
         self.duct_stock = float(info.GetParamValueOrDefault(duct_stock_param))

@@ -180,6 +180,9 @@ ADSK_POSITION_PARAM_NAME = "ADSK_Позиция"
 @notification()
 @log_plugin(EXEC_PARAMS.command_name)
 def script_execute(plugin_logger):
+    if doc.IsFamilyDocument:
+        forms.alert("Надстройка не предназначена для работы с семействами", "Ошибка", exitscript=True)
+    
     views = [uidoc.Document.GetElement(elem_id) for elem_id in uidoc.Selection.GetElementIds()]
 
     views = sorted(views, key=lambda v: v.Name)
