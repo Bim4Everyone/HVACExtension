@@ -274,6 +274,9 @@ class UnmodelingFactory:
     def __init__(self, doc):
         self.doc = doc
 
+        if self.doc.IsFamilyDocument:
+            forms.alert("Надстройка не предназначена для работы с семействами", "Ошибка", exitscript=True)
+
         self.COLOR_RULE_NAME = (
                 self.get_setting_value(["UNMODELING", "ENAMEL", "NAME"])
                 or 'Краска антикоррозионная, покрытие в два слоя. Расход - 0.2 кг на м²'

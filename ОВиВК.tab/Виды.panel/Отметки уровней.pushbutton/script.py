@@ -228,6 +228,9 @@ def check_base_internal_diff():
 
 def start_up_checks():
     """Стартовые проверки"""
+    if doc.IsFamilyDocument:
+        forms.alert("Надстройка не предназначена для работы с семействами", "Ошибка", exitscript=True)
+    
     if view.Category is None or view.ViewType != ViewType.ThreeD:
         forms.alert(
             "Добавление отметок возможно только на 3D-Виде.",
