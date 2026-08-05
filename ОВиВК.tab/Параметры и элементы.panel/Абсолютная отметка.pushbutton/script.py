@@ -58,10 +58,13 @@ class EditorReport:
             self.status_report = "Вы владеете элементами, но ваш файл устарел. Выполните синхронизацию."
 
         name = self.__get_element_editor_name(element)
-        if name is not None and name not in self.edited_reports:
+        if name is None:
+            return False
+
+        if name not in self.edited_reports:
             self.edited_reports.append(name)
-            return True
-        return False
+
+        return True
 
     def show_report(self):
         if len(self.edited_reports) > 0:
@@ -85,14 +88,9 @@ def setup_params():
         ADSK_LEVEL_CUR_OFFSET_PARAM_NAME
     ]
     project_parameters = ProjectParameters.Create(doc.Application)
+    
+    project_parameters.SetupRevitParams(doc, revit_params)
 
-    try:
-        project_parameters.SetupRevitParams(doc, revit_params)
-    except Exception as e:
-        if "Copying one or more elements failed." in str(e):
-            pass
-        else:
-            raise
 
     with revit.Transaction("BIM: Настройка параметров"):
         iterator = doc.ParameterBindings.ForwardIterator()
