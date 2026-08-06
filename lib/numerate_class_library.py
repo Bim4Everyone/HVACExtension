@@ -29,6 +29,8 @@ from dosymep_libs.bim4everyone import *
 from dosymep.Revit import *
 from dosymep.Revit.Geometry import *
 
+area_unit_value = "м²"
+piece_unit_value = "шт."
 position_param = SharedParamsConfig.Instance.VISPosition
 note_param = SharedParamsConfig.Instance.VISNote
 group_param = SharedParamsConfig.Instance.VISGrouping
@@ -333,6 +335,44 @@ class SpecificationFiller:
             duct.GetParamValueOrDefault(BuiltInParameter.RBS_CURVE_SURFACE_AREA),
             UnitTypeId.SquareMeters)
 
+    def __get_duct_length(self, duct):
+        return UnitUtils.ConvertFromInternalUnits(
+            duct.GetParamValueOrDefault(BuiltInParameter.CURVE_ELEM_LENGTH),
+            UnitTypeId.Meters)
+
+    def __should_process_length(self, element):
+        unit_value = element.GetParamValueOrDefault(SharedParamsConfig.Instance.VISUnit)
+        if unit_value == piece_unit_value:
+            return False
+        return unit_value == area_unit_value
+
+    def __process_lengths(self):
+        """
+        Обрабатывает длины воздуховодов и обновляет параметр VISNote.
+        """
+        ducts = FilteredElementCollector(
+            self.doc,
+            self.active_view.Id).OfCategory(BuiltInCategory.OST_DuctCurves).ToElements()
+        ducts = [duct for duct in ducts if self.__should_process_length(duct)]
+
+        length_by_position = {}
+
+        for duct in ducts:
+            element_position = duct.GetParamValue(position_param)
+            element_length = self.__get_duct_length(duct)
+
+            if element_position in length_by_position:
+                length_by_position[element_position] += element_length
+            else:
+                length_by_position[element_position] = element_length
+
+        for duct in ducts:
+            element_position = duct.GetParamValue(position_param)
+            value = length_by_position[element_position]
+            formatted_value = self.__format_length_value(duct, value)
+
+            self.__set_if_not_ro(duct, note_param, formatted_value)
+
     def __process_areas(self):
         """
         Обрабатывает площади воздуховодов, их фитингов, и обновляет параметр VISNote.
@@ -354,6 +394,10 @@ class SpecificationFiller:
 
             area_elements.extend(duct_fittings)
 
+        area_elements = [
+            element for element in area_elements
+            if not self.__should_process_length(element)]
+
         duct_dict = {}
 
         for area_element in area_elements:
@@ -372,13 +416,19 @@ class SpecificationFiller:
             element_position = area_element.GetParamValue(position_param)
 
             value = duct_dict[element_position]
-            formated_value = self.__format_area_value(area_element, value)
+            formatted_value = self.__format_area_value(area_element, value)
 
-            self.__set_if_not_ro(area_element, note_param, formated_value)
+            self.__set_if_not_ro(area_element, note_param, formatted_value)
+
+    def __format_length_value(self, element, value):
+        return self.__format_duct_value(element, value, ' м.п.')
 
     def __format_area_value(self, element, value):
+        return self.__format_duct_value(element, value, ' ' + area_unit_value)
+
+    def __format_duct_value(self, element, value, unit):
         # Если у нас заполняется примечание, проверяем индивидуальный запас и общий запас на воздуховоды. Увеличиваем
-        # значение на него и форматируем под м2
+        # значение на него и форматируем с указанной единицей измерения
 
         if element.InAnyCategory([BuiltInCategory.OST_DuctCurves, BuiltInCategory.OST_DuctFitting]):
             element_type = element.GetElementType()
@@ -398,7 +448,7 @@ class SpecificationFiller:
             if individual_stock != 0 and individual_stock is not None:
                 value = value + value * (individual_stock / 100)
 
-            value = "{:.2f}".format(value).rstrip('0').rstrip('.') + ' м²'
+            value = "{:.2f}".format(value).rstrip('0').rstrip('.') + unit
 
         return value
 
@@ -432,14 +482,14 @@ class SpecificationFiller:
             for element in elements:
                 self.__set_if_not_ro(element, position_param, str(element.Id.IntegerValue))
 
-    def __fill_values(self, specification_settings, elements, fill_areas, fill_numbers, first_index):
+    def __fill_values(self, specification_settings, elements, fill_notes, fill_numbers, first_index):
         """
         Заполняет позицию и примечания для элементов.
 
         Args:
             specification_settings (SpecificationSettings): Настройки спецификации.
             elements (list): Список элементов для заполнения.
-            fill_areas (bool): Флаг для заполнения площадей.
+            fill_notes (bool): Флаг для заполнения примечаний.
             fill_numbers (bool): Флаг для заполнения номеров.
         """
         with revit.Transaction("BIM: Запись номера"):
@@ -459,7 +509,8 @@ class SpecificationFiller:
 
             specification_settings.repair_specification()
 
-            if fill_areas:
+            if fill_notes:
+                self.__process_lengths()
                 self.__process_areas()
 
             if not fill_numbers:
@@ -534,20 +585,20 @@ class SpecificationFiller:
 
         return int(first_index)
 
-    def fill_position_and_notes(self, fill_numbers=False, fill_areas=False):
+    def fill_position_and_notes(self, fill_numbers=False, fill_notes=False):
         """
         Основной метод для заполнения позиций и примечаний в спецификации.
 
         Args:
             fill_numbers (bool): Флаг для заполнения номеров
-            fill_areas (bool): Флаг для заполнения площадей
+            fill_notes (bool): Флаг для заполнения примечаний
         """
         if self.doc.IsFamilyDocument:
             forms.alert("Надстройка не предназначена для работы с семействами", "Ошибка", exitscript=True)
 
         if self.active_view.Category is None or not self.active_view.Category.IsId(BuiltInCategory.OST_Schedules):
             forms.alert(
-                "Нумерация и вынесение площади воздуховодов сработают только на активном виде целевой спецификации",
+                "Нумерация и заполнение примечаний сработают только на активном виде целевой спецификации",
                 "Ошибка", exitscript=True)
 
         # На всякий случай выполняем настройку параметров - в теории уже должны быть на месте, но лучше продублировать
@@ -570,5 +621,10 @@ class SpecificationFiller:
         # Заполняем айди в параметр позиции элементов для их чтения
         self.__fill_id_to_schedule_param(specification_settings, elements)
 
-        # заполняем значения нумерации и, для воздуховодов их фитингов, примечаний
-        self.__fill_values(specification_settings, elements, fill_areas, fill_numbers, first_index)
+        # Заполняем значения нумерации и примечаний
+        self.__fill_values(
+            specification_settings,
+            elements,
+            fill_notes,
+            fill_numbers,
+            first_index)

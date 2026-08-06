@@ -3,18 +3,18 @@ title:
   en_us: Numerate&Notes
 
 tooltip:
-  ru: Заполнение площадей воздуховодов в примечания и нумерация позиций.
+  ru: Заполнение длин или площадей воздуховодов в примечания и нумерация позиций.
     
-    1. Откройте вид спецификации, на котором требуется заполнить нумерацию и площади в примечания воздуховодов.
+    1. Откройте вид спецификации, на котором требуется заполнить нумерацию и примечания воздуховодов.
     
     2. Запустите команду.
     
     3. Проверьте результат работы. Параметры типа заполнены не будут!
 
 
-  en_us: Filling duct areas to notes and filling out a position in the specification.
+  en_us: Filling duct lengths or areas to notes and filling out a position in the specification.
   
-    1. Open the specification view where you need to fill in the numbering and areas in the duct notes.
+    1. Open the specification view where you need to fill in the numbering and duct notes.
   
     2. Run the command.
   
