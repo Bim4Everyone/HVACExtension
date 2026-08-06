@@ -25,6 +25,6 @@ def script_execute(plugin_logger):
     view = document.ActiveView
     specification_filler = SpecificationFiller(document, view)
 
-    specification_filler.fill_position_and_notes(fill_numbers=False, fill_areas=True)
+    specification_filler.fill_position_and_notes(fill_numbers=False, fill_notes=True)
 
 script_execute()
