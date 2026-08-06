@@ -340,6 +340,38 @@ class SpecificationFiller:
             duct.GetParamValueOrDefault(BuiltInParameter.CURVE_ELEM_LENGTH),
             UnitTypeId.Meters)
 
+    def __get_element_area(self, element):
+        if element.Category.IsId(BuiltInCategory.OST_DuctCurves):
+            return self.__get_duct_area(element)
+        return self.__get_fitting_area(element)
+
+    def __get_view_elements_by_category(self, category):
+        return FilteredElementCollector(
+            self.doc,
+            self.active_view.Id).OfCategory(category).ToElements()
+
+    def __sum_values_by_position(self, elements, value_getter):
+        values_by_position = {}
+
+        for element in elements:
+            element_position = element.GetParamValue(position_param)
+            element_value = value_getter(element)
+
+            if element_position in values_by_position:
+                values_by_position[element_position] += element_value
+            else:
+                values_by_position[element_position] = element_value
+
+        return values_by_position
+
+    def __set_notes_by_position(self, elements, values_by_position, value_formatter):
+        for element in elements:
+            element_position = element.GetParamValue(position_param)
+            value = values_by_position[element_position]
+            formatted_value = value_formatter(element, value)
+
+            self.__set_if_not_ro(element, note_param, formatted_value)
+
     def __should_process_length(self, element):
         unit_value = element.GetParamValueOrDefault(SharedParamsConfig.Instance.VISUnit)
         if unit_value == piece_unit_value:
@@ -350,28 +382,11 @@ class SpecificationFiller:
         """
         Обрабатывает длины воздуховодов и обновляет параметр VISNote.
         """
-        ducts = FilteredElementCollector(
-            self.doc,
-            self.active_view.Id).OfCategory(BuiltInCategory.OST_DuctCurves).ToElements()
+        ducts = self.__get_view_elements_by_category(BuiltInCategory.OST_DuctCurves)
         ducts = [duct for duct in ducts if self.__should_process_length(duct)]
 
-        length_by_position = {}
-
-        for duct in ducts:
-            element_position = duct.GetParamValue(position_param)
-            element_length = self.__get_duct_length(duct)
-
-            if element_position in length_by_position:
-                length_by_position[element_position] += element_length
-            else:
-                length_by_position[element_position] = element_length
-
-        for duct in ducts:
-            element_position = duct.GetParamValue(position_param)
-            value = length_by_position[element_position]
-            formatted_value = self.__format_length_value(duct, value)
-
-            self.__set_if_not_ro(duct, note_param, formatted_value)
+        length_by_position = self.__sum_values_by_position(ducts, self.__get_duct_length)
+        self.__set_notes_by_position(ducts, length_by_position, self.__format_length_value)
 
     def __process_areas(self):
         """
@@ -383,14 +398,11 @@ class SpecificationFiller:
 
         area_elements = []
 
-        area_elements.extend(FilteredElementCollector(
-            self.doc,
-            self.active_view.Id).OfCategory(BuiltInCategory.OST_DuctCurves).ToElements())
+        area_elements.extend(
+            self.__get_view_elements_by_category(BuiltInCategory.OST_DuctCurves))
 
         if fill_fitting_areas:
-            duct_fittings = FilteredElementCollector(
-                self.doc,
-                self.active_view.Id).OfCategory(BuiltInCategory.OST_DuctFitting).ToElements()
+            duct_fittings = self.__get_view_elements_by_category(BuiltInCategory.OST_DuctFitting)
 
             area_elements.extend(duct_fittings)
 
@@ -398,27 +410,13 @@ class SpecificationFiller:
             element for element in area_elements
             if not self.__should_process_length(element)]
 
-        duct_dict = {}
-
-        for area_element in area_elements:
-            element_position = area_element.GetParamValue(position_param)
-            if area_element.Category.IsId(BuiltInCategory.OST_DuctCurves):
-                element_area = self.__get_duct_area(area_element)
-            else:
-                element_area = self.__get_fitting_area(area_element)
-
-            if element_position in duct_dict:
-                duct_dict[element_position] += element_area
-            else:
-                duct_dict[element_position] = element_area
-
-        for area_element in area_elements:
-            element_position = area_element.GetParamValue(position_param)
-
-            value = duct_dict[element_position]
-            formatted_value = self.__format_area_value(area_element, value)
-
-            self.__set_if_not_ro(area_element, note_param, formatted_value)
+        area_by_position = self.__sum_values_by_position(
+            area_elements,
+            self.__get_element_area)
+        self.__set_notes_by_position(
+            area_elements,
+            area_by_position,
+            self.__format_area_value)
 
     def __format_length_value(self, element, value):
         return self.__format_duct_value(element, value, ' м.п.')
