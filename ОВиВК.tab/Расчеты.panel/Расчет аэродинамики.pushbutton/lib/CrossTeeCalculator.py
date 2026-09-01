@@ -32,7 +32,7 @@ from Autodesk.Revit.DB.ExtensibleStorage import *
 from Autodesk.Revit.DB.Mechanical import *
 from dosymep.Bim4Everyone.Templates import ProjectParameters
 from dosymep.Bim4Everyone.SharedParams import SharedParamsConfig
-
+from TapDuctFlowCalculator import TapDuctFlowCalculator
 
 
 class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCalculator):
@@ -348,16 +348,9 @@ class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCal
             Lo_1 = max(self.get_element_sections_flows(branch_duct_1))
             Lo_2 = max(self.get_element_sections_flows(branch_duct_2))
 
-            flows_1 = self.get_element_sections_flows(element_1)
-            flows_2 = self.get_element_sections_flows(element_2)
-            all_flows = flows_1 + flows_2
-            excluded = [Lo_1, Lo_2]
-
-            # Оставим только значения, которые не равны Lo_1 или Lo_2
-            filtered_flows = [f for f in all_flows if f not in excluded]
-
-            Lc = max(filtered_flows) if filtered_flows else None
-            Lp = 0 # Для подобных тройников проход не имеет значения, это всегда разветвление или слияние
+            # Парные врезки находятся в одной позиции и одновременно изменяют
+            # расход магистрали на сумму расходов обоих ответвлений.
+            Lc, Lp = TapDuctFlowCalculator(self, duct).get_flows(element_1)
 
 
             branch_1_critical = False
@@ -478,16 +471,12 @@ class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCal
             Lo_1 = max(self.get_element_sections_flows(branch_duct_1))
             Lo_2 = max(self.get_element_sections_flows(branch_duct_2))
 
-            flows_1 = self.get_element_sections_flows(element_1)
-            flows_2 = self.get_element_sections_flows(element_2)
-            all_flows = flows_1 + flows_2
-            excluded = [Lo_1, Lo_2]
-
-            # Оставим только значения, которые не равны Lo_1 или Lo_2
-            filtered_flows = [f for f in all_flows if f not in excluded]
-
-            Lc = max(filtered_flows) if filtered_flows else None
-            Lp = min(filtered_flows) if filtered_flows else None
+            # Для крестовины учитываем все врезки в этой позиции как одну
+            # группу, чтобы получить расходы на соседних участках магистрали.
+            Lc, Lp = TapDuctFlowCalculator(
+                self,
+                duct,
+                additional_branches=[element_2]).get_flows(element_1)
 
             duct_critical = False
             branch_1_critical = False
@@ -537,7 +526,14 @@ class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCal
             else:
                 kind = "BRANCH" if (Lo_1 > Lp or Lo_2 > Lp) else "PASS"
 
-            result_name = name_map[self.system_is_supply][kind][is_rectangular]
+            # Нулевой проход означает, что весь расход магистрали уходит в ответвления.
+            # Специальные формулы разделения/слияния не содержат деления на (1 - Lo/Lc),
+            # которое для проходного тройника в этом случае привело бы к делению на ноль.
+            if Lp <= 0.01:
+                result_name = (self.TEE_SUPPLY_SEPARATION_NAME if self.system_is_supply
+                               else self.TEE_EXHAUST_MERGER_NAME)
+            else:
+                result_name = name_map[self.system_is_supply][kind][is_rectangular]
 
             fc = self.get_element_area(duct)
             fp = fc
@@ -859,13 +855,9 @@ class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCal
             Lo = max(self.get_element_sections_flows(branch_duct))
 
 
-            all_flows = self.get_element_sections_flows(element)
-            excluded = [Lo]
-
-            filtered_flows = [f for f in all_flows if f not in excluded]
-
-            Lc = max(filtered_flows) if filtered_flows else None
-            Lp = min(filtered_flows) if filtered_flows else None
+            # Расходы относятся к участкам непосредственно до и после этой
+            # врезки, а не к воздуховоду в целом с учётом остальных ответвлений.
+            Lc, Lp = TapDuctFlowCalculator(self, duct).get_flows(element)
 
             duct_critical = False
             branch_critical = False
@@ -912,7 +904,14 @@ class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCal
             else:
                 kind = "BRANCH" if (Lo > Lp) else "PASS"
 
-            result_name = name_map[self.system_is_supply][kind][is_rectangular]
+            # Нулевой проход означает, что весь расход магистрали уходит в ответвление.
+            # Специальные формулы разделения/слияния не содержат деления на (1 - Lo/Lc),
+            # которое для проходного тройника в этом случае привело бы к делению на ноль.
+            if Lp <= 0.01:
+                result_name = (self.TEE_SUPPLY_SEPARATION_NAME if self.system_is_supply
+                               else self.TEE_EXHAUST_MERGER_NAME)
+            else:
+                result_name = name_map[self.system_is_supply][kind][is_rectangular]
 
             fc = self.get_element_area(duct)
             fp = fc

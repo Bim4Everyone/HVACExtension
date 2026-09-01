@@ -32,6 +32,7 @@ from Autodesk.Revit.DB.ExtensibleStorage import *
 from Autodesk.Revit.DB.Mechanical import *
 from dosymep.Bim4Everyone.Templates import ProjectParameters
 from dosymep.Bim4Everyone.SharedParams import SharedParamsConfig
+from TapDuctFlowCalculator import TapDuctFlowCalculator
 
 class TransitionElbowCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCalculator):
     def __calculate_elbow_coefficient(self, connector, rounding = 150):
@@ -213,14 +214,25 @@ class TransitionElbowCoefficientCalculator(CalculatorClassLib.AerodinamicCoeffic
 
     def is_tap_elbow(self, element):
         """
-        Проверяет, является ли врезка отводом. Если среди расходов секций, в которых есть врезка имеется 0 - это отвод.
+        Проверяет, заканчивается ли магистраль на заданной врезке.
+
         Args:
             element: Врезка
         Returns:
             bool: True или False
         """
+        if (element.Category is None
+                or not element.Category.IsId(BuiltInCategory.OST_DuctFitting)
+                or element.MEPModel.PartType != PartType.TapAdjustable):
+            return False
 
-        flows = self.get_element_sections_flows(element)
-        if 0 in flows:
-            return True
-        return False
+        input_connector, output_connector = self.find_input_output_connector(element)
+        if self.system.SystemType == DuctSystemType.SupplyAir:
+            main_element = input_connector.connected_element
+        else:
+            main_element = output_connector.connected_element
+
+        # Если после позиции врезки расход магистрали отсутствует, врезка
+        # работает как поворот в конце воздуховода, а не как проходной тройник.
+        _, pass_flow = TapDuctFlowCalculator(self, main_element).get_flows(element)
+        return pass_flow <= 0.01

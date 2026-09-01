@@ -490,10 +490,13 @@ def get_network_element_pressure_drop(section, element, density, velocity, coeff
         pressure_drop = section.GetPressureDrop(element.Id)
         return UnitUtils.ConvertFromInternalUnits(pressure_drop, UnitTypeId.Pascals)
     pressure_drop = element.GetParamValueOrDefault(pressure_loss_param)
-    if pressure_drop is not None:
+    has_coefficient = coefficient not in [None, '-'] and float(coefficient) != 0
+    # Ненулевые потери, заданные параметром, имеют приоритет. Ноль считается
+    # отсутствием заданных потерь, если для элемента указан ненулевой КМС.
+    if pressure_drop is not None and (pressure_drop != 0 or not has_coefficient):
         return pressure_drop
-    if element.Category.Id.IntegerValue == int(BuiltInCategory.OST_DuctTerminal):
-        if coefficient and float(coefficient) != 0:
+    if element.Category.IsId(BuiltInCategory.OST_DuctTerminal):
+        if has_coefficient:
             return calculate_pressure_drop()
         return 10
     if element.InAnyCategory([BuiltInCategory.OST_DuctFitting,
