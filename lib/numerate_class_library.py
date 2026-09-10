@@ -37,6 +37,7 @@ group_param = SharedParamsConfig.Instance.VISGrouping
 individual_stock_param = SharedParamsConfig.Instance.VISIndividualStock
 duct_stock_param = SharedParamsConfig.Instance.VISPipeDuctReserve
 use_duct_fittings_param = SharedParamsConfig.Instance.VISConsiderDuctFittings
+local_element_id_prefix = "__LOCAL_ID__"
 
 class SpecificationSettings:
     """
@@ -226,8 +227,15 @@ class SpecificationFiller:
             tuple: Новая строка сортировки и обновленный номер позиции.
         """
         new_sort_rule = self.__get_sort_rule_string(row, specification_settings, self.active_view)
-        element_id = self.active_view.GetCellText(SectionType.Body, row, specification_settings.position_index)
-        if element_id.isdigit():
+        element_id_value = self.active_view.GetCellText(
+            SectionType.Body,
+            row,
+            specification_settings.position_index)
+        if element_id_value.startswith(local_element_id_prefix):
+            element_id = element_id_value[len(local_element_id_prefix):]
+            if not element_id.isdigit():
+                return new_sort_rule, position_number
+
             group = self.active_view.GetCellText(SectionType.Body, row, specification_settings.group_index)
             element = self.doc.GetElement(ElementId(int(element_id)))
 
@@ -478,7 +486,8 @@ class SpecificationFiller:
             specification_settings.show_all_specification()
 
             for element in elements:
-                self.__set_if_not_ro(element, position_param, str(element.Id.IntegerValue))
+                temporary_id = local_element_id_prefix + str(element.Id.IntegerValue)
+                self.__set_if_not_ro(element, position_param, temporary_id)
 
     def __fill_values(self, specification_settings, elements, fill_notes, fill_numbers, first_index):
         """
