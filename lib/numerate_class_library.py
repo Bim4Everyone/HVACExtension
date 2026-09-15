@@ -486,7 +486,7 @@ class SpecificationFiller:
             specification_settings.show_all_specification()
 
             for element in elements:
-                temporary_id = local_element_id_prefix + str(element.Id.IntegerValue)
+                temporary_id = local_element_id_prefix + str(element.Id.GetIdValue())
                 self.__set_if_not_ro(element, position_param, temporary_id)
 
     def __fill_values(self, specification_settings, elements, fill_notes, fill_numbers, first_index):
