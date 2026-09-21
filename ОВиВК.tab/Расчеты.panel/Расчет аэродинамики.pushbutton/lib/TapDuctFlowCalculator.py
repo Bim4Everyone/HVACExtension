@@ -71,26 +71,71 @@ class TapDuctFlowCalculator(object):
         """
         taps = {}
         end_connectors = self._get_end_connectors()
+
+        def is_connected_to_end(element):
+            return any(
+                any(reference.Owner.Id == element.Id
+                    for reference in end_connector.AllRefs)
+                for end_connector in end_connectors)
+
         for connector in self.duct.ConnectorManager.Connectors:
             for reference in connector.AllRefs:
                 owner = reference.Owner
                 if owner.Id == self.duct.Id or owner.Category is None:
                     continue
 
-                is_tap = (owner.Category.IsId(BuiltInCategory.OST_DuctFitting)
-                          and owner.MEPModel.PartType == PartType.TapAdjustable)
                 is_end_connector = any(
                     connector.Origin.IsAlmostEqualTo(item.Origin)
                     for item in end_connectors)
+                is_side_tap = (owner.Category.IsId(BuiltInCategory.OST_DuctFitting)
+                               and owner.MEPModel.PartType == PartType.TapAdjustable
+                               and not is_end_connector)
                 is_side_terminal = (owner.Category.IsId(BuiltInCategory.OST_DuctTerminal)
                                     and not is_end_connector)
-                if not is_tap and not is_side_terminal:
+                if not is_side_tap and not is_side_terminal:
+                    continue
+
+                if is_side_tap and self._is_flow_source(owner):
                     continue
 
                 taps[owner.Id.GetIdValue()] = owner
         for element in self.additional_branches:
-            taps[element.Id.GetIdValue()] = element
+            if (not is_connected_to_end(element)
+                    and not self._is_flow_source(element)):
+                taps[element.Id.GetIdValue()] = element
         return list(taps.values())
+
+    def _is_flow_source(self, tap):
+        """Проверяет, подаёт ли врезка поток в текущий воздуховод."""
+        if (tap.Category is None
+                or not tap.Category.IsId(BuiltInCategory.OST_DuctFitting)
+                or tap.MEPModel.PartType != PartType.TapAdjustable):
+            return False
+
+        input_connector, output_connector = self.calculator.find_input_output_connector(tap)
+        if self.calculator.system.SystemType == DuctSystemType.SupplyAir:
+            source_element = output_connector.connected_element
+        else:
+            source_element = input_connector.connected_element
+
+        return source_element is not None and source_element.Id == self.duct.Id
+
+    def _get_flow_sources(self):
+        """Возвращает боковые врезки, через которые поток входит в воздуховод."""
+        sources = {}
+        end_connectors = self._get_end_connectors()
+        for connector in self.duct.ConnectorManager.Connectors:
+            is_end_connector = any(
+                connector.Origin.IsAlmostEqualTo(item.Origin)
+                for item in end_connectors)
+            if is_end_connector:
+                continue
+
+            for reference in connector.AllRefs:
+                owner = reference.Owner
+                if self._is_flow_source(owner):
+                    sources[owner.Id.GetIdValue()] = owner
+        return list(sources.values())
 
     def _get_tap_connection_point(self, tap):
         """
@@ -145,7 +190,8 @@ class TapDuctFlowCalculator(object):
         """
         Рассчитывает локальные расходы до и после каждой позиции врезок.
 
-        Врезки сортируются от торцевого коннектора с наибольшим расходом.
+        Врезки сортируются от точки поступления максимального расхода. Обычно
+        это торцевой коннектор, но поток может поступать через боковую врезку.
         Элементы в одной позиции группируются и одновременно вычитаются из
         текущего расхода. Для каждой врезки сохраняется пара (Lc, Lp), где Lc
         является расходом до позиции, а Lp - расходом после неё.
@@ -159,19 +205,35 @@ class TapDuctFlowCalculator(object):
         """
         end_connectors = self._get_end_connectors()
         start_connector = max(end_connectors, key=lambda item: item.Flow)
+        start_point = start_connector.Origin
         start_flow = UnitUtils.ConvertFromInternalUnits(
             start_connector.Flow,
             UnitTypeId.CubicMetersPerHour)
 
+        flow_sources = self._get_flow_sources()
+        if len(flow_sources) > 1:
+            raise ValueError(
+                "У воздуховода ID {} найдено несколько входных врезок: {}".format(
+                    self.duct.Id,
+                    [element.Id.GetIdValue() for element in flow_sources]))
+        if flow_sources:
+            source = flow_sources[0]
+            start_point = self._get_tap_connection_point(source)
+            duct_param_flow = UnitUtils.ConvertFromInternalUnits(
+                self.duct.GetParamValue(BuiltInParameter.RBS_DUCT_FLOW_PARAM),
+                UnitTypeId.CubicMetersPerHour)
+            section_flows = self.calculator.get_element_sections_flows(self.duct)
+            start_flow = max([duct_param_flow, start_flow] + section_flows)
+
         # Для притока это направление потока, для вытяжки - обратное направление
-        # от общего расхода к меньшему. В обоих случаях Lc находится со стороны
-        # торцевого коннектора с наибольшим расходом.
+        # от общего расхода к меньшему. Началом служит входная боковая врезка,
+        # а при её отсутствии - торец с наибольшим расходом.
         tap_data = []
         for tap in self._get_connected_taps():
             point = self._get_tap_connection_point(tap)
             tap_data.append({
                 "tap": tap,
-                "distance": point.DistanceTo(start_connector.Origin),
+                "distance": point.DistanceTo(start_point),
                 "branch_flow": self._get_branch_flow(tap)
             })
         tap_data.sort(key=lambda item: item["distance"])
@@ -197,7 +259,15 @@ class TapDuctFlowCalculator(object):
                 result[item["tap"].Id.GetIdValue()] = (current_flow, next_flow)
             current_flow = next_flow
 
-        end_connector = min(end_connectors, key=lambda item: item.Flow)
+        if flow_sources:
+            positive_end_connectors = [
+                connector for connector in end_connectors
+                if connector.Flow > 0]
+            end_connector = min(
+                positive_end_connectors or end_connectors,
+                key=lambda item: item.Flow)
+        else:
+            end_connector = min(end_connectors, key=lambda item: item.Flow)
         end_flow = UnitUtils.ConvertFromInternalUnits(
             end_connector.Flow,
             UnitTypeId.CubicMetersPerHour)
@@ -219,7 +289,8 @@ class TapDuctFlowCalculator(object):
             tap: Врезка, для которой требуются локальные расходы.
 
         Returns:
-            tuple: Пара (Lc, Lp) в кубических метрах в час.
+            tuple: Пара (Lc, Lp) в кубических метрах в час. Для врезки,
+                подключённой к торцу воздуховода, Lp равен нулю.
 
         Raises:
             ValueError: Если врезка не найдена среди ответвлений воздуховода.
@@ -228,5 +299,14 @@ class TapDuctFlowCalculator(object):
             self._tap_flows = self._calculate()
         tap_id = tap.Id.GetIdValue()
         if tap_id not in self._tap_flows:
+            for end_connector in self._get_end_connectors():
+                is_connected_to_tap = any(
+                    reference.Owner.Id == tap.Id
+                    for reference in end_connector.AllRefs)
+                if is_connected_to_tap:
+                    end_flow = UnitUtils.ConvertFromInternalUnits(
+                        end_connector.Flow,
+                        UnitTypeId.CubicMetersPerHour)
+                    return end_flow, 0.0
             raise ValueError("Врезка ID {} не найдена на воздуховоде ID {}".format(tap.Id, self.duct.Id))
         return self._tap_flows[tap_id]
