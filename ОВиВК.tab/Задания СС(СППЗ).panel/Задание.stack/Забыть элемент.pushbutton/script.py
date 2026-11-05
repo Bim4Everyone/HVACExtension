@@ -16,6 +16,7 @@ import json
 import os
 import ctypes
 import codecs
+import shutil
 from low_voltage_task_class_lib import JsonOperator, EditedReport, LowVoltageSystemData
 
 clr.ImportExtensions(dosymep.Revit)
@@ -152,6 +153,45 @@ def forget_elements(json_data, elements, method):
     return json_data
 
 
+def add_vacancies(json_data, elements, folder):
+    path = os.path.join(folder, "Вакантные номера.json")
+    if os.path.exists(path):
+        with codecs.open(path, 'r', encoding='utf-8') as source:
+            vacancies = json.load(source)
+        backup_folder = os.path.join(folder, "backups")
+        if not os.path.exists(backup_folder):
+            os.makedirs(backup_folder)
+        backup_path = os.path.join(backup_folder, "Вакантные номера_{}.json".format(
+            datetime.now().strftime("%Y%m%d_%H%M%S_%f")))
+        shutil.copy2(path, backup_path)
+    else:
+        vacancies = {"open": {}, "closed": {}}
+
+    selected_ids = set(element.Id.GetIdValue() for element in elements)
+    for data in json_data:
+        if data.id.GetIdValue() not in selected_ids:
+            continue
+        match = re.match(r'^(.+)-(\d+)$', data.json_name or '')
+        if not match:
+            raise ValueError("Не удалось определить номер марки: {}".format(data.json_name))
+        number = int(match.group(2))
+        if data.closed_algorithm:
+            group = vacancies.setdefault("closed", {})
+            key = "НЗ-" + data.equipment_base_name
+        elif data.open_algorithm:
+            group = vacancies.setdefault("open", {})
+            key = data.equipment_base_name.rsplit('-', 1)[-1]
+        else:
+            raise ValueError("Неизвестный алгоритм номера: {}".format(data.json_name))
+        numbers = group.setdefault(key, [])
+        if number not in numbers:
+            numbers.append(number)
+            numbers.sort()
+
+    with codecs.open(path, 'w', encoding='utf-8') as target:
+        json.dump(vacancies, target, ensure_ascii=False, indent=4)
+
+
 def clear_element_task_params(elements):
     with revit.Transaction("BIM: Забыть элемент"):
         for element in elements:
@@ -181,6 +221,14 @@ def script_execute(plugin_logger):
 
     operator.create_backup(file_folder_path)
 
+    today_json_file_path = operator.get_json_file_path(file_folder_path)
+    today_json_data = []
+    if today_json_file_path and operator.get_utc_date() in os.path.basename(today_json_file_path):
+        today_json_data = operator.get_json_data(file_folder_path)
+
+    if method == forget_all_method:
+        add_vacancies(old_json_data + today_json_data, elements, file_folder_path)
+
     final_old_json = forget_elements(old_json_data, elements, method)
     operator.write_json_data(final_old_json, old_json_file_path)
     """
@@ -189,12 +237,9 @@ def script_execute(plugin_logger):
     необходимо продублировать изменения в нем тоже, чтоб поддерживать актуальное состояние заданий во всех актуальных
     версиях
     """
-    today_json_file_path = operator.get_json_file_path(file_folder_path)
-    if today_json_file_path and operator.get_utc_date() in os.path.basename(today_json_file_path):
-        today_json_data = operator.get_json_data(file_folder_path)
-        if today_json_data:
-            final_today_json = forget_elements(today_json_data, elements, method)
-            operator.write_json_data(final_today_json, today_json_file_path)
+    if today_json_data:
+        final_today_json = forget_elements(today_json_data, elements, method)
+        operator.write_json_data(final_today_json, today_json_file_path)
 
     clear_element_task_params(elements)
 

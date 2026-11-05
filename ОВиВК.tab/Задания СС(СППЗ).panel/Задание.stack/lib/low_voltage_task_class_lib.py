@@ -237,7 +237,7 @@ class JsonOperator:
         self.write_json_data(data, new_file_path)
 
     def get_json_file_path(self, project_path, is_today=True):
-        json_files = glob.glob(os.path.join(project_path, "*.json"))
+        json_files = glob.glob(os.path.join(project_path, "СС(СППЗ)_*.json"))
 
         if not is_today:
             today = self.get_utc_date()
