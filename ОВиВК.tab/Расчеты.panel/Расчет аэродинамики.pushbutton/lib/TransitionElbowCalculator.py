@@ -35,6 +35,75 @@ from dosymep.Bim4Everyone.SharedParams import SharedParamsConfig
 from TapDuctFlowCalculator import TapDuctFlowCalculator
 
 class TransitionElbowCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCalculator):
+    def get_side_to_side_pair(self, duct):
+        """Находит две боковые врезки с равным расходом и нулевыми торцами.
+
+        Returns:
+            tuple или None: (source, sink, flow, source_branch, sink_branch).
+            source и sink — входная и выходная врезки; flow — расход в м3/ч;
+            source_branch и sink_branch — элементы ветвей перед входом и
+            после выхода. None означает, что схема не соответствует условиям.
+        """
+        location = duct.Location
+        if location is None or not hasattr(location, "Curve") or location.Curve is None:
+            return None
+        endpoints = [location.Curve.GetEndPoint(0), location.Curve.GetEndPoint(1)]
+        connectors = list(duct.ConnectorManager.Connectors)
+        if not connectors:
+            return None
+        ends = [min(connectors, key=lambda c: c.Origin.DistanceTo(point))
+                for point in endpoints]
+        if (ends[0] == ends[1] or any(abs(UnitUtils.ConvertFromInternalUnits(
+                c.Flow, UnitTypeId.CubicMetersPerHour)) > 0.01 for c in ends)):
+            return None
+
+        taps = {}
+        for connector in connectors:
+            if any(connector.Origin.IsAlmostEqualTo(end.Origin) for end in ends):
+                continue
+            for reference in connector.AllRefs:
+                tap = reference.Owner
+                if (tap.Category is not None and
+                        (tap.Category.IsId(BuiltInCategory.OST_DuctTerminal) or
+                         (tap.Category.IsId(BuiltInCategory.OST_DuctFitting)
+                          and tap.MEPModel.PartType == PartType.TapAdjustable))):
+                    taps[tap.Id.GetIdValue()] = tap
+        if (len(taps) != 2 or any(tap.Category.IsId(BuiltInCategory.OST_DuctTerminal)
+                                  for tap in taps.values())):
+            return None
+
+        source = None
+        sink = None
+        source_branch = None
+        sink_branch = None
+        is_supply = self.system.SystemType == DuctSystemType.SupplyAir
+        for tap in taps.values():
+            input_connector, output_connector = self.find_input_output_connector(tap)
+            duct_side = input_connector if is_supply else output_connector
+            branch_side = output_connector if is_supply else input_connector
+            if (duct_side.connected_element is not None
+                    and duct_side.connected_element.Id == duct.Id):
+                sink = tap
+                sink_branch = branch_side.connected_element
+            elif (branch_side.connected_element is not None
+                    and branch_side.connected_element.Id == duct.Id):
+                source = tap
+                source_branch = duct_side.connected_element
+        if source is None or sink is None or source_branch is None or sink_branch is None:
+            return None
+        source_flows = self.get_element_sections_flows(source_branch)
+        sink_flows = self.get_element_sections_flows(sink_branch)
+        if not source_flows:
+            source_flows = self.get_element_sections_flows(source)
+        if not sink_flows:
+            sink_flows = self.get_element_sections_flows(sink)
+        if not source_flows or not sink_flows:
+            return None
+        flow = max(source_flows)
+        if flow <= 0 or abs(flow - max(sink_flows)) > max(1.0, flow * 0.005):
+            return None
+        return source, sink, flow, source_branch, sink_branch
+
     def __calculate_elbow_coefficient(self, connector, rounding = 150):
         """
         Расчет КМС отводов для врезок и собственно отводов
@@ -54,15 +123,15 @@ class TransitionElbowCoefficientCalculator(CalculatorClassLib.AerodinamicCoeffic
             coefficient = (0.25 * (b / h) ** 0.25) * (1.07 * math.exp(2 / (2 * (rounding + b / 2) / b + 1)) - 1) ** 2
             if connector.angle <= 60:
                 coefficient *= 0.708
-            base_name = 'Отвод прямоугольный'
+            base_name = self.ELBOW_RECT_NAME
 
         elif connector.shape == ConnectorProfileType.Round:
             coefficient = 0.33 if connector.angle > 85 else 0.18
-            base_name = 'Отвод круглый'
+            base_name = self.ELBOW_ROUND_NAME
 
         else:
             coefficient = 0
-            base_name = 'Неизвестная форма отвода'
+            base_name = self.ELBOW_UNKNOWN_NAME
 
         return coefficient, base_name
 
@@ -93,7 +162,8 @@ class TransitionElbowCoefficientCalculator(CalculatorClassLib.AerodinamicCoeffic
 
         input_conn, output_conn, length, angle = get_transition_variables()
 
-        base_name = 'Заужение' if input_conn.area > output_conn.area else 'Расширение'
+        base_name = (self.TRANSITION_NARROW_NAME if input_conn.area > output_conn.area
+                     else self.TRANSITION_WIDEN_NAME)
         self.remember_element_name(element, base_name, [input_conn, output_conn])
 
         is_confuser = input_conn.area > output_conn.area
@@ -144,7 +214,34 @@ class TransitionElbowCoefficientCalculator(CalculatorClassLib.AerodinamicCoeffic
 
         return 0  # В случае равных сечений
 
-    def get_tap_elbow_coefficient(self, element):
+    def is_tap_pair_elbow(self, element, partner, duct):
+        """Проверяет поворот потока между двумя врезками на воздуховоде."""
+        pair = self.get_side_to_side_pair(duct)
+        if pair is None:
+            return False
+        source, sink, _, _, _ = pair
+        if set([source.Id, sink.Id]) != set([element.Id, partner.Id]):
+            return False
+
+        directions = []
+        for tap in (element, partner):
+            connectors = self.get_connectors(tap)
+            duct_connector = next((connector for connector in connectors
+                                   if any(ref.Owner.Id == duct.Id for ref in connector.AllRefs)), None)
+            branch_connector = next((connector for connector in connectors
+                                     if connector != duct_connector), None)
+            if duct_connector is None or branch_connector is None:
+                return False
+            direction = branch_connector.Origin - duct_connector.Origin
+            if direction.GetLength() <= 1e-9:
+                return False
+            directions.append(direction.Normalize())
+
+        angle = math.degrees(math.acos(max(-1.0, min(1.0,
+            directions[0].DotProduct(directions[1])))))
+        return abs(angle - 90.0) <= 10.0
+
+    def get_tap_elbow_coefficient(self, element, partner=None, duct=None):
         """
         Вычисляет коэффициент для колена исполненного через врезку.
 
@@ -153,6 +250,22 @@ class TransitionElbowCoefficientCalculator(CalculatorClassLib.AerodinamicCoeffic
         Returns:
             float: КМС
         """
+        if partner is not None:
+            _, sink, _, source_branch, sink_branch = self.get_side_to_side_pair(duct)
+            source_area = self.get_element_area(source_branch)
+            sink_area = self.get_element_area(sink_branch)
+            connector = self.get_connector_data_instances(sink)[0]
+            if abs(source_area - sink_area) > 1e-9:
+                ratio = sink_area / source_area
+                coefficient = 0.4 + 0.7 * ratio ** 2
+                self.remember_element_name(element, self.ELBOW_TRANSITION_RECT_NAME,
+                                           [connector, connector], angle=90)
+                return coefficient
+            connector.angle = 90
+            coefficient, base_name = self.__calculate_elbow_coefficient(connector)
+            self.remember_element_name(element, base_name, [connector, connector], angle=90)
+            return coefficient
+
         connector_data = self.get_connector_data_instances(element)
         connector = connector_data[0]
 
@@ -169,7 +282,7 @@ class TransitionElbowCoefficientCalculator(CalculatorClassLib.AerodinamicCoeffic
         if f != F:
             coefficient = ((f / F) ** 2 + 0.7 * (f / F) ** 2) if output_element == main_element else (
                     0.4 + 0.7 * (f / F) ** 2)
-            base_name = 'Колено прямоугольное с изменением сечения'
+            base_name = self.ELBOW_TRANSITION_RECT_NAME
             duct_input = self.find_input_output_connector(main_element)[0]
             duct_output = self.find_input_output_connector(second_element)[0]
             self.remember_element_name(element, base_name, [duct_output, duct_input])

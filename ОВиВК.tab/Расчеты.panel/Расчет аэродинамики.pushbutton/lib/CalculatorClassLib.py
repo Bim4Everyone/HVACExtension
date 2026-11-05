@@ -114,6 +114,34 @@ class MulticonElementCharacteristic:
 class AerodinamicCoefficientCalculator(object):
     """Класс для расчета аэродинамических коэффициентов."""
 
+    TEE_SUPPLY_PASS_NAME = 'Тройник на проход нагнетание круглый/прямоугольный'
+    TEE_SUPPLY_BRANCH_ROUND_NAME = 'Тройник нагнетание ответвление круглый'
+    TEE_SUPPLY_BRANCH_RECT_NAME = 'Тройник нагнетание ответвление прямоугольный'
+    TEE_SUPPLY_SEPARATION_NAME = 'Тройник симметричный разделение потока нагнетание'
+    TEE_EXHAUST_PASS_ROUND_NAME = 'Тройник всасывание на проход круглый'
+    TEE_EXHAUST_PASS_RECT_NAME = 'Тройник всасывание на проход прямоугольный'
+    TEE_EXHAUST_BRANCH_ROUND_NAME = 'Тройник всасывание ответвление круглый'
+    TEE_EXHAUST_BRANCH_RECT_NAME = 'Тройник всасывание ответвление прямоугольный'
+    TEE_EXHAUST_MERGER_NAME = 'Тройник симметричный слияние'
+    CROSS_SUPPLY_PASS_RECT_NAME = 'Крестовина на нагнетании проход прямоугольная'
+    CROSS_SUPPLY_BRANCH_RECT_NAME = 'Крестовина на нагнетании ответвление прямоугольная'
+    CROSS_SUPPLY_PASS_ROUND_NAME = 'Крестовина на нагнетании проход круглая'
+    CROSS_SUPPLY_BRANCH_ROUND_NAME = 'Крестовина на нагнетании ответвление круглая'
+    CROSS_EXHAUST_PASS_RECT_NAME = 'Крестовина на всасывании проход прямоугольная'
+    CROSS_EXHAUST_PASS_ROUND_NAME = 'Крестовина на всасывании проход круглая'
+    CROSS_EXHAUST_BRANCH_RECT_NAME = 'Крестовина на всасывании ответвление прямоугольная'
+    CROSS_EXHAUST_BRANCH_ROUND_NAME = 'Крестовина на всасывании ответвление круглая'
+    HOLE_NAME = 'Боковое отверстие '
+    START_TERMINAL_NAME = 'Воздухораспределитель '
+    END_TERMINAL_NAME_SUPPLY = 'Воздухозабор '
+    END_TERMINAL_NAME_EXHAUST = 'Выброс '
+    ELBOW_RECT_NAME = 'Отвод прямоугольный'
+    ELBOW_ROUND_NAME = 'Отвод круглый'
+    ELBOW_UNKNOWN_NAME = 'Неизвестная форма отвода'
+    ELBOW_TRANSITION_RECT_NAME = 'Колено прямоугольное с изменением сечения'
+    TRANSITION_NARROW_NAME = 'Заужение'
+    TRANSITION_WIDEN_NAME = 'Расширение'
+
     # GUIDы нужны для обращения в ExternalServiceRegistry, сверки с сервисом текущего элемента и его замены
     LOSS_GUID_CONST = "46245996-eebb-4536-ac17-9c1cd917d8cf"
     COEFF_GUID_CONST = "5a598293-1504-46cc-a9c0-de55c82848b9"

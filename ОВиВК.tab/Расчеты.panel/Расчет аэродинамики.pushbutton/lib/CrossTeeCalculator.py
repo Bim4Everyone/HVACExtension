@@ -36,34 +36,6 @@ from TapDuctFlowCalculator import TapDuctFlowCalculator
 
 
 class CrossTeeCoefficientCalculator(CalculatorClassLib.AerodinamicCoefficientCalculator):
-    TEE_SUPPLY_PASS_NAME = 'Тройник на проход нагнетание круглый/прямоугольный'
-    TEE_SUPPLY_BRANCH_ROUND_NAME = 'Тройник нагнетание ответвление круглый'
-    TEE_SUPPLY_BRANCH_RECT_NAME = 'Тройник нагнетание ответвление прямоугольный'
-    TEE_SUPPLY_SEPARATION_NAME = 'Тройник симметричный разделение потока нагнетание'
-    TEE_EXHAUST_PASS_ROUND_NAME = 'Тройник всасывание на проход круглый'
-    TEE_EXHAUST_PASS_RECT_NAME = 'Тройник всасывание на проход прямоугольный'
-    TEE_EXHAUST_BRANCH_ROUND_NAME = 'Тройник всасывание ответвление круглый'
-    TEE_EXHAUST_BRANCH_RECT_NAME = 'Тройник всасывание ответвление прямоугольный'
-    TEE_EXHAUST_MERGER_NAME = 'Тройник симметричный слияние'
-
-
-    CROSS_SUPPLY_PASS_RECT_NAME = 'Крестовина на нагнетании проход прямоугольная'
-    CROSS_SUPPLY_BRANCH_RECT_NAME = 'Крестовина на нагнетании ответвление прямоугольная'
-
-    CROSS_SUPPLY_PASS_ROUND_NAME = 'Крестовина на нагнетании проход круглая'
-    CROSS_SUPPLY_BRANCH_ROUND_NAME = 'Крестовина на нагнетании ответвление круглая'
-
-    CROSS_EXHAUST_PASS_RECT_NAME = 'Крестовина на всасывании проход прямоугольная'
-    CROSS_EXHAUST_PASS_ROUND_NAME = 'Крестовина на всасывании проход круглая'
-
-    CROSS_EXHAUST_BRANCH_RECT_NAME = 'Крестовина на всасывании ответвление прямоугольная'
-    CROSS_EXHAUST_BRANCH_ROUND_NAME = 'Крестовина на всасывании ответвление круглая'
-
-    HOLE_NAME = 'Боковое отверстие '
-    START_TERMINAL_NAME = 'Воздухораспределитель '
-    END_TERMINAL_NAME_SUPPLY = 'Воздухозабор '
-    END_TERMINAL_NAME_EXHAUST = 'Выброс '
-
     tap_crosses_filtered = []
     duct_terminals_flows = {}
     duct_terminals_sizes = {}

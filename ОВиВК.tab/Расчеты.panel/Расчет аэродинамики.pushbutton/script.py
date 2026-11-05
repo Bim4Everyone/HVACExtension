@@ -308,7 +308,14 @@ def calculate_local_coefficient(element):
         if has_partner:
             fitting_2, duct_element = has_partner
 
-            if transition_elbow_calculator.is_tap_elbow(element) or transition_elbow_calculator.is_tap_elbow(fitting_2):
+            if transition_elbow_calculator.is_tap_pair_elbow(element, fitting_2, duct_element):
+                if element.Id in cross_tee_calculator.tap_crosses_filtered:
+                    local_section_coefficient = 0
+                else:
+                    local_section_coefficient = transition_elbow_calculator.get_tap_elbow_coefficient(
+                        element, fitting_2, duct_element)
+                    cross_tee_calculator.tap_crosses_filtered.append(fitting_2.Id)
+            elif transition_elbow_calculator.is_tap_elbow(element) or transition_elbow_calculator.is_tap_elbow(fitting_2):
                 local_section_coefficient = cross_tee_calculator.get_double_tap_tee_coefficient(element, fitting_2,
                                                                                                 duct_element)
             else:
