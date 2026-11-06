@@ -36,6 +36,8 @@ from collections import defaultdict
 from dosymep_libs.bim4everyone import *
 
 from System.Collections.Generic import List
+from Autodesk.Revit.UI.Selection import ISelectionFilter, ObjectType
+from Autodesk.Revit.Exceptions import OperationCanceledException
 
 doc = __revit__.ActiveUIDocument.Document
 view = doc.ActiveView
@@ -182,6 +184,18 @@ def split_collection(equipment_collection):
 
     return open_valves, closed_valves, equipment_elements
 
+class TaskSelectionFilter(ISelectionFilter):
+    def __init__(self, categories):
+        self.categories = categories
+
+    def AllowElement(self, element):
+        return element.Category is not None and any(
+            element.Category.IsId(category) for category in self.categories)
+
+    def AllowReference(self, reference, position):
+        return False
+
+
 def get_elements():
     ''' Забираем только выбранные элементы нужных категорий. '''
     categories = [
@@ -191,10 +205,16 @@ def get_elements():
     ]
 
     selected_ids = uidoc.Selection.GetElementIds()
-    if not selected_ids:
-        forms.alert("Выберите элементы для обновления задания.", "Ошибка", exitscript=True)
-
-    elements = [doc.GetElement(element_id) for element_id in selected_ids]
+    if selected_ids.Count:
+        elements = [doc.GetElement(element_id) for element_id in selected_ids]
+    else:
+        try:
+            references = uidoc.Selection.PickObjects(
+                ObjectType.Element, TaskSelectionFilter(categories),
+                "Выберите арматуру и оборудование для обновления задания и нажмите «Готово»")
+        except OperationCanceledException:
+            script.exit()
+        elements = [doc.GetElement(reference.ElementId) for reference in references]
     elements = [element for element in elements
                 if element is not None and element.Category is not None
                 and any(element.Category.IsId(category) for category in categories)]
@@ -203,6 +223,40 @@ def get_elements():
                     "Ошибка", exitscript=True)
 
     return elements
+
+def print_missing_task_params(elements):
+    output = script.get_output()
+    rows = []
+    type_rows = []
+    reported_types = set()
+    for element in elements:
+        missing = []
+        element_type = element.GetElementType()
+        if element_type is None or element_type.GetParamValueOrDefault(CREATE_TASK_SS_PARAM) != 1:
+            family_name = element_type.FamilyName if element_type is not None else "Тип не найден"
+            type_name = (element_type.GetParamValueOrDefault(BuiltInParameter.SYMBOL_NAME_PARAM)
+                         if element_type is not None else "")
+            type_key = (family_name, type_name)
+            if type_key not in reported_types:
+                reported_types.add(type_key)
+                type_rows.append([family_name, type_name, output.linkify(element.Id),
+                                  "ФОП_ВИС_СС Добавить к заданию: не включён или отсутствует"])
+        for param, name in ((SYSTEM_PARAM, "ФОП_ВИС_Имя системы"),
+                            (FLOOR_PARAM, "ФОП_Этаж СМР")):
+            value = element.GetParamValueOrDefault(param)
+            if value is None or not value.strip() or value.strip() == "!Нет системы":
+                missing.append(name + " (экземпляр): не заполнен")
+        if missing:
+            rows.append([output.linkify(element.Id), "<br>".join(missing)])
+    if type_rows:
+        output.print_table(table_data=type_rows,
+                           title="Параметры типов: добавление к заданию СС(СППЗ)",
+                           columns=["Семейство", "Типоразмер", "Выбрать пример", "Замечание"])
+    if rows:
+        output.print_table(table_data=rows,
+                           title="Параметры экземпляров: задание СС(СППЗ)",
+                           columns=["Выбрать элемент", "Замечания"])
+
 
 def get_elements_to_objective(elements):
     ''' Фильтруем, у каких элементов модели стоит галочка для добавления в задание
@@ -356,6 +410,7 @@ def script_execute(plugin_logger):
 
     setup_params()
     raw_collection = get_elements()
+    print_missing_task_params(raw_collection)
     selected_ids = set(element.Id.GetIdValue() for element in raw_collection)
     file_folder_path, is_path_local = operator.get_document_path()
 

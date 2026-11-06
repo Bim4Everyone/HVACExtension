@@ -137,9 +137,10 @@ def get_selected_mode():
 
 def forget_elements(json_data, elements, method):
     if method == forget_all_method:
+        selected_ids = set(element.Id.GetIdValue() for element in elements)
         return [
             data for data in json_data
-            if not any(element.Id == data.id for element in elements)
+            if abs(data.id.GetIdValue()) not in selected_ids
         ]
 
     if method == forget_id_method:
@@ -147,7 +148,7 @@ def forget_elements(json_data, elements, method):
         for element in elements:
             for data in json_data:
                 if element.Id == data.id:
-                    data.id = ElementId(-abs(int(str(data.id))))
+                    data.id = ElementId(-abs(data.id.GetIdValue()))
                     data.deletion_date = deletion_date
 
     return json_data
@@ -169,7 +170,7 @@ def add_vacancies(json_data, elements, folder):
 
     selected_ids = set(element.Id.GetIdValue() for element in elements)
     for data in json_data:
-        if data.id.GetIdValue() not in selected_ids:
+        if abs(data.id.GetIdValue()) not in selected_ids:
             continue
         match = re.match(r'^(.+)-(\d+)$', data.json_name or '')
         if not match:
