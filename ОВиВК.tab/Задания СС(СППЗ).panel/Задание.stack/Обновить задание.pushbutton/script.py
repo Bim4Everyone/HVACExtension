@@ -11,11 +11,8 @@ clr.AddReference("dosymep.Bim4Everyone.dll")
 
 import dosymep
 import re
-import glob
-import os
-import json
-import codecs
 from low_voltage_task_class_lib import JsonOperator, EditedReport, LowVoltageSystemData
+from vacancy_numbers import read_vacancies, write_vacancies, allocate_number
 
 clr.ImportExtensions(dosymep.Revit)
 clr.ImportExtensions(dosymep.Bim4Everyone)
@@ -35,7 +32,6 @@ from collections import defaultdict
 
 from dosymep_libs.bim4everyone import *
 
-from System.Collections.Generic import List
 from Autodesk.Revit.UI.Selection import ISelectionFilter, ObjectType
 from Autodesk.Revit.Exceptions import OperationCanceledException
 
@@ -99,24 +95,16 @@ def get_value_if_para_not_empty(element, param):
 
     return value
 
-def take_number(vacancies, kind, key, max_numbers, assigned):
-    used = assigned.setdefault((kind, key), set())
-    available = vacancies.setdefault(kind, {}).setdefault(key, [])
-    while available:
-        number = available.pop(0)
-        if number not in used:
-            used.add(number)
-            max_numbers[key] = max(max_numbers.get(key, 0), number)
-            return number
-    number = max_numbers.get(key, 0) + 1
-    while number in used:
-        number += 1
-    max_numbers[key] = number
-    used.add(number)
+def take_number(vacancies, valve_type, key, max_numbers, assigned, floor, system):
+    """Назначает номер и обновляет максимум и занятые номера его группы."""
+    used = assigned.setdefault((valve_type, key), set())
+    number = allocate_number(vacancies, valve_type, floor, system, used,
+                             max_numbers.get(key, 0) + 1)
+    max_numbers[key] = max(max_numbers.get(key, 0), number)
     return number
 
 
-def use_open_algorithm(open_valves, old_data, vacancies, max_numbers, assigned):
+def use_open_algorithm(open_valves, vacancies, max_numbers, assigned):
     ''' Создаем имена для списка элементов используя алгоритм для открытых клапанов от СППЗ '''
     open_valves_by_floors = split_equipment_by_floors(open_valves, opened=True)
 
@@ -125,11 +113,14 @@ def use_open_algorithm(open_valves, old_data, vacancies, max_numbers, assigned):
         for open_valve in open_valves_instances:
             if open_valve.element.Category.IsId(BuiltInCategory.OST_MechanicalEquipment):
                 base_name  = open_valve.equipment_base_name
+                valve_type = "Оборудование"
             else:
                 base_name = "НО-" + open_valve.equipment_base_name
+                valve_type = "НО"
 
-            # Проверяем, существует ли ключ в словаре max_numbers
-            count = take_number(vacancies, "open", floor_name, max_numbers, assigned)
+            system_name = open_valve.equipment_base_name.rsplit('-', 1)[0]
+            count = take_number(vacancies, valve_type, floor_name, max_numbers, assigned,
+                                floor_name, system_name)
 
             open_valve.json_name = base_name + "-" + str(count)
 
@@ -137,28 +128,20 @@ def use_open_algorithm(open_valves, old_data, vacancies, max_numbers, assigned):
 
     return result
 
-def use_closed_algorithm(valves, old_data, vacancies, max_numbers, assigned):
+def use_closed_algorithm(valves, vacancies, max_numbers, assigned):
     ''' Создаем имена для списка элементов используя алгоритм для закрытых клапанов от СППЗ '''
     valves_by_floors = split_equipment_by_floors(valves, closed=True)
 
     result = []
 
     for floor_name, valve_data_instances in valves_by_floors.items():
-        # Группировка valve_data_instances по equipment_base_name
-        valve_groups = {}
         for valve_data in valve_data_instances:
-            if valve_data.equipment_base_name not in valve_groups:
-                valve_groups[valve_data.equipment_base_name] = []
-            valve_groups[valve_data.equipment_base_name].append(valve_data)
-
-        # проходим по экземплярам НЗ сгруппированных по базовому имени(одинаковая система и этаж)
-        for equipment_base_name, valve_data_instances_group in valve_groups.items():
-            for valve_data in valve_data_instances_group:
-                json_base_name = "НЗ-" + valve_data.equipment_base_name
-                count = take_number(vacancies, "closed", json_base_name, max_numbers, assigned)
-                valve_data.json_name = json_base_name + "-" + str(count)
-
-                result.append(valve_data)
+            json_base_name = "НЗ-" + valve_data.equipment_base_name
+            system_name = valve_data.equipment_base_name.rsplit('-', 1)[0]
+            count = take_number(vacancies, u"НЗ", json_base_name, max_numbers, assigned,
+                                floor_name, system_name)
+            valve_data.json_name = json_base_name + "-" + str(count)
+            result.append(valve_data)
 
     return result
 
@@ -205,19 +188,19 @@ def get_elements():
     ]
 
     selected_ids = uidoc.Selection.GetElementIds()
+    selection_filter = TaskSelectionFilter(categories)
     if selected_ids.Count:
         elements = [doc.GetElement(element_id) for element_id in selected_ids]
     else:
         try:
             references = uidoc.Selection.PickObjects(
-                ObjectType.Element, TaskSelectionFilter(categories),
+                ObjectType.Element, selection_filter,
                 "Выберите арматуру и оборудование для обновления задания и нажмите «Готово»")
         except OperationCanceledException:
             script.exit()
         elements = [doc.GetElement(reference.ElementId) for reference in references]
     elements = [element for element in elements
-                if element is not None and element.Category is not None
-                and any(element.Category.IsId(category) for category in categories)]
+                if element is not None and selection_filter.AllowElement(element)]
     if not elements:
         forms.alert("Среди выбранных элементов нет арматуры или оборудования.",
                     "Ошибка", exitscript=True)
@@ -332,6 +315,24 @@ def get_open_max_numbers(old_data):
 
 
 def get_assigned_numbers(old_data):
+    """
+    Собирает занятые порядковые номера из записей задания для проверки вакансий.
+
+    НО и оборудование используют отдельные группы номеров в пределах этажа.
+    Для НЗ группа определяется сочетанием системы и этажа. Учитываются
+    все записи, включая исторические с датой удаления и отрицательным ID:
+    их номера остаются занятыми, пока запись не удалена полностью.
+    Записи без числового суффикса марки или признака алгоритма пропускаются.
+
+    Args:
+        old_data (list[LowVoltageSystemData]): Сохранённые записи задания.
+
+    Returns:
+        dict: Словарь множеств занятых номеров. Ключ для НО — ("НО", этаж),
+            для оборудования — ("Оборудование", этаж),
+            для НЗ — ("НЗ", "НЗ-" + equipment_base_name).
+            Например: {("НО", "01"): {1, 2}, ("НЗ", "НЗ-ДУ1-01"): {3}}.
+    """
     assigned = {}
     for data in old_data:
         match = re.match(r'^(.+)-(\d+)$', data.json_name or '')
@@ -339,12 +340,13 @@ def get_assigned_numbers(old_data):
             continue
         number = int(match.group(2))
         if data.closed_algorithm:
-            kind, key = "closed", "НЗ-" + data.equipment_base_name
+            valve_type, key = u"НЗ", "НЗ-" + data.equipment_base_name
         elif data.open_algorithm:
-            kind, key = "open", data.equipment_base_name.rsplit('-', 1)[-1]
+            valve_type = u"НО" if data.json_name.startswith(u"НО-") else u"Оборудование"
+            key = data.equipment_base_name.rsplit('-', 1)[-1]
         else:
             continue
-        assigned.setdefault((kind, key), set()).add(number)
+        assigned.setdefault((valve_type, key), set()).add(number)
     return assigned
 
 def check_edited_elements(elements):
@@ -363,22 +365,6 @@ def clear_param_false_values(elements, json_data):
         if not any(element.Id == data.id for data in json_data):
             element.SetParamValue(TASK_SS_PARAM, "")
             element.SetParamValue(DATE_SS_PARAM, "")
-
-def del_latest_file(file_folder_path):
-    # Находим все JSON-файлы в директории
-    json_files = glob.glob(os.path.join(file_folder_path, "СС(СППЗ)_*.json"))
-    if not json_files:
-        return
-
-    # Находим файл с самым поздним временем модификации
-    latest_file = max(json_files, key=os.path.getmtime)
-
-    date = operator.get_utc_date()
-
-    if date not in latest_file:
-        return
-    else:
-        os.remove(latest_file)
 
 def setup_params():
     revit_params = [MARK_PARAM,
@@ -447,18 +433,17 @@ def script_execute(plugin_logger):
 
     # Делим новые элементы по спискам для применения отдельных алгоритмов
     open_valves, closed_valves, equipment_elements = split_collection(elements_to_objective)
-    vacancy_path = os.path.join(file_folder_path, "Вакантные номера.json")
-    if os.path.exists(vacancy_path):
-        with codecs.open(vacancy_path, 'r', encoding='utf-8') as source:
-            vacancies = json.load(source)
-    else:
-        vacancies = {"open": {}, "closed": {}}
+    vacancies = read_vacancies(file_folder_path)
     assigned = get_assigned_numbers(old_data)
-    open_max = get_open_max_numbers(old_data)
+    open_data = [data for data in old_data if data.open_algorithm and not data.closed_algorithm]
+    open_max = get_open_max_numbers([data for data in open_data
+                                     if data.json_name.startswith(u"НО-")])
+    equipment_max = get_open_max_numbers([data for data in open_data
+                                          if not data.json_name.startswith(u"НО-")])
     closed_max = get_closed_max_numbers(old_data)
-    open_valves_data = use_open_algorithm(open_valves, old_data, vacancies, open_max, assigned)
-    closed_valves_data = use_closed_algorithm(closed_valves, old_data, vacancies, closed_max, assigned)
-    equipment_elements_data = use_open_algorithm(equipment_elements, old_data, vacancies, open_max, assigned)
+    open_valves_data = use_open_algorithm(open_valves, vacancies, open_max, assigned)
+    closed_valves_data = use_closed_algorithm(closed_valves, vacancies, closed_max, assigned)
+    equipment_elements_data = use_open_algorithm(equipment_elements, vacancies, equipment_max, assigned)
 
     with revit.Transaction("BIM: Обновление задания"):
         if open_valves_data or closed_valves_data or equipment_elements_data:
@@ -474,13 +459,11 @@ def script_execute(plugin_logger):
                 if low_voltage_system_data.id.GetIdValue() in selected_ids:
                     low_voltage_system_data.insert(doc, operator.get_utc_date())
 
-            # Записываем в json-файл
-            operator.send_json_data(json_data, file_folder_path)
-            with codecs.open(vacancy_path, 'w', encoding='utf-8') as target:
-                json.dump(vacancies, target, ensure_ascii=False, indent=4)
-
             # Проверяем все элементы на предмет ложно-заполненности
             # (У элемента есть марка, но его не было в старых заданиях или в новых данных для json)
             clear_param_false_values(raw_collection, json_data)
+
+            operator.send_json_data(json_data, file_folder_path)
+            write_vacancies(file_folder_path, vacancies)
 
 script_execute()

@@ -16,8 +16,8 @@ import json
 import os
 import ctypes
 import codecs
-import shutil
 from low_voltage_task_class_lib import JsonOperator, EditedReport, LowVoltageSystemData
+from vacancy_numbers import read_vacancies, write_vacancies, vacancy_from_data, vacancy_key
 
 clr.ImportExtensions(dosymep.Revit)
 clr.ImportExtensions(dosymep.Bim4Everyone)
@@ -155,42 +155,37 @@ def forget_elements(json_data, elements, method):
 
 
 def add_vacancies(json_data, elements, folder):
-    path = os.path.join(folder, "Вакантные номера.json")
-    if os.path.exists(path):
-        with codecs.open(path, 'r', encoding='utf-8') as source:
-            vacancies = json.load(source)
-        backup_folder = os.path.join(folder, "backups")
-        if not os.path.exists(backup_folder):
-            os.makedirs(backup_folder)
-        backup_path = os.path.join(backup_folder, "Вакантные номера_{}.json".format(
-            datetime.now().strftime("%Y%m%d_%H%M%S_%f")))
-        shutil.copy2(path, backup_path)
-    else:
-        vacancies = {"open": {}, "closed": {}}
+    """
+    Сохраняет номера выбранных элементов как свободные для повторной выдачи.
 
+    Учитывает обычные записи и записи с отрицательным ID из истории.
+    Номера НО и оборудования группируются раздельно по типу и этажу, НЗ — по системе
+    и этажу. Повторяющиеся номера добавляются один раз и сортируются.
+    Данные записываются в файл «Вакантные номера.json» рядом с заданиями.
+
+    Args:
+        json_data (list[LowVoltageSystemData]): Записи заданий, из которых
+            нужно получить номера выбранных элементов.
+        elements (list[Element]): Выбранные элементы, которые не выдавались
+            в задании и номера которых можно освободить.
+        folder (str): Путь к папке проекта с JSON-файлами заданий.
+
+    Raises:
+        ValueError: Не удалось определить номер марки.
+    """
+    vacancies = read_vacancies(folder)
+    existing = set(vacancy_key(item) for item in vacancies)
     selected_ids = set(element.Id.GetIdValue() for element in elements)
     for data in json_data:
         if abs(data.id.GetIdValue()) not in selected_ids:
             continue
-        match = re.match(r'^(.+)-(\d+)$', data.json_name or '')
-        if not match:
-            raise ValueError("Не удалось определить номер марки: {}".format(data.json_name))
-        number = int(match.group(2))
-        if data.closed_algorithm:
-            group = vacancies.setdefault("closed", {})
-            key = "НЗ-" + data.equipment_base_name
-        elif data.open_algorithm:
-            group = vacancies.setdefault("open", {})
-            key = data.equipment_base_name.rsplit('-', 1)[-1]
-        else:
-            raise ValueError("Неизвестный алгоритм номера: {}".format(data.json_name))
-        numbers = group.setdefault(key, [])
-        if number not in numbers:
-            numbers.append(number)
-            numbers.sort()
+        vacancy = vacancy_from_data(data)
+        key = vacancy_key(vacancy)
+        if key not in existing:
+            vacancies.append(vacancy)
+            existing.add(key)
 
-    with codecs.open(path, 'w', encoding='utf-8') as target:
-        json.dump(vacancies, target, ensure_ascii=False, indent=4)
+    write_vacancies(folder, vacancies)
 
 
 def clear_element_task_params(elements):
@@ -216,27 +211,27 @@ def script_execute(plugin_logger):
     elements = get_pre_selected() or get_selected()
 
     old_json_file_path = operator.get_json_file_path(file_folder_path, is_today=False)
-    old_json_data = operator.get_json_data(file_folder_path, is_today=False)
-    if not old_json_data:
-        forms.alert("Данные старых заданий не были обнаружены", "Ошибка", exitscript=True)
-
-    operator.create_backup(file_folder_path)
+    old_json_data = operator.get_json_data(file_folder_path, is_today=False) or []
 
     today_json_file_path = operator.get_json_file_path(file_folder_path)
     today_json_data = []
     if today_json_file_path and operator.get_utc_date() in os.path.basename(today_json_file_path):
-        today_json_data = operator.get_json_data(file_folder_path)
+        today_json_data = operator.get_json_data(file_folder_path) or []
+
+    if not old_json_data and not today_json_data:
+        forms.alert("Данные заданий не были обнаружены", "Ошибка", exitscript=True)
+
+    operator.create_backup(file_folder_path)
 
     if method == forget_all_method:
         add_vacancies(old_json_data + today_json_data, elements, file_folder_path)
 
     final_old_json = forget_elements(old_json_data, elements, method)
-    operator.write_json_data(final_old_json, old_json_file_path)
+    if old_json_file_path:
+        operator.write_json_data(final_old_json, old_json_file_path)
     """
-    Обновить задание работает по принципу удаления сегодняшнего задания при каждом вызове. Для корректировки необходимо
-    откорректировать последний замороженный файл с не сегодняшней датой и если сегодня выполнялось обновление и есть файл
-    необходимо продублировать изменения в нем тоже, чтоб поддерживать актуальное состояние заданий во всех актуальных
-    версиях
+    Удаляем или помечаем записи выбранных элементов в последнем прошлом
+    и сегодняшнем файлах задания
     """
     if today_json_data:
         final_today_json = forget_elements(today_json_data, elements, method)
