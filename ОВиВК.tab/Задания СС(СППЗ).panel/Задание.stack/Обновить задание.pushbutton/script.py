@@ -95,16 +95,15 @@ def get_value_if_para_not_empty(element, param):
 
     return value
 
-def take_number(vacancies, valve_type, key, max_numbers, assigned, floor, system):
-    """Назначает номер и обновляет максимум и занятые номера его группы."""
-    used = assigned.setdefault((valve_type, key), set())
-    number = allocate_number(vacancies, valve_type, floor, system, used,
+def take_number(vacancies, valve_type, key, max_numbers, floor, system):
+    """Назначает номер и обновляет максимум его группы."""
+    number = allocate_number(vacancies, valve_type, floor, system,
                              max_numbers.get(key, 0) + 1)
     max_numbers[key] = max(max_numbers.get(key, 0), number)
     return number
 
 
-def use_open_algorithm(open_valves, vacancies, max_numbers, assigned):
+def use_open_algorithm(open_valves, vacancies, max_numbers):
     ''' Создаем имена для списка элементов используя алгоритм для открытых клапанов от СППЗ '''
     open_valves_by_floors = split_equipment_by_floors(open_valves, opened=True)
 
@@ -119,7 +118,7 @@ def use_open_algorithm(open_valves, vacancies, max_numbers, assigned):
                 valve_type = "НО"
 
             system_name = open_valve.equipment_base_name.rsplit('-', 1)[0]
-            count = take_number(vacancies, valve_type, floor_name, max_numbers, assigned,
+            count = take_number(vacancies, valve_type, floor_name, max_numbers,
                                 floor_name, system_name)
 
             open_valve.json_name = base_name + "-" + str(count)
@@ -128,7 +127,7 @@ def use_open_algorithm(open_valves, vacancies, max_numbers, assigned):
 
     return result
 
-def use_closed_algorithm(valves, vacancies, max_numbers, assigned):
+def use_closed_algorithm(valves, vacancies, max_numbers):
     ''' Создаем имена для списка элементов используя алгоритм для закрытых клапанов от СППЗ '''
     valves_by_floors = split_equipment_by_floors(valves, closed=True)
 
@@ -138,7 +137,7 @@ def use_closed_algorithm(valves, vacancies, max_numbers, assigned):
         for valve_data in valve_data_instances:
             json_base_name = "НЗ-" + valve_data.equipment_base_name
             system_name = valve_data.equipment_base_name.rsplit('-', 1)[0]
-            count = take_number(vacancies, u"НЗ", json_base_name, max_numbers, assigned,
+            count = take_number(vacancies, u"НЗ", json_base_name, max_numbers,
                                 floor_name, system_name)
             valve_data.json_name = json_base_name + "-" + str(count)
             result.append(valve_data)
@@ -314,41 +313,6 @@ def get_open_max_numbers(old_data):
     return max_numbers
 
 
-def get_assigned_numbers(old_data):
-    """
-    Собирает занятые порядковые номера из записей задания для проверки вакансий.
-
-    НО и оборудование используют отдельные группы номеров в пределах этажа.
-    Для НЗ группа определяется сочетанием системы и этажа. Учитываются
-    все записи, включая исторические с датой удаления и отрицательным ID:
-    их номера остаются занятыми, пока запись не удалена полностью.
-    Записи без числового суффикса марки или признака алгоритма пропускаются.
-
-    Args:
-        old_data (list[LowVoltageSystemData]): Сохранённые записи задания.
-
-    Returns:
-        dict: Словарь множеств занятых номеров. Ключ для НО — ("НО", этаж),
-            для оборудования — ("Оборудование", этаж),
-            для НЗ — ("НЗ", "НЗ-" + equipment_base_name).
-            Например: {("НО", "01"): {1, 2}, ("НЗ", "НЗ-ДУ1-01"): {3}}.
-    """
-    assigned = {}
-    for data in old_data:
-        match = re.match(r'^(.+)-(\d+)$', data.json_name or '')
-        if not match:
-            continue
-        number = int(match.group(2))
-        if data.closed_algorithm:
-            valve_type, key = u"НЗ", "НЗ-" + data.equipment_base_name
-        elif data.open_algorithm:
-            valve_type = u"НО" if data.json_name.startswith(u"НО-") else u"Оборудование"
-            key = data.equipment_base_name.rsplit('-', 1)[-1]
-        else:
-            continue
-        assigned.setdefault((valve_type, key), set()).add(number)
-    return assigned
-
 def check_edited_elements(elements):
     ''' Проверяем занят ли элемент '''
     edited_report = EditedReport(doc)
@@ -434,16 +398,15 @@ def script_execute(plugin_logger):
     # Делим новые элементы по спискам для применения отдельных алгоритмов
     open_valves, closed_valves, equipment_elements = split_collection(elements_to_objective)
     vacancies = read_vacancies(file_folder_path)
-    assigned = get_assigned_numbers(old_data)
     open_data = [data for data in old_data if data.open_algorithm and not data.closed_algorithm]
     open_max = get_open_max_numbers([data for data in open_data
                                      if data.json_name.startswith(u"НО-")])
     equipment_max = get_open_max_numbers([data for data in open_data
                                           if not data.json_name.startswith(u"НО-")])
     closed_max = get_closed_max_numbers(old_data)
-    open_valves_data = use_open_algorithm(open_valves, vacancies, open_max, assigned)
-    closed_valves_data = use_closed_algorithm(closed_valves, vacancies, closed_max, assigned)
-    equipment_elements_data = use_open_algorithm(equipment_elements, vacancies, equipment_max, assigned)
+    open_valves_data = use_open_algorithm(open_valves, vacancies, open_max)
+    closed_valves_data = use_closed_algorithm(closed_valves, vacancies, closed_max)
+    equipment_elements_data = use_open_algorithm(equipment_elements, vacancies, equipment_max)
 
     with revit.Transaction("BIM: Обновление задания"):
         if open_valves_data or closed_valves_data or equipment_elements_data:

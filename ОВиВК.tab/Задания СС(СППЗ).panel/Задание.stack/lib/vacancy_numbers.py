@@ -23,7 +23,7 @@ def write_vacancies(folder, vacancies):
 
 
 def vacancy_from_data(data):
-    """Получает вакансию из сохранённой марки, системы и этажа задания."""
+    """Получает вакансию для записи в json из сохранённой марки, системы и этажа задания."""
     system, floor = data.equipment_base_name.rsplit('-', 1)
     number = int(data.json_name.rsplit('-', 1)[1])
     if data.closed_algorithm:
@@ -34,24 +34,27 @@ def vacancy_from_data(data):
 
 
 def vacancy_key(item):
-    """Возвращает ключ без системы для НО и оборудования."""
+    """
+    Возвращает ключ вакансии для поиска дубликатов при добавлении в список.
+
+    Ключ — кортеж (тип, этаж, система или None, номер). Две вакансии
+    с одинаковым ключом считаются одной и той же свободной позицией.
+    Для НЗ учитывается система, для НО и оборудования вместо неё ставится
+    None, поскольку их номера выдаются независимо от системы.
+
+    """
     return (item['type'], item['floor'],
             item['system'] if item['type'] == u'НЗ' else None, item['number'])
 
 
-def allocate_number(vacancies, kind, floor, system, used, next_number):
+def allocate_number(vacancies, kind, floor, system, next_number):
     """Занимает минимальную подходящую вакансию либо следующий новый номер."""
     candidates = sorted([item for item in vacancies
                          if item['type'] == kind and item['floor'] == floor
                          and (kind != u'НЗ' or item['system'] == system)],
                         key=lambda item: item['number'])
-    for item in candidates:
+    if candidates:
+        item = candidates[0]
         vacancies.remove(item)
-        if item['number'] not in used:
-            number = item['number']
-            used.add(number)
-            return number
-    while next_number in used:
-        next_number += 1
-    used.add(next_number)
+        return item['number']
     return next_number
