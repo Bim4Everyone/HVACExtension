@@ -7,7 +7,7 @@ import os
 
 def read_vacancies(folder):
     """Читает единый список вакансий из папки задания."""
-    path = os.path.join(folder, u"Вакантные номера.json")
+    path = os.path.join(folder, "Вакантные номера.json")
     if not os.path.exists(path):
         return []
     with codecs.open(path, 'r', encoding='utf-8') as source:
@@ -16,7 +16,7 @@ def read_vacancies(folder):
 
 def write_vacancies(folder, vacancies):
     """Сортирует и сохраняет текущий список вакансий."""
-    path = os.path.join(folder, u"Вакантные номера.json")
+    path = os.path.join(folder, "Вакантные номера.json")
     vacancies.sort(key=lambda item: (item['system'], item['floor'], item['number'], item['type']))
     with codecs.open(path, 'w', encoding='utf-8') as target:
         json.dump(vacancies, target, ensure_ascii=False, indent=4)
@@ -27,9 +27,9 @@ def vacancy_from_data(data):
     system, floor = data.equipment_base_name.rsplit('-', 1)
     number = int(data.json_name.rsplit('-', 1)[1])
     if data.closed_algorithm:
-        kind = u'НЗ'
+        kind = 'НЗ'
     else:
-        kind = u'НО' if data.json_name.startswith(u'НО-') else u'Оборудование'
+        kind = 'НО' if data.json_name.startswith('НО-') else 'Оборудование'
     return {'type': kind, 'floor': floor, 'system': system, 'number': number}
 
 
@@ -44,14 +44,14 @@ def vacancy_key(item):
 
     """
     return (item['type'], item['floor'],
-            item['system'] if item['type'] == u'НЗ' else None, item['number'])
+            item['system'] if item['type'] == 'НЗ' else None, item['number'])
 
 
 def allocate_number(vacancies, kind, floor, system, next_number):
     """Занимает минимальную подходящую вакансию либо следующий новый номер."""
     candidates = sorted([item for item in vacancies
                          if item['type'] == kind and item['floor'] == floor
-                         and (kind != u'НЗ' or item['system'] == system)],
+                         and (kind != 'НЗ' or item['system'] == system)],
                         key=lambda item: item['number'])
     if candidates:
         item = candidates[0]

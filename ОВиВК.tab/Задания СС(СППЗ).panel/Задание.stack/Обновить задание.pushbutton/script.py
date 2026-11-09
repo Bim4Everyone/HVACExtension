@@ -137,7 +137,7 @@ def use_closed_algorithm(valves, vacancies, max_numbers):
         for valve_data in valve_data_instances:
             json_base_name = "НЗ-" + valve_data.equipment_base_name
             system_name = valve_data.equipment_base_name.rsplit('-', 1)[0]
-            count = take_number(vacancies, u"НЗ", json_base_name, max_numbers,
+            count = take_number(vacancies, "НЗ", json_base_name, max_numbers,
                                 floor_name, system_name)
             valve_data.json_name = json_base_name + "-" + str(count)
             result.append(valve_data)
@@ -400,9 +400,9 @@ def script_execute(plugin_logger):
     vacancies = read_vacancies(file_folder_path)
     open_data = [data for data in old_data if data.open_algorithm and not data.closed_algorithm]
     open_max = get_open_max_numbers([data for data in open_data
-                                     if data.json_name.startswith(u"НО-")])
+                                     if data.json_name.startswith("НО-")])
     equipment_max = get_open_max_numbers([data for data in open_data
-                                          if not data.json_name.startswith(u"НО-")])
+                                          if not data.json_name.startswith("НО-")])
     closed_max = get_closed_max_numbers(old_data)
     open_valves_data = use_open_algorithm(open_valves, vacancies, open_max)
     closed_valves_data = use_closed_algorithm(closed_valves, vacancies, closed_max)
