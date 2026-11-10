@@ -14,6 +14,7 @@ import Revit
 import dosymep
 import codecs
 import math
+import re
 
 clr.ImportExtensions(Revit.Elements)
 clr.ImportExtensions(Revit.GeometryConversion)
@@ -52,50 +53,68 @@ uidoc = __revit__.ActiveUIDocument
 EQUIPMENT_TYPE_NAME = "Оборудование"
 VALVE_TYPE_NAME = "Клапан"
 OUTER_VALVE_NAME = "ZAWTERM"
-FAMILY_NAME_CONST = 'Обр_ОП_Универсальный'
-AUDYTOR_V72 = "Audytor SET 7.2"
-AUDYTOR_V73 = "Audytor SET 7.3"
+FAMILY_NAME_CONST = u'Универсальный'
 DEBUG_MODE = False
 EPSILON = 1e-9
 
 JSON_CONFIG = 'config.json'
-JSON_VERSION = 'version.json'
 
 class RevitParamNames:
     """Класс для хранения имен параметров Revit, используемых в скрипте"""
-    CODE = 'ADSK_Код изделия'
-    LENGHT = 'ADSK_Размер_Длина'
+    CODE = u'ФОП_ВИС_Код аудитор'
+    AUDYTOR_PROCESSING = u'ФОП_ВИС_Обработка аудитор'
+    SECTIONAL_DEVICE = u'ФОП_ВИС_Секционный прибор'
+    LENGTH_DEVICE = u'ФОП_ВИС_Прибор длина'
+    SECTION_COUNT = u'ФОП_ВИС_Количество секций'
+    AUDYTOR_LENGTH = u'ФОП_ВИС_Длина аудитор'
     POWER = 'ADSK_Тепловая мощность'
     SETTING = 'ADSK_Настройка'
 
 class AudytorReadingRules:
-    """Класс для хранения правил чтения данных из результата расчета Audytor
-    Содержит индексы столбцов и пояснения к ним"""
-
-    #Общие правила для оборудования клапанов
+    """Позиции служебных полей, не описанных схемами DM_Res."""
     EQ_CONNECTION_TYPE = 2
     X_COORD = 3
     Y_COORD = 4
     Z_COORD = 5
+    VALVE_TYPE = 1
 
-    #Правила специфичные для оборудования
-    EQUIPMENT_LENGHT = 12
-    CODE = 16
-    REAL_POWER = 20
-    NOMINAL_POWER = 22
 
-    # Настройка имеет разный индекс в разных версиях Audytor
-    # Выбор индекса реализован через метод versioning_setting()
-    SETTING_7_2 = 28       # Индекс столбца с настройкой для Audytor SET 7.2
-    SETTING_7_3 = 29       # Индекс столбца с настройкой для Audytor SET 7.3
+class AudytorDataSchema:
+    """Поля DM_Res в порядке значений, следующих за маркером #ID схемы."""
+    def __init__(self, lines):
+        self.schemas = {}
+        for line in lines:
+            parts = line.strip().split(';')
+            if parts[0] not in ('DM_ResRadiators', 'DM_ResDZTCO'):
+                continue
+            if parts[-1] == '':
+                parts.pop()
+            if len(parts) < 2 or (len(parts) - 2) % 3:
+                raise ValueError(u'Некорректное описание схемы: {0}'.format(parts[0]))
+            fields = [(parts[i + 1], parts[i + 2])
+                      for i in range(2, len(parts), 3)]
+            if len(set(fields)) != len(fields) or parts[0] in self.schemas:
+                raise ValueError(u'Неоднозначное описание схемы: {0}'.format(parts[0]))
+            self.schemas[parts[0]] = ('#' + parts[1], fields)
 
-    MAKER = 30  # Индекс столбца с производителем
-    FULL_NAME = 31  # Индекс столбца с полным наименованием
+    def read_values(self, data, schema_name):
+        if schema_name not in self.schemas:
+            raise ValueError(u'В файле отсутствует схема {0}.'.format(schema_name))
+        marker, fields = self.schemas[schema_name]
+        if data.count(marker) != 1:
+            raise ValueError(u'Не найден однозначный маркер {0}.'.format(marker))
+        start = data.index(marker) + 1
+        # После значений схемы идет служебное поле.
+        if len(data) < start + len(fields) + 1:
+            raise ValueError(u'Недостаточно значений для схемы {0}.'.format(schema_name))
+        return dict(zip(fields, data[start:start + len(fields)]))
 
-    # Правила специфичные для КЛАПАНОВ
-    VALVE_TYPE = 1 # Индекс стобца с типом клапана
-    VALVE_MAKER = 2  # Индекс столбца с производителем клапана
-    VALVE_SETTING = 17  # Индекс столбца с настройкой клапана
+    @staticmethod
+    def get_value(values, name, unit=u'null'):
+        key = (name, unit)
+        if key not in values:
+            raise ValueError(u'В схеме отсутствует поле «{0}» ({1}).'.format(name, unit))
+        return values[key]
 
 
 class CSVReportGenerator(object):
@@ -179,6 +198,22 @@ class TextParser:
         return float(value.replace(',', '.'))
 
     @staticmethod
+    def parse_size(value):
+        """Возвращает (длина в мм, число секций) из поля «Размер»."""
+        match = re.match(u'^\\s*([0-9]+(?:[.,][0-9]+)?)\\s*(szt\\.?|м|m)\\s*$',
+                         value, re.IGNORECASE)
+        if match is None:
+            raise ValueError(u'Неизвестный формат размера прибора: «{0}».'.format(value))
+        number = TextParser.parse_float(match.group(1))
+        if number <= 0:
+            raise ValueError(u'Размер прибора должен быть положительным: «{0}».'.format(value))
+        if match.group(2).lower().startswith('szt'):
+            if number != int(number):
+                raise ValueError(u'Количество секций должно быть целым: «{0}».'.format(value))
+            return None, int(number)
+        return number * 1000, None
+
+    @staticmethod
     def parse_setting(value):
         """Обрабатывает значение настройки (например, 'N' → 0)."""
         if value in ('N', '', 'Kvs'):
@@ -260,7 +295,8 @@ class AuditorEquipment:
                  connection_type="",
                  rotated_coords=None,
                  original_coords=None,
-                 equipment_len=0,
+                 equipment_len=None,
+                 section_count=None,
                  code="",
                  real_power=0,
                  nominal_power=0,
@@ -279,6 +315,7 @@ class AuditorEquipment:
         self.original_coords = original_coords or XYZ.Zero
         self.rotated_coords = rotated_coords or XYZ.Zero
         self.equipment_len = equipment_len
+        self.section_count = section_count
         self.code = code
         self.real_power = real_power
         self.nominal_power = nominal_power
@@ -373,30 +410,25 @@ class EquipmentDataCache:
             setting = item["setting"]
 
             if data.type_name == EQUIPMENT_TYPE_NAME:
-                # 1. Код изделия
-                old_code = str(element.GetParamValue(RevitParamNames.CODE) or "")
-                new_code = str(data.code or "")
-                if old_code != new_code:
-                    element.SetParamValue(RevitParamNames.CODE, new_code)
-                    self._changes.append({
-                        "element_id": element.Id,
-                        "param_name": RevitParamNames.CODE,
-                        "old_value": old_code,
-                        "new_value": new_code
-                    })
-                # 2. Длина
-                old_length = (UnitConverter.to_millimeters
-                              (element.GetParamValue(RevitParamNames.LENGHT) or 0))
-                new_length = data.equipment_len
-                if abs(old_length - new_length) > EPSILON:
-                    element.SetParamValue(RevitParamNames.LENGHT,
-                                          UnitConverter.from_millimeters(new_length))
-                    self._changes.append({
-                        "element_id": element.Id,
-                        "param_name": RevitParamNames.LENGHT,
-                        "old_value": old_length,
-                        "new_value": new_length
-                    })
+                # 1. Код Audytor
+                if element.IsExistsParam(RevitParamNames.CODE):
+                    old_code = str(element.GetParamValue(RevitParamNames.CODE) or "")
+                    new_code = str(data.code or "")
+                    if old_code != new_code:
+                        element.SetParamValue(RevitParamNames.CODE, new_code)
+                        self._changes.append({
+                            "element_id": element.Id,
+                            "param_name": RevitParamNames.CODE,
+                            "old_value": old_code,
+                            "new_value": new_code
+                        })
+                # 2. Размер: галочки в типоразмере, значения в экземпляре.
+                if self._type_flag_enabled(element, RevitParamNames.SECTIONAL_DEVICE):
+                    self._write_size(element, RevitParamNames.SECTION_COUNT,
+                                     data.section_count, is_length=False)
+                if self._type_flag_enabled(element, RevitParamNames.LENGTH_DEVICE):
+                    self._write_size(element, RevitParamNames.AUDYTOR_LENGTH,
+                                     data.equipment_len, is_length=True)
 
                 # 3. Мощность
                 old_power = element.GetParamValue(RevitParamNames.POWER) or 0
@@ -422,114 +454,99 @@ class EquipmentDataCache:
                         "new_value": setting
                     })
 
+    @staticmethod
+    def _type_flag_enabled(element, param_name):
+        parameter = element.Symbol.LookupParameter(param_name)
+        return (parameter is not None
+                and parameter.StorageType == StorageType.Integer
+                and parameter.AsInteger() == 1)
+
+    def _write_size(self, element, param_name, value, is_length):
+        # Не записываем длину вместо секций или секции вместо длины.
+        if value is None:
+            return
+        parameter = element.LookupParameter(param_name)
+        if parameter is None:
+            return
+        if parameter.StorageType == StorageType.Integer and not is_length:
+            old_value = parameter.AsInteger()
+            new_value = int(value)
+        else:
+            old_value = parameter.AsDouble()
+            new_value = float(value)
+            if is_length:
+                old_value = UnitConverter.to_millimeters(old_value)
+        if abs(old_value - new_value) <= EPSILON:
+            return
+        parameter.Set(UnitConverter.from_millimeters(new_value)
+                      if is_length else new_value)
+        self._changes.append({
+            "element_id": element.Id,
+            "param_name": param_name,
+            "old_value": old_value,
+            "new_value": new_value
+        })
+
     def get_changes(self):
         """Возвращает список изменений"""
         return self._changes
-        real_power_watts = UnitConverter.to_watts(data.real_power)
-        len_millimeters = UnitConverter.from_meters(data.equipment_len)
-        element.SetParamValue(RevitParamNames.LENGHT, len_millimeters)
-        element.SetParamValue(RevitParamNames.CODE, data.code)
-        element.SetParamValue(RevitParamNames.POWER, real_power_watts)
-
-        # В любом случае, если есть настройка — записываем
-        if setting:
-            element.SetParamValue(RevitParamNames.SETTING, setting)
-
-
-class ReadingRulesForEquipment:
-    '''
-    Класс используется для интерпретиции данных по Приборам
-    '''
-    def __init__(self, audytor_version):
-        self.audytor_version = audytor_version
-
-    def versioning_setting(self):
-        versioning_setting_index = AudytorReadingRules.SETTING_7_2
-        if self.audytor_version == AUDYTOR_V73:
-            versioning_setting_index = AudytorReadingRules.SETTING_7_3
-        return versioning_setting_index
-
-    connection_type_index = AudytorReadingRules.EQ_CONNECTION_TYPE
-    x_index = AudytorReadingRules.X_COORD
-    y_index = AudytorReadingRules.Y_COORD
-    z_index = AudytorReadingRules.Z_COORD
-    equipment_len_index = AudytorReadingRules.EQUIPMENT_LENGHT
-    code_index = AudytorReadingRules.CODE
-    real_power_index = AudytorReadingRules.REAL_POWER
-    nominal_power_index = AudytorReadingRules.NOMINAL_POWER
-
-    @property
-    def setting_index(self):
-        return self.versioning_setting()
-
-    maker_index =  AudytorReadingRules.MAKER
-    full_name_index =  AudytorReadingRules.FULL_NAME
-
-
-class ReadingRulesForValve:
-    '''
-    Класс используется для интерпретиции данных по Клапанам
-    '''
-    connection_type_index = AudytorReadingRules.VALVE_TYPE
-    maker_index = AudytorReadingRules.VALVE_MAKER
-    x_index = AudytorReadingRules.X_COORD
-    y_index = AudytorReadingRules.Y_COORD
-    z_index = AudytorReadingRules.Z_COORD
-    setting_index = AudytorReadingRules.VALVE_SETTING
 
 
 class AuditorFileParser:
     """Отвечает только за парсинг строк файла в объекты"""
     @staticmethod
-    def parse_heating_device(line, z_correction, angle, audytor_version):
+    def parse_heating_device(line, z_correction, angle, schemas):
         data = line.strip().split(';')
-        rr = ReadingRulesForEquipment(audytor_version)
+        values = schemas.read_values(data, 'DM_ResRadiators')
+        equipment_len, section_count = TextParser.parse_size(
+            schemas.get_value(values, u'Размер'))
+        rr = AudytorReadingRules
 
         # Получаем оба набора координат
         original_point, rotated_point = AuditorFileParser._parse_coordinates(
             data=data,
-            x_idx=rr.x_index,
-            y_idx=rr.y_index,
-            z_idx=rr.z_index,
+            x_idx=rr.X_COORD,
+            y_idx=rr.Y_COORD,
+            z_idx=rr.Z_COORD,
             z_correction=z_correction,
             angle=angle
         )
         return AuditorEquipment(
-            connection_type=data[rr.connection_type_index],
+            connection_type=data[rr.EQ_CONNECTION_TYPE],
             rotated_coords=rotated_point,
             original_coords=original_point,
-            equipment_len=TextParser.parse_float(
-                data[rr.equipment_len_index])*1000,
-            code=data[rr.code_index],
-            real_power=TextParser.parse_float(data[rr.real_power_index]),
-            nominal_power=TextParser.parse_float(data[rr.nominal_power_index]),
-            setting=TextParser.parse_setting(data[rr.setting_index]),
-            maker=data[rr.maker_index],
-            full_name=data[rr.full_name_index],
+            equipment_len=equipment_len,
+            section_count=section_count,
+            code=schemas.get_value(values, u'Символ', u'null'),
+            real_power=TextParser.parse_float(schemas.get_value(values, u'FHL Вт', u'Вт')),
+            nominal_power=TextParser.parse_float(schemas.get_value(values, u'Fr Вт', u'Вт')),
+            setting=TextParser.parse_setting(schemas.get_value(values, u'Настройка', u'null')),
+            maker=schemas.get_value(values, u'Производитель', u'null'),
+            full_name=schemas.get_value(values, u'Описание', u'null'),
             type_name=EQUIPMENT_TYPE_NAME
         )
 
     @staticmethod
-    def parse_valve(line, z_correction, angle, audytor_version):
+    def parse_valve(line, z_correction, angle, schemas):
         data = line.strip().split(';')
-        rr = ReadingRulesForValve()
+        rr = AudytorReadingRules
 
-        if data[rr.connection_type_index] != OUTER_VALVE_NAME:
+        if data[rr.VALVE_TYPE] != OUTER_VALVE_NAME:
             return None
+        values = schemas.read_values(data, 'DM_ResDZTCO')
         # Получаем оба набора координат
         original_point, rotated_point = AuditorFileParser._parse_coordinates(
             data=data,
-            x_idx=rr.x_index,
-            y_idx=rr.y_index,
-            z_idx=rr.z_index,
+            x_idx=rr.X_COORD,
+            y_idx=rr.Y_COORD,
+            z_idx=rr.Z_COORD,
             z_correction=z_correction,
             angle=angle
         )
         return AuditorEquipment(
-            maker=data[rr.maker_index],
             rotated_coords=rotated_point,
             original_coords=original_point,
-            setting=TextParser.parse_setting(data[rr.setting_index]),
+            setting=TextParser.parse_setting(schemas.get_value(values, u'Настройка', u'null')),
             type_name=VALVE_TYPE_NAME
         )
 
@@ -662,7 +679,7 @@ def find_section(lines,
                  parse_func,
                  z_correction,
                  angle,
-                 audytor_version):
+                 schemas):
     result = []
     i = 0
     while i < len(lines):
@@ -673,7 +690,7 @@ def find_section(lines,
                 parsed_item = parse_func(lines[i],
                                          z_correction,
                                          angle,
-                                         audytor_version)
+                                         schemas)
 
                 if parsed_item is not None:
                     result.append(parsed_item)
@@ -716,16 +733,24 @@ def rotate_point(angle, point):
 
 
 def get_elements_by_family_name(category):
-    """ Возвращает коллекцию элементов по категории """
+    """Отбирает приборы по имени семейства или флагу обработки в типоразмере."""
     revit_equipment_elements = FilteredElementCollector(doc) \
         .OfCategory(category) \
         .WhereElementIsNotElementType() \
         .ToElements()
 
-    filtered_equipment = [
-        eq for eq in revit_equipment_elements
-        if FAMILY_NAME_CONST in eq.Symbol.Family.Name
-    ]
+    filtered_equipment = []
+    for eq in revit_equipment_elements:
+        symbol = eq.Symbol
+        if FAMILY_NAME_CONST in symbol.Family.Name:
+            filtered_equipment.append(eq)
+            continue
+
+        processing = symbol.LookupParameter(RevitParamNames.AUDYTOR_PROCESSING)
+        if (processing is not None
+                and processing.StorageType == StorageType.Integer
+                and processing.AsInteger() == 1):
+            filtered_equipment.append(eq)
 
     return filtered_equipment
 
@@ -744,7 +769,6 @@ def process_start_up():
     # Получаем данные из последнего по дате редактирования файла
 
     old_angle = operator.get_json_data(JSON_CONFIG)
-    old_version = operator.get_json_data(JSON_VERSION)
 
     angle = forms.ask_for_string(
         default=str(old_angle),
@@ -766,15 +790,7 @@ def process_start_up():
 
     operator.send_json_data(angle, JSON_CONFIG)
 
-    audytor_version = forms.ask_for_one_item(
-        [AUDYTOR_V72, AUDYTOR_V73],
-        default= old_version,
-        prompt='Выберите версию Аудитора',
-        title='Импорт расчетов'
-    )
-    operator.send_json_data(audytor_version, JSON_VERSION)
-
-    return angle, filepath, audytor_version
+    return angle, filepath
 
 
 def process_audytor_revit_matching(auditor_equipment_list,
@@ -804,10 +820,11 @@ def process_audytor_revit_matching(auditor_equipment_list,
     data_cache.write_all()
 
 
-def read_auditor_file(file_path, angle, audytor_version, doc):
+def read_auditor_file(file_path, angle, doc):
     with codecs.open(file_path, 'r', encoding='utf-8') as file:
         lines = file.readlines()
 
+    schemas = AudytorDataSchema(lines)
     z_correction = calculate_z_correction(doc)
     equipment = find_section(
         lines,
@@ -816,7 +833,7 @@ def read_auditor_file(file_path, angle, audytor_version, doc):
         AuditorFileParser.parse_heating_device,
         z_correction,
         angle,
-        audytor_version
+        schemas
     )
     valves = find_section(
         lines,
@@ -825,7 +842,7 @@ def read_auditor_file(file_path, angle, audytor_version, doc):
         AuditorFileParser.parse_valve,
         z_correction,
         angle,
-        audytor_version
+        schemas
     )
     equipment.extend(valves)
 
@@ -842,11 +859,13 @@ if DEBUG_MODE:
 @notification()
 @log_plugin(EXEC_PARAMS.command_name)
 def script_execute(plugin_logger):
-    angle, filepath, audytor_version = process_start_up()
-    ayditror_equipment_elements = read_auditor_file(filepath,
-                                                    angle,
-                                                    audytor_version,
-                                                    doc)
+    angle, filepath = process_start_up()
+    try:
+        ayditror_equipment_elements = read_auditor_file(filepath, angle, doc)
+    except (ValueError, IndexError) as error:
+        forms.alert(u'Не удалось прочитать файл расчета:\n{0}'.format(error),
+                    u'Ошибка импорта', exitscript=True)
+        return
     # собираем высоты цилиндров в которых будем искать данные
     level_cylinders = (LevelCylinderGenerator.
                        create_cylinders(ayditror_equipment_elements))
